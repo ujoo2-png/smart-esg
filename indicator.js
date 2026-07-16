@@ -92,13 +92,13 @@ const Indicator = {
   getGroupDisplayName(group) {
     if (!group) return ''
     const en = this._enGroupNames[group.group_code] || ''
-    return en ? `${group.group_name}(${en})` : group.group_name
+    return en ? `${group.group_name} (${en})` : group.group_name
   },
 
   getDisplayName(indicator) {
     if (!indicator) return ''
     const en = this._enNames[indicator.indicator_code] || ''
-    return en ? `${indicator.indicator_name}(${en})` : indicator.indicator_name
+    return en ? `${indicator.indicator_name} (${en})` : indicator.indicator_name
   },
 
   getNameAndCode(indicator) {

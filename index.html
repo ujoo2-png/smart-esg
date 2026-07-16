@@ -40,11 +40,12 @@
       <a href="#" data-page="api">🔌 <span class="nav-label">API 연동</span></a>
       <a href="#" data-page="settings">⚙️ <span class="nav-label">설정</span></a>
     </nav>
-    <div id="sb-collapse-btn" style="padding:10px 0;text-align:center;border-top:1px solid rgba(255,255,255,.08);cursor:pointer;color:rgba(255,255,255,.5);font-size:14px" title="사이드바 접기">◀</div>
+    <div id="sb-collapse-btn" style="padding:10px 0;text-align:center;border-top:1px solid rgba(255,255,255,.08);cursor:pointer;color:rgba(255,255,255,.5);font-size:14px" title="사이드바 접기/펼치기">◀</div>
   </aside>
   <main id="main">
     <header id="topbar">
       <div class="topbar-left">
+        <button id="sb-toggle-top" title="사이드바 접기/펼치기" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px;margin-right:8px" onclick="toggleSidebar()">☰</button>
         <h2 id="page-title">대시보드</h2>
       </div>
       <div class="topbar-right">

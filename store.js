@@ -68,13 +68,26 @@ const Store = {
 
   _load() {
     const raw = localStorage.getItem(STORE_KEY)
+    const savedVer = localStorage.getItem(STORE_KEY + '_ver')
     this._data = raw ? JSON.parse(raw) : this._emptyData()
-    if (!raw) this._seed()
-    else this._ensureSeeds()
+    if (!raw) {
+      this._seed()
+    } else {
+      const empty = this._emptyData()
+      Object.keys(empty).forEach(k => {
+        if (this._data[k] == null) this._data[k] = empty[k]
+      })
+      this._ensureSeeds()
+      if (savedVer !== APP_VERSION) {
+        localStorage.setItem(STORE_KEY + '_ver', APP_VERSION)
+        this._save()
+      }
+    }
   },
 
   _ensureSeeds() {
     const d = this._data
+    const _ts = () => Date.now() + Math.random()
     if (!d.agencyMaster?.length) {
       d.agencyMaster = [
         { code: 'ECOVADIS', name: 'EcoVadis', country: '프랑스', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '글로벌 공급망 ESG 평가' },
@@ -86,22 +99,100 @@ const Store = {
     }
     if (!d.departments?.length) {
       d.departments = [
-        { id: Date.now()+1, dept_code: 'ESG', dept_name: 'ESG경영팀', manager_name: '', manager_email: '', parent_dept: '', is_active: true },
-        { id: Date.now()+2, dept_code: 'ENV', dept_name: '환경팀', manager_name: '', manager_email: '', parent_dept: 'ESG', is_active: true },
-        { id: Date.now()+3, dept_code: 'HR', dept_name: '인사팀', manager_name: '', manager_email: '', parent_dept: '', is_active: true }
+        { id: _ts(), dept_code: 'ESG', dept_name: 'ESG경영팀', manager_name: '', manager_email: '', parent_dept: '', is_active: true },
+        { id: _ts(), dept_code: 'ENV', dept_name: '환경팀', manager_name: '', manager_email: '', parent_dept: 'ESG', is_active: true },
+        { id: _ts(), dept_code: 'HR', dept_name: '인사팀', manager_name: '', manager_email: '', parent_dept: '', is_active: true }
       ]
     }
-    if (!d.indicatorGroups?.length) {
-      this._seedIndicatorsOnly()
+    if (!d.indicatorGroups?.length) this._seedIndicatorsOnly()
+    if (!d.weightParams?.length) {
+      d.weightParams = [
+        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'ENV', weight_pct: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'LHR', weight_pct: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'ETH', weight_pct: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'SP', weight_pct: 25, year: 2026 },
+        { id: _ts(), authority_code: 'KSSB', group_code: 'KSSB', weight_pct: 100, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'POLICY', weight_pct: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'ACTION', weight_pct: 40, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'RESULT', weight_pct: 35, year: 2026 }
+      ]
+    }
+    if (!d.ratingThresholds?.length) {
+      d.ratingThresholds = [
+        { id: _ts(), authority_code: 'ECOVADIS', rating: 'Platinum', min_score: 78, max_score: 100, year: 2026, effective_from: '2026-01-01' },
+        { id: _ts(), authority_code: 'ECOVADIS', rating: 'Gold', min_score: 68, max_score: 77, year: 2026, effective_from: '2026-01-01' },
+        { id: _ts(), authority_code: 'ECOVADIS', rating: 'Silver', min_score: 54, max_score: 67, year: 2026, effective_from: '2026-01-01' },
+        { id: _ts(), authority_code: 'ECOVADIS', rating: 'Bronze', min_score: 37, max_score: 53, year: 2026, effective_from: '2026-01-01' },
+        { id: _ts(), authority_code: 'KSSB', rating: '우수', min_score: 80, max_score: 100, year: 2026, effective_from: '2026-02-26' },
+        { id: _ts(), authority_code: 'KSSB', rating: '양호', min_score: 60, max_score: 79, year: 2026, effective_from: '2026-02-26' },
+        { id: _ts(), authority_code: 'KSSB', rating: '보통', min_score: 40, max_score: 59, year: 2026, effective_from: '2026-02-26' },
+        { id: _ts(), authority_code: 'KSSB', rating: '미흡', min_score: 0, max_score: 39, year: 2026, effective_from: '2026-02-26' }
+      ]
+    }
+    if (!d.indicatorMappings?.length && d.indicators?.length) {
+      this._seedIndicatorMappings()
     }
     if (!d.suppliers?.length) {
       d.suppliers = [
-        { id: Date.now()+10, name: '(주)한국전자', industry: '전자제품', ceo: '김철수', employee_count: 500, last_vsme_score: null, last_vsme_grade: null, last_vsme_date: null },
-        { id: Date.now()+11, name: '(주)서울ENG', industry: '엔지니어링', ceo: '박영희', employee_count: 200, last_vsme_score: 72, last_vsme_grade: 'B', last_vsme_date: '2025-12-01' },
-        { id: Date.now()+12, name: '(주)그린팩토리', industry: '제조업', ceo: '이준호', employee_count: 100, last_vsme_score: 45, last_vsme_grade: 'D', last_vsme_date: '2025-11-15' }
+        { id: _ts(), name: '(주)한국전자', industry: '전자제품', ceo: '김철수', employee_count: 500, last_vsme_score: null, last_vsme_grade: null, last_vsme_date: null },
+        { id: _ts(), name: '(주)서울ENG', industry: '엔지니어링', ceo: '박영희', employee_count: 200, last_vsme_score: 72, last_vsme_grade: 'B', last_vsme_date: '2025-12-01' },
+        { id: _ts(), name: '(주)그린팩토리', industry: '제조업', ceo: '이준호', employee_count: 100, last_vsme_score: 45, last_vsme_grade: 'D', last_vsme_date: '2025-11-15' }
+      ]
+    }
+    if (!d.maskingRules?.length) {
+      d.maskingRules = [
+        { id: 1, field_name: '급여', masking_type: '전체마스킹', applies_to_ai_api: true },
+        { id: 2, field_name: '징계이력', masking_type: '전체마스킹', applies_to_ai_api: true },
+        { id: 3, field_name: '직원명', masking_type: '부분마스킹', applies_to_ai_api: true }
       ]
     }
     this._save()
+  },
+
+  _seedIndicatorMappings() {
+    const d = this._data
+    const _ts = () => Date.now() + Math.random()
+    const findInd = (auth, code) => d.indicators.find(i => i.authority_code === auth && i.indicator_code === code)
+    const mappingData = [
+      ['ECOVADIS', 'EV-ENV-POL', 'KSSB', 'KSSB1-STRAT', 'direct', 'high'],
+      ['ECOVADIS', 'EV-ENV-OPS', 'KSSB', 'KSSB2-MET', 'direct', 'high'],
+      ['ECOVADIS', 'EV-ENV-OPS', 'KSSB', 'KSSB2-RISK', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-ENV-RES', 'KSSB', 'KSSB2-MET', 'direct', 'high'],
+      ['ECOVADIS', 'EV-LHR-POL', 'KSSB', 'KSSB1-STRAT', 'direct', 'medium'],
+      ['ECOVADIS', 'EV-LHR-HR', 'KSSB', 'KSSB1-MET', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-ETH-POL', 'KSSB', 'KSSB1-GOV', 'direct', 'high'],
+      ['ECOVADIS', 'EV-SP-POL', 'KSSB', 'KSSB1-STRAT', 'indirect', 'low'],
+      ['ECOVADIS', 'EV-ENV-POL', 'KCGS', 'KCGS-ENV', 'direct', 'high'],
+      ['ECOVADIS', 'EV-LHR-POL', 'KCGS', 'KCGS-SOC', 'direct', 'high'],
+      ['ECOVADIS', 'EV-ETH-POL', 'KCGS', 'KCGS-GOV', 'direct', 'high'],
+      ['ECOVADIS', 'EV-ENV-RES', 'NICE', 'NICE-ENV', 'direct', 'medium'],
+      ['ECOVADIS', 'EV-LHR-RES', 'NICE', 'NICE-SOC', 'direct', 'medium'],
+      ['ECOVADIS', 'EV-ETH-COR', 'NICE', 'NICE-GOV', 'direct', 'medium'],
+      ['ECOVADIS', 'EV-ENV-OPS', 'K-ESG', 'KESG-E2', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-LHR-HR', 'K-ESG', 'KESG-S2', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-ETH-POL', 'K-ESG', 'KESG-G1', 'direct', 'high'],
+      ['ECOVADIS', 'EV-SP-ENV', 'K-ESG', 'KESG-E1', 'indirect', 'low'],
+      ['KSSB', 'KSSB2-MET', 'ECOVADIS', 'EV-ENV-OPS', 'direct', 'high'],
+      ['KSSB', 'KSSB1-GOV', 'ECOVADIS', 'EV-ETH-POL', 'direct', 'high'],
+      ['KCGS', 'KCGS-ENV', 'ECOVADIS', 'EV-ENV-RES', 'direct', 'medium'],
+      ['KCGS', 'KCGS-SOC', 'ECOVADIS', 'EV-LHR-RES', 'direct', 'medium'],
+      ['KCGS', 'KCGS-GOV', 'ECOVADIS', 'EV-ETH-COR', 'direct', 'medium']
+    ]
+    mappingData.forEach(([srcAuth, srcCode, tgtAuth, tgtCode, type, conf]) => {
+      const src = findInd(srcAuth, srcCode)
+      const tgt = findInd(tgtAuth, tgtCode)
+      if (src && tgt) {
+        d.indicatorMappings.push({
+          id: _ts(),
+          source_authority: srcAuth,
+          source_indicator_id: src.id,
+          target_authority: tgtAuth,
+          target_indicator_id: tgt.id,
+          mapping_type: type,
+          confidence: conf
+        })
+      }
+    })
   },
 
   _seedIndicatorsOnly() {
@@ -347,6 +438,8 @@ const Store = {
         status: idx < 15 ? 'completed' : 'in_progress'
       })
     })
+
+    this._seedIndicatorMappings()
 
     const evIds = []
     ;[
