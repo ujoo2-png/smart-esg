@@ -22,6 +22,36 @@
     return e
   }
 
+  let _toastTimer = null
+  function showToast(msg, type) {
+    let t = document.querySelector('.toast')
+    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t) }
+    clearTimeout(_toastTimer)
+    t.textContent = msg
+    t.className = 'toast ' + (type || '')
+    requestAnimationFrame(() => { t.classList.add('show') })
+    _toastTimer = setTimeout(() => t.classList.remove('show'), 2500)
+  }
+
+  let _loadingCount = 0
+  function showLoading(text) {
+    let ov = document.getElementById('loading-overlay')
+    if (!ov) {
+      ov = document.createElement('div')
+      ov.id = 'loading-overlay'
+      ov.innerHTML = '<div style="position:fixed;inset:0;background:rgba(255,255,255,.7);z-index:9998;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)"><div style="text-align:center"><div class="spinner"></div><p id="loading-text" style="margin-top:12px;font-size:13px;color:#555"></p></div></div>'
+      document.body.appendChild(ov)
+    }
+    const txt = document.getElementById('loading-text')
+    if (txt) txt.textContent = text || '처리 중...'
+    ov.style.display = 'block'
+    _loadingCount++
+  }
+  function hideLoading() {
+    _loadingCount = Math.max(0, _loadingCount - 1)
+    if (_loadingCount === 0) { const ov = document.getElementById('loading-overlay'); if (ov) ov.style.display = 'none' }
+  }
+
   function sortableTable(id, columns, rows, opts = {}) {
     if (!_tableState[id]) _tableState[id] = { sortCol: -1, sortAsc: true, selected: new Set(), page: 0 }
     const st = _tableState[id]
@@ -349,7 +379,7 @@
           actions: a => [
             el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => showAssessmentDetail(a.id) }, '점수'),
             el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => editAssessment(a.id) }, '수정'),
-            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('정말 삭제?')) { Store.deleteAssessmentCascade(a.id); if (_currentAssessmentId === a.id) _currentAssessmentId = null; renderAssessments() } } }, '삭제')
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('정말 삭제?')) { Store.deleteAssessmentCascade(a.id); if (_currentAssessmentId === a.id) _currentAssessmentId = null; showToast('평가가 삭제되었습니다.', 'success'); renderAssessments() } } }, '삭제')
           ]
         })
       )
@@ -395,6 +425,8 @@
           el('div', { style: 'display:flex;gap:6px;align-items:center' },
             el('span', {}, statusBadge(a.status)),
             nextStatus[a.status] ? el('button', { className: 'btn btn-sm btn-primary', onClick: () => transitionStatus(id) }, statusLabels[a.status]) : null,
+            el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Report.print(id) } }, '📄 보고서 인쇄'),
+            el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Report.downloadHTML(id); showToast('보고서가 다운로드되었습니다.', 'success') } }, '📥 HTML 저장'),
             el('button', { className: 'btn btn-sm btn-secondary', onClick: renderAssessments }, '← 목록')
           )
         ),
@@ -529,6 +561,7 @@
       const data = { title: title.value, assessment_year: parseInt(year.value), authority_code: authority.value, status: 'draft' }
       if (isEdit) {
         Store.updateAssessment(a.id, data)
+        showToast('평가가 수정되었습니다.', 'success')
       } else {
         const created = Store.addAssessment(data)
         const activeIndicators = Store.getIndicators().filter(i => i.authority_code === authority.value && i.is_active !== false)
@@ -537,6 +570,7 @@
           const w = weightParams.find(p => p.group_code === Store.getIndicatorGroups().find(g => g.id === ind.group_id)?.group_code)
           Store.addAssessmentItem({ assessment_id: created.id, indicator_id: ind.id, weight_id: w?.id, weight_pct: w?.weight_pct || 0, status: 'pending' })
         })
+        showToast('평가가 생성되었습니다. (' + activeIndicators.length + '개 지표)', 'success')
       }
       closeModal()
       renderAssessments()
@@ -604,7 +638,7 @@
           el('span', { style: 'font-size:13px;font-weight:600' }, `${_selectedIndicators.size}개 선택됨`),
           el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: true })); _selectedIndicators.clear(); renderIndicators() } }, '활성화'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: false })); _selectedIndicators.clear(); renderIndicators() } }, '비활성화'),
-          el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm(`${_selectedIndicators.size}개 지표를 삭제하시겠습니까?`)) { _selectedIndicators.forEach(id => Store.deleteIndicator(id)); _selectedIndicators.clear(); renderIndicators() } } }, '삭제'),
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm(`${_selectedIndicators.size}개 지표를 삭제하시겠습니까?`)) { _selectedIndicators.forEach(id => Store.deleteIndicator(id)); _selectedIndicators.clear(); showToast('지표가 삭제되었습니다.', 'success'); renderIndicators() } } }, '삭제'),
           el('button', { className: 'btn btn-sm', style: 'margin-left:auto', onClick: () => { _selectedIndicators.clear(); renderIndicators() } }, '선택 해제')
         )
       )
@@ -752,8 +786,8 @@
             scope2_split_required: scope2Check.checked,
             is_active: true
           }
-          if (isEdit && ind) Store.updateIndicator(ind.id, data)
-          else Store.addIndicator(data)
+          if (isEdit && ind) { Store.updateIndicator(ind.id, data); showToast('지표가 수정되었습니다.', 'success') }
+          else { Store.addIndicator(data); showToast('지표가 추가되었습니다.', 'success') }
           _showQuickForm = false; _editingIndicator = null; renderIndicators()
         } }, isEdit ? '💾 저장' : '+ 추가')
       )
@@ -822,7 +856,7 @@
             el('span', { style: `padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:${confColors[m.confidence] || '#ccc'}20;color:${confColors[m.confidence] || '#888'}` }, confLabels[m.confidence] || m.confidence || '-')
           ),
           el('td', { style: 'text-align:center' },
-            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('매핑을 삭제하시겠습니까?')) { Store.deleteIndicatorMapping(m.id); renderIndicators() } } }, '삭제')
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('매핑을 삭제하시겠습니까?')) { Store.deleteIndicatorMapping(m.id); showToast('매핑이 삭제되었습니다.', 'success'); renderIndicators() } } }, '삭제')
           )
         )
       })
@@ -897,6 +931,7 @@
         mapping_type: mapType.value,
         confidence: confidence.value
       })
+      showToast('매핑이 추가되었습니다.', 'success')
       closeModal(); renderIndicators()
     }
   }
@@ -996,7 +1031,7 @@
             tagCodes.length > 3 ? el('span', { style: 'font-size:9px;color:#aaa' }, `+${tagCodes.length - 3}`) : null
           ) : null,
           el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: (e) => { e.stopPropagation(); _evidencePreviewId = ev.id; renderEvidenceMgmt() } }, '수정'),
-          el('button', { className: 'btn btn-sm', style: 'font-size:11px;color:#e74c3c', onClick: (e) => { e.stopPropagation(); if (confirm('삭제?')) { Store.deleteEvidence(ev.id); if (_evidencePreviewId === ev.id) _evidencePreviewId = null; renderEvidenceMgmt() } } }, '✕')
+          el('button', { className: 'btn btn-sm', style: 'font-size:11px;color:#e74c3c', onClick: (e) => { e.stopPropagation(); if (confirm('삭제?')) { Store.deleteEvidence(ev.id); if (_evidencePreviewId === ev.id) _evidencePreviewId = null; showToast('증빙이 삭제되었습니다.', 'success'); renderEvidenceMgmt() } } }, '✕')
         )
       )
 
@@ -1196,9 +1231,11 @@
         Store.updateEvidence(ev.id, data)
         existingTags.forEach(tid => Evidence.untag(ev.id, tid))
         evidenceId = ev.id
+        showToast('증빙이 수정되었습니다.', 'success')
       } else {
         const e = Evidence.add(data)
         evidenceId = e.id
+        showToast('증빙이 추가되었습니다.', 'success')
       }
       _tagValues.forEach(tid => { if (tid) Evidence.tag(evidenceId, parseInt(tid)) })
       newFiles.forEach(f => {
@@ -1315,9 +1352,9 @@
           { label: 'tCO2eq', value: a => el('span', { style: 'font-weight:600' }, a.co2eq ? a.co2eq.toFixed(4) : '-') },
           { label: '계수', value: a => { const f = GHG.getFactor(a.energy_type, a.scope, a.scope2_method); return f ? `${f.factor} ${f.unit}` : '-' } }
         ], activities, {
-          bulkDelete: id => Store.deleteGHGActivity(id),
+          bulkDelete: id => { Store.deleteGHGActivity(id); showToast('활동자료가 삭제되었습니다.', 'success') },
           actions: a => [
-            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.deleteGHGActivity(a.id); renderGHG() } }, '삭제')
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.deleteGHGActivity(a.id); showToast('활동자료가 삭제되었습니다.', 'success'); renderGHG() } }, '삭제')
           ]
         }) : el('div', { style: 'text-align:center;padding:30px;color:#999' },
           el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '📊'),
@@ -1343,6 +1380,7 @@
     modal('온실가스 활동자료 입력', form)
     document.getElementById('modal-save').onclick = function save() {
       GHG.addActivity({ assessment_id: _ghgAssId, energy_type: energyType.value, scope: parseInt(scope.value), scope2_method: scope.value === '2' ? s2m.value : null, value: parseFloat(value.value), unit: unit.value, period_start: ps.value, period_end: pe.value })
+      showToast('활동자료가 등록되었습니다.', 'success')
       closeModal(); renderGHG()
     }
   }
@@ -1421,11 +1459,11 @@
           }, align: 'center' },
           { label: '최근 진단', key: 'last_vsme_date', value: s => s.last_vsme_date ? el('span', { style: 'font-size:12px;color:#888' }, new Date(s.last_vsme_date).toLocaleDateString('ko-KR')) : el('span', { style: 'color:#ccc' }, '-') }
         ], suppliers, {
-          bulkDelete: id => Supplier.delete(id),
+          bulkDelete: id => { Supplier.delete(id); showToast('협력사가 삭제되었습니다.', 'success') },
           actions: s => [
             el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => openVSMEForSupplier(s.id) }, '자가진단'),
             el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => editSupplier(s.id) }, '수정'),
-            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('정말 삭제?')) { Supplier.delete(s.id); renderSupplier() } } }, '삭제')
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('정말 삭제?')) { Supplier.delete(s.id); showToast('협력사가 삭제되었습니다.', 'success'); renderSupplier() } } }, '삭제')
           ]
         }) : el('div', { style: 'text-align:center;padding:30px;color:#999' },
           el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '🏢'),
@@ -1462,8 +1500,8 @@
     modal(isEdit ? '협력사 수정' : '협력사 추가', form)
     document.getElementById('modal-save').onclick = () => {
       const data = { name: name.value, industry: industry.value, ceo: ceo.value, employee_count: parseInt(empCount.value) || null, revenue: parseFloat(revenue.value) || null, phone: phone.value, email: email.value }
-      if (isEdit) Supplier.update(s.id, data)
-      else Supplier.add(data)
+      if (isEdit) { Supplier.update(s.id, data); showToast('협력사가 수정되었습니다.', 'success') }
+      else { Supplier.add(data); showToast('협력사가 추가되었습니다.', 'success') }
       closeModal(); renderSupplier()
     }
   }
@@ -1978,12 +2016,13 @@
         ),
         el('div', { style: 'display:flex;gap:8px;align-items:center' },
           el('button', { className: 'btn btn-primary btn-sm', disabled: _aiGenerating, onClick: async () => {
-            _aiGenerating = true; renderAI()
+            _aiGenerating = true; renderAI(); showLoading('AI 보고서 일괄 생성 중...')
             for (const ind of indicators) {
               if (!drafts.find(d => d.indicator_id === ind.id)) {
                 await AI.generateReport(_aiAssId, ind.id, currentUser?.role)
               }
             }
+            hideLoading(); showToast('AI 보고서가 생성되었습니다.', 'success')
             _aiGenerating = false; renderAI()
           }}, _aiGenerating ? '⏳ 생성 중...' : '🚀 전체 일괄 생성'),
           el('span', { style: 'font-size:11px;color:#999' }, `미생성: ${total - generated}건`)
@@ -2859,8 +2898,8 @@
               el('td', {}, unsupported.length ? el('span', { style: 'color:#e74c3c;font-weight:600' }, `⚠ ${unsupported.length}건`) : el('span', { style: 'color:#27ae60' }, '✅')),
               el('td', { style: 'text-align:center' }, d.masked_before_send ? el('span', { style: 'color:#27ae60;font-size:10px' }, '🔒') : el('span', { style: 'color:#999;font-size:10px' }, '-')),
               el('td', { style: 'white-space:nowrap' },
-                hasEvidence && d.ver_status === 'pass' ? el('button', { className: 'btn btn-sm btn-success', style: { marginRight: 4 }, onClick: () => { Store.updateAIDraft(d.id, { human_status: 'approved', human_reviewed_at: new Date().toISOString() }); renderAIHistory() } }, '승인') : el('span', { style: 'color:#e74c3c;font-size:10px;font-weight:600;padding:4px 8px;background:#fff5f5;border-radius:4px;display:inline-block' }, !hasEvidence ? '증빙미연결' : '검증미통과'),
-                el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.updateAIDraft(d.id, { human_status: 'rejected' }); renderAIHistory() } }, '반려')
+                hasEvidence && d.ver_status === 'pass' ? el('button', { className: 'btn btn-sm btn-success', style: { marginRight: 4 }, onClick: () => { Store.updateAIDraft(d.id, { human_status: 'approved', human_reviewed_at: new Date().toISOString() }); showToast('AI 초안이 승인되었습니다.', 'success'); renderAIHistory() } }, '승인') : el('span', { style: 'color:#e74c3c;font-size:10px;font-weight:600;padding:4px 8px;background:#fff5f5;border-radius:4px;display:inline-block' }, !hasEvidence ? '증빙미연결' : '검증미통과'),
+                el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.updateAIDraft(d.id, { human_status: 'rejected' }); showToast('AI 초안이 반려되었습니다.', 'warning'); renderAIHistory() } }, '반려')
               )
             )
           }))
@@ -3362,6 +3401,7 @@
       bulkDelete: id => {
         if (currentUser && currentUser.id === id) return
         Store.deleteUser(id)
+        showToast('사용자가 삭제되었습니다.', 'success')
       },
       actions: u => {
         const isPending = u.status !== 'active'
@@ -3381,6 +3421,7 @@
   function approveUser(id) {
     if (!currentUser) return alert('로그인이 필요합니다.')
     Store.updateUser(id, { status: 'active' })
+    showToast('사용자가 승인되었습니다.', 'success')
     const pc = document.getElementById('pending-count')
     if (pc) pc.textContent = Store.getUsers().filter(u => u.status !== 'active').length
     if (_userListTab === 'pending' && Store.getUsers().filter(u => u.status !== 'active').length === 0) switchUserListTab('all')
@@ -3408,6 +3449,7 @@
     modal('사용자 수정', form)
     document.getElementById('modal-save').onclick = function() {
       Store.updateUser(id, { name: document.getElementById('f-uname').value, company_id: document.getElementById('f-ucompany').value ? parseInt(document.getElementById('f-ucompany').value) : null, dept_code: document.getElementById('f-udept').value, position: document.getElementById('f-uposition').value, email: document.getElementById('f-uemail').value, phone: document.getElementById('f-uphone').value, role: document.getElementById('f-urole').value, status: document.getElementById('f-ustatus').value })
+      showToast('사용자 정보가 수정되었습니다.', 'success')
       closeModal(); renderUsers()
     }
   }
@@ -3415,6 +3457,7 @@
   function deleteUser(id) {
     if (!confirm('정말 삭제하시겠습니까?')) return
     Store.deleteUser(id)
+    showToast('사용자가 삭제되었습니다.', 'success')
     renderUsers()
   }
 

@@ -123,6 +123,10 @@ form input:focus,form select:focus { border-color:#7C3AED }
 .toast.error { background:#e74c3c }
 .toast.warning { background:#f39c12 }
 
+.spinner { width:36px; height:36px; border:3px solid #e8e8ec; border-top-color:#7C3AED; border-radius:50%; animation:spin .7s linear infinite; margin:0 auto }
+@keyframes spin { to { transform:rotate(360deg) } }
+#loading-overlay { display:none }
+
 /* Scrollbar styling */
 ::-webkit-scrollbar { width:6px; height:6px }
 ::-webkit-scrollbar-track { background:transparent }
