@@ -271,6 +271,9 @@
 
   // ==================== Navigation ====================
   function navigate(page) {
+    if (typeof canAccess === 'function' && !canAccess(page)) {
+      page = 'dashboard'
+    }
     document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'))
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
     const link = document.querySelector(`#nav a[data-page="${page}"]`)

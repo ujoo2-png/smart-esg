@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.5.7'
+const APP_VERSION = 'v1.5.8'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -160,10 +160,14 @@ const Store = {
       ['ECOVADIS', 'EV-ENV-RES', 'KSSB', 'KSSB2-MET', 'direct', 'high'],
       ['ECOVADIS', 'EV-LHR-POL', 'KSSB', 'KSSB1-STRAT', 'direct', 'medium'],
       ['ECOVADIS', 'EV-LHR-HR', 'KSSB', 'KSSB1-MET', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-LHR-SD', 'KSSB', 'KSSB1-MET', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-LHR-CS', 'KSSB', 'KSSB1-STRAT', 'expanded', 'medium'],
       ['ECOVADIS', 'EV-ETH-POL', 'KSSB', 'KSSB1-GOV', 'direct', 'high'],
       ['ECOVADIS', 'EV-SP-POL', 'KSSB', 'KSSB1-STRAT', 'indirect', 'low'],
       ['ECOVADIS', 'EV-ENV-POL', 'KCGS', 'KCGS-ENV', 'direct', 'high'],
       ['ECOVADIS', 'EV-LHR-POL', 'KCGS', 'KCGS-SOC', 'direct', 'high'],
+      ['ECOVADIS', 'EV-LHR-SD', 'KCGS', 'KCGS-SOC', 'direct', 'medium'],
+      ['ECOVADIS', 'EV-LHR-CS', 'KCGS', 'KCGS-SOC', 'expanded', 'medium'],
       ['ECOVADIS', 'EV-ETH-POL', 'KCGS', 'KCGS-GOV', 'direct', 'high'],
       ['ECOVADIS', 'EV-ENV-RES', 'NICE', 'NICE-ENV', 'direct', 'medium'],
       ['ECOVADIS', 'EV-LHR-RES', 'NICE', 'NICE-SOC', 'direct', 'medium'],
@@ -172,6 +176,8 @@ const Store = {
       ['ECOVADIS', 'EV-LHR-HR', 'K-ESG', 'KESG-S2', 'expanded', 'medium'],
       ['ECOVADIS', 'EV-ETH-POL', 'K-ESG', 'KESG-G1', 'direct', 'high'],
       ['ECOVADIS', 'EV-SP-ENV', 'K-ESG', 'KESG-E1', 'indirect', 'low'],
+      ['ECOVADIS', 'EV-ENV-ANO', 'K-ESG', 'KESG-E1', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-LHR-CS', 'K-ESG', 'KESG-S2', 'expanded', 'medium'],
       ['KSSB', 'KSSB2-MET', 'ECOVADIS', 'EV-ENV-OPS', 'direct', 'high'],
       ['KSSB', 'KSSB1-GOV', 'ECOVADIS', 'EV-ETH-POL', 'direct', 'high'],
       ['KCGS', 'KCGS-ENV', 'ECOVADIS', 'EV-ENV-RES', 'direct', 'medium'],
@@ -210,9 +216,12 @@ const Store = {
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-PRD', '제품 사용·폐기 영향', 'ACTION')
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-CERT', '환경 인증(ISO14001 등)', 'ACTION')
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-RES', '환경성과 보고', 'RESULT', { scope2_split_required: true })
+    addInd(evEnv, 'ECOVADIS', 'EV-ENV-ANO', '대기·소음·악취', 'RESULT')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-POL', '인권·노동 정책', 'POLICY')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-HRM', '인적자원관리', 'ACTION')
+    addInd(evLhr, 'ECOVADIS', 'EV-LHR-SD', '사회적 대화', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-HR', '인권(노동법준수/다양성)', 'ACTION')
+    addInd(evLhr, 'ECOVADIS', 'EV-LHR-CS', '경력·숙련도', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-RES', '노동·인권 성과 보고', 'RESULT')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-POL', '윤리·반부패 정책', 'POLICY')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-COR', '부패방지 조치', 'ACTION')
@@ -306,10 +315,13 @@ const Store = {
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-PRD',  '제품 사용·폐기 영향', 'ACTION', { materiality_optional: true })
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-CERT', '환경 인증(ISO14001 등)', 'ACTION')
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-RES',  '환경성과 보고', 'RESULT', { scope2_split_required: true })
+    addInd(evEnv, 'ECOVADIS', 'EV-ENV-ANO',  '대기·소음·악취', 'RESULT')
 
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-POL',  '인권·노동 정책', 'POLICY')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-HRM',  '인적자원관리(재해예방/교육/근로조건)', 'ACTION')
+    addInd(evLhr, 'ECOVADIS', 'EV-LHR-SD',   '사회적 대화(노사협의/직원참여)', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-HR',   '인권(노동법준수/다양성/차별금지)', 'ACTION')
+    addInd(evLhr, 'ECOVADIS', 'EV-LHR-CS',   '경력·숙련도(직업훈련/역량개발)', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-RES',  '노동·인권 성과 보고', 'RESULT')
 
     addInd(evEth, 'ECOVADIS', 'EV-ETH-POL',  '윤리·반부패 정책', 'POLICY')

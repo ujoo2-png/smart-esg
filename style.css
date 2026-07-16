@@ -174,3 +174,16 @@ form input:focus,form select:focus { border-color:#7C3AED }
   table { font-size:10px }
   th, td { padding:5px 6px !important }
 }
+
+body.viewer-mode #content .btn-danger,
+body.viewer-mode #content .btn-primary:not(#export-btn):not(#help-btn),
+body.viewer-mode #content .bulk-bar button,
+body.viewer-mode #content .card-header .btn:not(.btn-secondary),
+body.viewer-mode #content .card-header > div > button.btn-primary,
+body.viewer-mode #settings .tab,
+body.viewer-mode #content table td:last-child .btn-sm.btn-danger,
+body.viewer-mode #content table td:last-child .btn-sm.btn-secondary { display:none !important }
+body.viewer-mode #content .upload-area { pointer-events:none; opacity:.5 }
+body.viewer-mode #content select,
+body.viewer-mode #content input:not([type=hidden]):not([type=search]):not([readonly]),
+body.viewer-mode #content textarea { pointer-events:none; opacity:.7 }

@@ -146,6 +146,33 @@ function findPassword(name, email) {
 function isAdmin() { return currentUser && currentUser.role === 'admin' }
 function isManager() { return currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') }
 
+const _rolePages = {
+  dashboard: 'viewer', assessment: 'user', indicator: 'viewer',
+  evidence: 'viewer', ghg: 'user', supplier: 'manager',
+  ai: 'manager', editor: 'manager', gri: 'viewer',
+  risk: 'manager', monitor: 'viewer', issa: 'manager',
+  submit: 'manager', kssb: 'manager', aihistory: 'viewer',
+  budget: 'manager', masking: 'admin', api: 'admin', settings: 'admin'
+}
+const _roleOrder = { viewer: 0, user: 1, manager: 2, admin: 3 }
+function canAccess(page) {
+  if (!currentUser) return false
+  const need = _rolePages[page] || 'admin'
+  return _roleOrder[currentUser.role] >= _roleOrder[need]
+}
+function canWrite() { return currentUser && currentUser.role !== 'viewer' }
+function roleLabel(r) { return { admin: '관리자', manager: '매니저', user: '사용자', viewer: '뷰어' }[r] || r }
+function applyNavRoles() {
+  const nav = document.getElementById('nav')
+  if (!nav) return
+  nav.querySelectorAll('a[data-page]').forEach(a => {
+    const page = a.dataset.page
+    if (page === 'dashboard') { a.style.display = ''; return }
+    const allowed = canAccess(page)
+    a.style.display = allowed ? '' : 'none'
+  })
+}
+
 function capsCheck(e) {
   const w = document.getElementById('af-caps-warn')
   if (w) w.style.display = e.getModifierState('CapsLock') ? 'block' : 'none'
@@ -393,7 +420,9 @@ function applyAuthUI() {
   const user = currentUser
   const app = document.getElementById('app')
   if (app) app.style.display = user ? 'flex' : 'none'
-  document.getElementById('user-info').textContent = user ? (user.name + (user.role === 'admin' ? ' (관리자)' : user.role === 'manager' ? ' (매니저)' : ' (사용자)')) : '로그인 필요'
+  document.getElementById('user-info').textContent = user ? (user.name + ' (' + roleLabel(user.role) + ')') : '로그인 필요'
   document.getElementById('login-btn-top').style.display = user ? 'none' : 'inline-block'
   document.getElementById('logout-btn-top').style.display = user ? 'inline-block' : 'none'
+  document.body.classList.toggle('viewer-mode', user && user.role === 'viewer')
+  if (user) applyNavRoles()
 }
