@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Smart ESG</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app" style="display:none">
+  <aside id="sidebar">
+    <div class="sidebar-header" id="sidebar-logo" style="cursor:pointer">
+      <div id="sb-header-expanded">
+        <div style="display:flex;align-items:center;gap:8px">
+          <h1 style="margin:0">Smart ESG</h1>
+          <span id="version-badge" style="background:#7C3AED;color:#fff;font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px"></span>
+        </div>
+        <p class="subtitle" id="version-label">지속가능경영보고서 시스템</p>
+      </div>
+      <div id="sb-header-collapsed" style="display:none;text-align:center;font-size:22px;padding:8px 0">SE</div>
+    </div>
+    <nav id="nav">
+      <a href="#" class="active" data-page="dashboard">📊 <span class="nav-label">대시보드</span></a>
+      <a href="#" data-page="assessment">📋 <span class="nav-label">ESG 평가</span></a>
+      <a href="#" data-page="indicator">📌 <span class="nav-label">지표 관리</span></a>
+      <a href="#" data-page="evidence">📎 <span class="nav-label">증빙 관리</span></a>
+      <a href="#" data-page="ghg">🏭 <span class="nav-label">온실가스</span></a>
+      <a href="#" data-page="supplier">🏢 <span class="nav-label">협력사 리스크</span></a>
+      <a href="#" data-page="ai">🤖 <span class="nav-label">AI 보고서</span></a>
+      <a href="#" data-page="editor">📝 <span class="nav-label">보고서 편집기</span></a>
+      <a href="#" data-page="gri">📊 <span class="nav-label">GRI 준수율</span></a>
+      <a href="#" data-page="risk">⚠️ <span class="nav-label">리스크 예측</span></a>
+      <a href="#" data-page="monitor">📈 <span class="nav-label">벤치마크</span></a>
+      <a href="#" data-page="issa">🛡️ <span class="nav-label">감사 보증</span></a>
+      <a href="#" data-page="submit">📤 <span class="nav-label">평가기관 제출</span></a>
+      <a href="#" data-page="kssb">📜 <span class="nav-label">KSSB 공시</span></a>
+      <a href="#" data-page="aihistory">🕐 <span class="nav-label">AI 이력</span></a>
+      <a href="#" data-page="budget">💰 <span class="nav-label">예산/리스크</span></a>
+      <a href="#" data-page="masking">🔒 <span class="nav-label">마스킹 설정</span></a>
+      <a href="#" data-page="api">🔌 <span class="nav-label">API 연동</span></a>
+      <a href="#" data-page="settings">⚙️ <span class="nav-label">설정</span></a>
+    </nav>
+    <div id="sb-collapse-btn" style="padding:10px 0;text-align:center;border-top:1px solid rgba(255,255,255,.08);cursor:pointer;color:rgba(255,255,255,.5);font-size:14px" title="사이드바 접기">◀</div>
+  </aside>
+  <main id="main">
+    <header id="topbar">
+      <div class="topbar-left">
+        <h2 id="page-title">대시보드</h2>
+      </div>
+      <div class="topbar-right">
+        <span id="user-info">로그인 필요</span>
+        <button id="login-btn-top" onclick="showAuthModal('login')" style="display:none">로그인</button>
+        <button id="logout-btn-top" onclick="doLogoutUI()" style="display:none">로그아웃</button>
+        <button id="help-btn" title="도움말" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px">❓</button>
+      </div>
+    </header>
+    <section id="content">
+      <div id="page-dashboard" class="page active">
+        <div id="dashboardGrid"></div>
+      </div>
+      <div id="page-assessment" class="page"></div>
+      <div id="page-indicator" class="page"></div>
+      <div id="page-evidence" class="page"></div>
+      <div id="page-ghg" class="page"></div>
+      <div id="page-supplier" class="page"></div>
+      <div id="page-ai" class="page"></div>
+      <div id="page-editor" class="page"></div>
+      <div id="page-gri" class="page"></div>
+      <div id="page-risk" class="page"></div>
+      <div id="page-monitor" class="page"></div>
+      <div id="page-issa" class="page"></div>
+      <div id="page-submit" class="page"></div>
+      <div id="page-kssb" class="page"></div>
+      <div id="page-aihistory" class="page"></div>
+      <div id="page-budget" class="page"></div>
+      <div id="page-masking" class="page"></div>
+      <div id="page-api" class="page"></div>
+      <div id="page-settings" class="page">
+        <div class="tabs">
+          <button class="tab active" data-stab="tab-users" onclick="switchSettingsTab('tab-users')">👥 사용자 관리</button>
+          <button class="tab" data-stab="tab-keepalive" onclick="switchSettingsTab('tab-keepalive')">🔋 접속 유지</button>
+          <button class="tab" data-stab="tab-mobile" onclick="switchSettingsTab('tab-mobile')">📱 모바일 접속</button>
+          <button class="tab" data-stab="tab-companies" onclick="switchSettingsTab('tab-companies')">🏢 회사 관리</button>
+          <button class="tab" data-stab="tab-departments" onclick="switchSettingsTab('tab-departments')">🏬 부서 관리</button>
+          <button class="tab" data-stab="tab-weights" onclick="switchSettingsTab('tab-weights')">⚖ 가중치·등급</button>
+        </div>
+
+        <div id="tab-users" class="tab-content active">
+          <div class="card">
+            <div class="card-header">
+              <h3>사용자 목록</h3>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button class="btn" style="padding:4px 10px;font-size:12px;background:#e8eaed;color:#555" onclick="switchUserListTab('all')">전체</button>
+                <button class="btn" style="padding:4px 10px;font-size:12px;background:#2d5427;color:#fff" onclick="switchUserListTab('pending')">승인대기 <span id="pending-count" style="background:#fff;color:#2d5427;border-radius:99px;padding:0 6px;margin-left:4px;font-size:11px">0</span></button>
+                <input type="text" id="user-search" placeholder="이름 / 아이디 검색..." oninput="renderUsers()" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:200px;outline:none;margin-left:8px">
+                <button class="btn btn-secondary" onclick="cleanupUsers()" style="font-size:12px">미승인 회원 전체삭제</button>
+              </div>
+            </div>
+            <div class="table-wrap"><table class="table-dense">
+              <thead><tr><th>아이디</th><th>이름</th><th>부서</th><th>직급</th><th>이메일</th><th>연락처</th><th>권한</th><th>상태</th><th>가입일</th><th>관리</th></tr></thead>
+              <tbody id="user-tbody">
+                <tr><td colspan="10">등록된 사용자가 없습니다.</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+
+        <div id="tab-keepalive" class="tab-content">
+          <div class="card">
+            <div class="card-header"><h3>🔋 Supabase 접속 유지</h3></div>
+            <div style="padding:20px;max-width:520px">
+              <p style="font-size:13px;color:#555;line-height:1.7">
+                Supabase 무료 요금제는 <strong>7일 동안 API 요청이 없으면 자동으로 일시중지</strong>됩니다.<br>
+                아래 기능을 켜면 일정 간격으로 Supabase에 자동 접속하여 중단을 방지합니다.
+              </p>
+              <div style="display:flex;align-items:center;gap:12px;margin:20px 0;padding:16px;background:#f8f6ff;border-radius:12px">
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:14px">자동 접속 유지</div>
+                  <div style="font-size:12px;color:#888;margin-top:2px">6일마다 Supabase에 자동으로 접속합니다</div>
+                </div>
+                <label style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer">
+                  <input type="checkbox" id="keepalive-toggle" onchange="toggleKeepAlive(this.checked)" style="opacity:0;width:0;height:0">
+                  <span id="keepalive-slider" style="position:absolute;inset:0;background:#ccc;border-radius:26px;transition:.3s"></span>
+                </label>
+              </div>
+              <div style="font-size:12px;color:#999">
+                <span id="keepalive-status">⏹ 중지됨</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tab-mobile" class="tab-content">
+          <div class="card">
+            <div class="card-header"><h3>📱 모바일 앱 접속</h3></div>
+            <div style="padding:20px;display:flex;gap:32px;flex-wrap:wrap">
+              <div style="flex:1;min-width:260px">
+                <p style="font-size:13px;color:#555;line-height:1.7">
+                  아래 주소를 스마트폰 브라우저에 입력하거나<br>
+                  QR코드를 스캔하면 모바일 페이지에 접속할 수 있습니다.<br><br>
+                  <strong>주소</strong><br>
+                  <input id="mobile-url" type="url" placeholder="https://..." style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-top:4px" oninput="updateQR()">
+                </p>
+              </div>
+              <div style="text-align:center">
+                <div id="qr-container" style="background:#fff;border:2px dashed #ddd;border-radius:12px;padding:16px;display:inline-block">
+                  <img id="qr-image" src="" alt="QR코드" style="width:240px;height:240px;display:block">
+                  <p style="font-size:11px;color:#999;margin:8px 0 0">QR코드를 스캔하면 모바일 페이지로 이동합니다</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tab-companies" class="tab-content">
+          <div id="companies-content"></div>
+        </div>
+
+        <div id="tab-departments" class="tab-content">
+          <div id="departments-content"></div>
+        </div>
+
+        <div id="tab-weights" class="tab-content">
+          <div id="weights-content"></div>
+        </div>
+      </div>
+    </section>
+    <div id="help-panel" class="hidden" style="position:fixed;top:60px;right:16px;width:340px;max-height:calc(100vh - 80px);background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:1000;overflow-y:auto;padding:20px;font-size:13px;line-height:1.7">
+      <div id="help-content"></div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-overlay" class="hidden" onclick="closeModal(event)">
+  <div id="modal" onclick="event.stopPropagation()">
+    <div id="modal-header">
+      <h3 id="modal-title">제목</h3>
+      <button class="btn-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div id="modal-body"></div>
+    <div id="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" id="modal-save" onclick="saveModal()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2" defer></script>
+<script src="supabase.js" defer></script>
+<script src="auth.js" defer></script>
+<script src="store.js" defer></script>
+<script src="ghg.js" defer></script>
+<script src="indicator.js" defer></script>
+<script src="evidence.js" defer></script>
+<script src="ai.js" defer></script>
+<script src="report.js" defer></script>
+<script src="dashboard.js" defer></script>
+<script src="supplier.js" defer></script>
+<script src="gri.js" defer></script>
+<script src="risk.js" defer></script>
+<script src="monitor.js" defer></script>
+<script src="issa.js" defer></script>
+<script src="submit.js" defer></script>
+<script src="api-integration.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
