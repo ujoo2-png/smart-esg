@@ -3042,6 +3042,69 @@
     )
   }
 
+  function renderAgencies() {
+    const c = document.getElementById('agencies-content')
+    if (!c) return
+    const agencies = Store.getAgencyMaster()
+    c.innerHTML = ''
+    c.append(
+      el('div', { className: 'card' },
+        el('div', { className: 'card-header' },
+          el('h3', {}, `평가기관 목록 (${agencies.length}개)`),
+          el('button', { className: 'btn btn-primary', onClick: () => {
+            const form = el('form', { onSubmit: e => e.preventDefault() })
+            const code = el('input', { required: true, placeholder: '예: KSSB, ECOVADIS' })
+            const name = el('input', { required: true, placeholder: '예: 한국지속가능성보고서 기준' })
+            const nameKr = el('input', { placeholder: '예: KSSB' })
+            const country = el('input', { value: 'KR', placeholder: 'KR' })
+            const trackType = el('select', {},
+              el('option', { value: 'MANDATORY' }, '법정 의무 (MANDATORY)'),
+              el('option', { value: 'VOLUNTARY' }, '자율 공시 (VOLUNTARY)')
+            )
+            const effDate = el('input', { type: 'date' })
+            const isActive = el('input', { type: 'checkbox', checked: true })
+            form.append(
+              el('label', {}, '기관 코드 *', code),
+              el('label', {}, '영문명 *', name),
+              el('label', {}, '한글명', nameKr),
+              el('label', {}, '국가', country),
+              el('label', {}, '공시 유형', trackType),
+              el('label', {}, '시행일', effDate),
+              el('label', { style: 'display:flex;align-items:center;gap:8px;margin-top:8px' }, isActive, ' 활성')
+            )
+            modal('평가기관 추가', form)
+            document.getElementById('modal-save').onclick = () => {
+              Store.addAgencyMaster({
+                code: code.value.toUpperCase(),
+                name: name.value,
+                name_kr: nameKr.value,
+                country: country.value,
+                track_type: trackType.value,
+                effective_date: effDate.value,
+                is_active: isActive.checked
+              })
+              closeModal(); renderAgencies()
+            }
+          }}, '+ 기관 추가')
+        ),
+        agencies.length ? sortableTable('agencies', [
+          { label: '코드', key: 'code', value: a => el('span', { style: 'font-weight:600;font-family:monospace' }, a.code) },
+          { label: '영문명', key: 'name' },
+          { label: '한글명', key: 'name_kr', value: a => a.name_kr || '-' },
+          { label: '국가', key: 'country', value: a => a.country || '-', align: 'center' },
+          { label: '공시 유형', value: a => el('span', { style: `display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${a.track_type === 'MANDATORY' ? '#ef444410' : '#10b98110'};color:${a.track_type === 'MANDATORY' ? '#ef4444' : '#10b981'}` }, a.track_type === 'MANDATORY' ? '법정 의무' : '자율 공시'), align: 'center' },
+          { label: '시행일', key: 'effective_date', value: a => a.effective_date || '-' },
+          { label: '활성', value: a => el('span', { style: `color:${a.is_active !== false ? '#10b981' : '#ccc'}` }, a.is_active !== false ? '●' : '○'), align: 'center' }
+        ], agencies, {
+          bulkDelete: id => { Store.deleteAgencyMaster(id); renderAgencies() },
+          actions: a => [
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm(`"${a.code}" 기관을 삭제하시겠습니까?`)) { Store.deleteAgencyMaster(a.id); renderAgencies() } } }, '삭제')
+          ]
+        }) : el('div', { style: 'text-align:center;padding:30px;color:#999' }, '등록된 평가기관이 없습니다.')
+      )
+    )
+  }
+
   // ==================== Settings: Users ====================
   function switchSettingsTab(tabId) {
     document.querySelectorAll('#page-settings .tab').forEach(t => t.classList.remove('active'))
@@ -3059,6 +3122,7 @@
     if (tabId === 'tab-companies') renderCompanies()
     if (tabId === 'tab-departments') renderDepartments()
     if (tabId === 'tab-weights') renderWeights()
+    if (tabId === 'tab-agencies') renderAgencies()
   }
 
   function switchUserListTab(tab) {

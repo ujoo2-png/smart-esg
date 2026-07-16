@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.5.1'
+const APP_VERSION = 'v1.5.2'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -324,15 +324,15 @@ const Store = {
     addInd(evSp, 'ECOVADIS', 'EV-360',      '360° Watch 외부 모니터링', 'RESULT')
 
     this._data.agencyMaster.push(
-      { code: 'ECOVADIS', name: 'EcoVadis', country: '프랑스', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '글로벌 공급망 ESG 평가' },
-      { code: 'KCGS', name: 'KCGS', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '한국기업지배구조원 ESG평가' },
-      { code: 'NICE', name: 'NICE', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: 'NICE 평가정보 ESG' },
-      { code: 'KSSB', name: 'KSSB', country: '한국', track_type: 'MANDATORY', disclosure_std_no: '제1호,제2호', effective_date: '2026-02-26', note: '한국지속가능성기준원 - 법정 공시' },
-      { code: 'ISSB', name: 'ISSB', country: '글로벌', track_type: 'MANDATORY', disclosure_std_no: 'IFRS S1,S2', effective_date: '2024-01-01', note: '국제지속가능성기준위원회' },
-      { code: 'CDP', name: 'CDP', country: '영국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '환경정보 공개 플랫폼' },
-      { code: 'GRI', name: 'GRI', country: '네덜란드', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '지속가능경영 보고서 기준' },
-      { code: 'TCFD', name: 'TCFD', country: '글로벌', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '기후관련 재무정보 공시' },
-      { code: 'SBTi', name: 'SBTi', country: '글로벌', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '과학기반 감축목표' }
+      { id: 1, code: 'ECOVADIS', name: 'EcoVadis', country: '프랑스', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '글로벌 공급망 ESG 평가' },
+      { id: 2, code: 'KCGS', name: 'KCGS', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '한국기업지배구조원 ESG평가' },
+      { id: 3, code: 'NICE', name: 'NICE', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: 'NICE 평가정보 ESG' },
+      { id: 4, code: 'KSSB', name: 'KSSB', country: '한국', track_type: 'MANDATORY', disclosure_std_no: '제1호,제2호', effective_date: '2026-02-26', note: '한국지속가능성기준원 - 법정 공시' },
+      { id: 5, code: 'ISSB', name: 'ISSB', country: '글로벌', track_type: 'MANDATORY', disclosure_std_no: 'IFRS S1,S2', effective_date: '2024-01-01', note: '국제지속가능성기준위원회' },
+      { id: 6, code: 'CDP', name: 'CDP', country: '영국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '환경정보 공개 플랫폼' },
+      { id: 7, code: 'GRI', name: 'GRI', country: '네덜란드', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '지속가능경영 보고서 기준' },
+      { id: 8, code: 'TCFD', name: 'TCFD', country: '글로벌', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '기후관련 재무정보 공시' },
+      { id: 9, code: 'SBTi', name: 'SBTi', country: '글로벌', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '과학기반 감축목표' }
     )
 
     this._data.departments.push(
@@ -665,6 +665,8 @@ const Store = {
   // ==== Agency Master ====
   getAgencyMaster() { return this.data.agencyMaster || [] },
   getAgencyTrackType(code) { const a = (this.data.agencyMaster || []).find(x => x.code === code); return a ? a.track_type : 'VOLUNTARY' },
+  addAgencyMaster(a) { this.data.agencyMaster.push({ id: Date.now(), ...a }); this._save() },
+  deleteAgencyMaster(id) { this.data.agencyMaster = this.data.agencyMaster.filter(x => x.id !== id); this._save() },
 
   // ==== Import API Data (ERP 연동) ====
   importApiData(category, rows) {

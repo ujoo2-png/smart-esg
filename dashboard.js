@@ -18,22 +18,21 @@ const Dashboard = {
     const alerts = RISK.generateAlerts(assessmentId)
 
     container.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px">
         ${this._kpiScore(assessment)}
         ${this._kpiCompletion(items)}
         ${this._kpiEvidence(evidenceCount)}
         ${this._kpiRisk(risks)}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
         ${this._pillarChart(items, groups, assessment.authority_code)}
         ${this._ghgDonut(ghgSummary)}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
         ${this._evidenceStackedBar(evidenceCount)}
         ${this._draftProgress(drafts)}
-        ${this._supplierRiskBar()}
       </div>
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">
         ${this._riskHeatmap(risks)}
         ${this._alertFeed(alerts)}
       </div>
@@ -44,28 +43,35 @@ const Dashboard = {
     `
   },
 
-  _ring(pct, color, size = 100, stroke = 10) {
+  _ring(pct, color, size = 100, stroke = 8) {
     const r = (size - stroke) / 2
     const c = 2 * Math.PI * r
     const offset = c - (pct / 100) * c
     return `<svg width="${size}" height="${size}" style="transform:rotate(-90deg)">
-      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="#eee" stroke-width="${stroke}"/>
-      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="#f0f0f0" stroke-width="${stroke}"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round" style="transition:stroke-dashoffset 0.6s ease"/>
     </svg>`
   },
 
+  _card(title, content, opts = {}) {
+    return `<div style="background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:20px">
+      <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:14px">${title}</div>
+      ${content}
+    </div>`
+  },
+
   _kpiScore(a) {
-    const gradeColor = { Platinum: '#8e44ad', Gold: '#f1c40f', Silver: '#95a5a6', Bronze: '#d35400' }
+    const gradeColor = { Platinum: '#8e44ad', Gold: '#d4a017', Silver: '#7f8c8d', Bronze: '#cd7f32' }
     const color = gradeColor[a.rating] || '#7C3AED'
-    return `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;align-items:center;gap:16px">
-      <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-        ${this._ring(a.total_score || 0, color, 80, 8)}
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:${color}">${a.total_score != null ? a.total_score.toFixed(0) : '-'}</div>
+    return `<div style="background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:20px;display:flex;align-items:center;gap:20px">
+      <div style="position:relative;width:72px;height:72px;flex-shrink:0">
+        ${this._ring(a.total_score || 0, color, 72, 6)}
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:${color}">${a.total_score != null ? a.total_score.toFixed(0) : '-'}</div>
       </div>
       <div>
-        <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">총점 · 등급</div>
-        <div style="font-size:20px;font-weight:700;color:${color};margin-top:2px">${a.rating || '미평가'}</div>
-        <div style="font-size:11px;color:#aaa;margin-top:2px">${Indicator.getAuthorityName(a.authority_code)} · ${a.assessment_year}년</div>
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.5px">총점</div>
+        <div style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:2px">${a.rating || '미평가'}</div>
+        <div style="font-size:11px;color:#bbb;margin-top:4px">${Indicator.getAuthorityName(a.authority_code)} · ${a.assessment_year}년</div>
       </div>
     </div>`
   },
@@ -74,16 +80,16 @@ const Dashboard = {
     const total = items.length
     const done = items.filter(i => i.status === 'completed' || i.status === 'excluded').length
     const pct = total ? Math.round(done / total * 100) : 0
-    const color = pct >= 80 ? '#27ae60' : pct >= 50 ? '#f39c12' : '#e74c3c'
-    return `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;align-items:center;gap:16px">
-      <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-        ${this._ring(pct, color, 80, 8)}
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:${color}">${pct}%</div>
+    const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'
+    return `<div style="background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:20px;display:flex;align-items:center;gap:20px">
+      <div style="position:relative;width:72px;height:72px;flex-shrink:0">
+        ${this._ring(pct, color, 72, 6)}
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:${color}">${pct}%</div>
       </div>
       <div>
-        <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">항목 완료율</div>
-        <div style="font-size:20px;font-weight:700;margin-top:2px">${done} <span style="font-size:13px;color:#999">/ ${total}</span></div>
-        <div style="font-size:11px;color:#aaa;margin-top:2px">${items.filter(i=>i.status==='in_progress').length}건 진행중</div>
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.5px">완료율</div>
+        <div style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:2px">${done} <span style="font-size:13px;color:#bbb;font-weight:400">/ ${total}</span></div>
+        <div style="font-size:11px;color:#bbb;margin-top:4px">${items.filter(i=>i.status==='in_progress').length}건 진행중</div>
       </div>
     </div>`
   },
@@ -92,39 +98,39 @@ const Dashboard = {
     const total = ec.total
     const verified = ec.externally_verified
     const pct = total ? Math.round(verified / total * 100) : 0
-    return `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;align-items:center;gap:16px">
-      <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-        ${this._ring(pct, '#3498db', 80, 8)}
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#3498db">${total}</div>
+    return `<div style="background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:20px;display:flex;align-items:center;gap:20px">
+      <div style="position:relative;width:72px;height:72px;flex-shrink:0">
+        ${this._ring(pct, '#3b82f6', 72, 6)}
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#3b82f6">${total}</div>
       </div>
       <div>
-        <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">증빙 현황</div>
-        <div style="font-size:20px;font-weight:700;margin-top:2px">${total}건</div>
-        <div style="font-size:11px;color:#aaa;margin-top:2px">외부검증 ${verified}건 (${pct}%)</div>
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.5px">증빙</div>
+        <div style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:2px">${total}건</div>
+        <div style="font-size:11px;color:#bbb;margin-top:4px">외부검증 ${verified}건</div>
       </div>
     </div>`
   },
 
   _kpiRisk(risks) {
     const overall = risks.overall
-    const color = overall.color || '#999'
-    return `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;align-items:center;gap:16px">
-      <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-        ${this._ring(overall.score || 0, color, 80, 8)}
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:${color}">${overall.score ?? '-'}</div>
+    const color = overall.color || '#94a3b8'
+    return `<div style="background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:20px;display:flex;align-items:center;gap:20px">
+      <div style="position:relative;width:72px;height:72px;flex-shrink:0">
+        ${this._ring(overall.score || 0, color, 72, 6)}
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:${color}">${overall.score ?? '-'}</div>
       </div>
       <div>
-        <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px">리스크 점수</div>
-        <div style="font-size:20px;font-weight:700;color:${color};margin-top:2px">${overall.label || '미평가'}</div>
-        <div style="font-size:11px;color:#aaa;margin-top:2px">${risks.alerts.length}건 알림</div>
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.5px">리스크</div>
+        <div style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:2px">${overall.label || '미평가'}</div>
+        <div style="font-size:11px;color:#bbb;margin-top:4px">${risks.alerts.length}건 알림</div>
       </div>
     </div>`
   },
 
   _pillarChart(items, groups, authorityCode) {
     const usePillar = authorityCode === 'ECOVADIS'
+    const barColors = ['#7C3AED', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
     let barsHtml = ''
-    const barColors = ['#7C3AED', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4']
     if (usePillar) {
       const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.group_code === '_PILLAR')
       const pillars = ['POLICY', 'ACTION', 'RESULT']
@@ -132,47 +138,43 @@ const Dashboard = {
         const pillarItems = items.filter(it => { const ind = Store.getIndicators().find(x => x.id === it.indicator_id); return ind && ind.pillar === p })
         const avg = pillarItems.length ? (pillarItems.reduce((s, it) => s + (it.score || 0), 0) / pillarItems.length) : 0
         const pw = pillarParams.find(pp => pp.pillar === p)
-        const pct = (avg / 100) * 100
-        return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0">
-          <span style="width:90px;font-size:12px;color:#555;text-align:right">${Indicator.getPillarName(p)}</span>
-          <div style="flex:1;background:#f0f0f0;height:20px;border-radius:10px;overflow:hidden">
-            <div style="background:${barColors[i]};height:100%;width:${pct}%;border-radius:10px;transition:width 0.5s"></div>
+        return `<div style="margin:8px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:12px;color:#555;font-weight:500">${Indicator.getPillarName(p)}</span>
+            <span style="font-size:12px;font-weight:600;color:${barColors[i]}">${avg.toFixed(1)}</span>
           </div>
-          <span style="width:40px;font-size:13px;font-weight:600;color:${barColors[i]}">${avg.toFixed(1)}</span>
-          <span style="width:40px;font-size:11px;color:#999">${pw ? pw.weight_pct + '%' : '-'}</span>
+          <div style="background:#f5f5f5;height:6px;border-radius:3px;overflow:hidden">
+            <div style="background:${barColors[i]};height:100%;width:${avg}%;border-radius:3px;transition:width 0.5s"></div>
+          </div>
+          ${pw ? `<div style="font-size:10px;color:#bbb;margin-top:2px">가중치 ${pw.weight_pct}%</div>` : ''}
         </div>`
       }).join('')
     } else {
       barsHtml = groups.map((g, i) => {
         const groupItems = items.filter(it => { const inds = Indicator.getIndicators(g.id); return inds.some(ind => ind.id === it.indicator_id) })
         const avg = groupItems.length ? (groupItems.reduce((s, it) => s + (it.score || 0), 0) / groupItems.length) : 0
-        const pct = (avg / 100) * 100
-        return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0">
-          <span style="width:90px;font-size:12px;color:#555;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.group_name}</span>
-          <div style="flex:1;background:#f0f0f0;height:20px;border-radius:10px;overflow:hidden">
-            <div style="background:${barColors[i % barColors.length]};height:100%;width:${pct}%;border-radius:10px;transition:width 0.5s"></div>
+        return `<div style="margin:6px 0">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <span style="font-size:11px;color:#666">${g.group_name}</span>
+            <span style="font-size:11px;font-weight:600;color:${barColors[i % barColors.length]}">${avg.toFixed(1)}</span>
           </div>
-          <span style="width:40px;font-size:13px;font-weight:600;color:${barColors[i % barColors.length]}">${avg.toFixed(1)}</span>
+          <div style="background:#f5f5f5;height:5px;border-radius:3px;overflow:hidden">
+            <div style="background:${barColors[i % barColors.length]};height:100%;width:${avg}%;border-radius:3px;transition:width 0.5s"></div>
+          </div>
         </div>`
       }).join('')
     }
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">${usePillar ? '필러별 점수' : '테마별 점수'}</h3>
-      ${barsHtml || '<p style="color:#999;font-size:12px">데이터 없음</p>'}
-    </div>`
+    return this._card(usePillar ? '필러별 점수' : '테마별 점수', barsHtml || '<p style="color:#bbb;font-size:12px">데이터 없음</p>')
   },
 
   _ghgDonut(summary) {
     const entries = Object.values(summary)
     const total = entries.reduce((s, e) => s + e.total, 0)
-    if (!entries.length) return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">GHG 배출량</h3>
-      <div style="text-align:center;padding:30px;color:#999;font-size:12px">데이터 없음</div>
-    </div>`
+    if (!entries.length) return this._card('GHG 배출량', '<div style="text-align:center;padding:24px;color:#bbb;font-size:12px">데이터 없음</div>')
 
-    const colors = ['#3498db', '#2ecc71', '#27ae60', '#9b59b6', '#e67e22']
-    const size = 120
-    const r = 45
+    const colors = ['#3b82f6', '#10b981', '#06b6d4', '#8b5cf6', '#f59e0b']
+    const size = 100
+    const r = 38
     const c = 2 * Math.PI * r
     let cumPct = 0
     const circles = entries.map((e, i) => {
@@ -180,44 +182,45 @@ const Dashboard = {
       const dashLen = pct * c
       const dashOff = c - cumPct * c
       cumPct += pct
-      const label = e.scope2_method ? `S2-${e.scope2_method === 'location-based' ? 'LB' : 'MB'}` : `Scope ${e.scope}`
-      return `<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${colors[i]}" stroke-width="18" stroke-dasharray="${dashLen} ${c - dashLen}" stroke-dashoffset="${dashOff}" transform="rotate(-90 ${size/2} ${size/2})"/>
-        <text x="${size/2}" y="${size/2 + 4}" text-anchor="middle" font-size="14" font-weight="700" fill="#333" transform="rotate(90 ${size/2} ${size/2})">${total.toFixed(0)}</text>`
+      return `<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${colors[i]}" stroke-width="16" stroke-dasharray="${dashLen} ${c - dashLen}" stroke-dashoffset="${dashOff}" transform="rotate(-90 ${size/2} ${size/2})"/>`
     })
 
     const legend = entries.map((e, i) => {
       const label = e.scope2_method ? `Scope 2 (${e.scope2_method === 'location-based' ? '위치' : '시장'})` : `Scope ${e.scope}`
-      return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0">
-        <span style="width:10px;height:10px;border-radius:50%;background:${colors[i]};flex-shrink:0"></span>
-        <span style="flex:1;color:#555">${label}</span>
-        <span style="font-weight:600">${e.total.toFixed(1)}</span>
+      return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+        <span style="width:8px;height:8px;border-radius:50%;background:${colors[i]};flex-shrink:0"></span>
+        <span style="flex:1;font-size:12px;color:#666">${label}</span>
+        <span style="font-size:12px;font-weight:600;color:#333">${e.total.toFixed(1)}</span>
       </div>`
     }).join('')
 
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">GHG 배출량 (tCO2eq)</h3>
-      <div style="display:flex;align-items:center;gap:20px">
-        <div style="flex-shrink:0">${this._ring(100, '#3498db', size, 0)}</div>
+    return this._card('GHG 배출량 (tCO₂eq)', `
+      <div style="display:flex;align-items:center;gap:24px">
+        <svg width="${size}" height="${size}" style="flex-shrink:0">${circles.join('')}</svg>
         <div style="flex:1">${legend}</div>
       </div>
-    </div>`
+      <div style="margin-top:8px;font-size:11px;color:#bbb">합계 ${total.toFixed(1)} tCO₂eq</div>
+    `)
   },
 
   _evidenceStackedBar(ec) {
     const total = ec.total || 1
     const segments = [
-      { label: '외부검증', count: ec.externally_verified, color: '#27ae60' },
-      { label: '내부검토', count: ec.internal_reviewed, color: '#3498db' },
-      { label: '자가입력', count: ec.self, color: '#f39c12' }
+      { label: '외부검증', count: ec.externally_verified, color: '#10b981' },
+      { label: '내부검토', count: ec.internal_reviewed, color: '#3b82f6' },
+      { label: '자가입력', count: ec.self, color: '#f59e0b' }
     ]
-    const bars = segments.map(s => `<div style="width:${(s.count/total*100)}%;background:${s.color};height:100%;float:left"></div>`).join('')
-    const legend = segments.map(s => `<span style="font-size:11px;color:#666;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.color};margin-right:4px"></span>${s.label} ${s.count}건</span>`).join('')
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">증빙 현황</h3>
-      <div style="display:flex;height:16px;border-radius:8px;overflow:hidden;margin-bottom:10px">${bars}</div>
-      <div>${legend}</div>
-      <div style="margin-top:8px;font-size:11px;color:#aaa">총 ${ec.total}건 · 외부검증률 ${total > 1 ? Math.round(ec.externally_verified/total*100) : 0}%</div>
-    </div>`
+    const bars = segments.map(s => `<div style="width:${(s.count/total*100)}%;background:${s.color};height:100%"></div>`).join('')
+    const legend = segments.map(s => `<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <span style="width:8px;height:8px;border-radius:50%;background:${s.color};flex-shrink:0"></span>
+      <span style="flex:1;color:#666">${s.label}</span>
+      <span style="font-weight:600;color:#333">${s.count}건</span>
+    </div>`).join('')
+    return this._card('증빙 현황', `
+      <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:14px">${bars}</div>
+      <div style="display:flex;flex-direction:column;gap:4px">${legend}</div>
+      <div style="margin-top:8px;font-size:11px;color:#bbb">외부검증률 ${total > 1 ? Math.round(ec.externally_verified/total*100) : 0}%</div>
+    `)
   },
 
   _draftProgress(drafts) {
@@ -227,93 +230,84 @@ const Dashboard = {
     const pending = drafts.filter(d => d.ver_status === 'pending').length
     const failed = drafts.filter(d => d.ver_status === 'fail').length
     const pct = total ? Math.round(approved / total * 100) : 0
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">AI 초안 진행</h3>
-      <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px">
-        <div style="position:relative;width:60px;height:60px;flex-shrink:0">
-          ${this._ring(pct, '#7C3AED', 60, 6)}
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#7C3AED">${pct}%</div>
+    const badges = [
+      { label: '승인', count: approved, color: '#10b981' },
+      { label: '검증', count: verified, color: '#3b82f6' },
+      { label: '대기', count: pending, color: '#f59e0b' },
+      { label: '실패', count: failed, color: '#ef4444' }
+    ]
+    return this._card('AI 초안 진행', `
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+        <div style="position:relative;width:56px;height:56px;flex-shrink:0">
+          ${this._ring(pct, '#7C3AED', 56, 5)}
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#7C3AED">${pct}%</div>
         </div>
         <div>
-          <div style="font-size:20px;font-weight:700">${total}</div>
-          <div style="font-size:11px;color:#999">전체 초안</div>
+          <div style="font-size:20px;font-weight:700;color:#1a1a2e">${total}</div>
+          <div style="font-size:11px;color:#bbb">전체 초안</div>
         </div>
       </div>
-      <div style="display:flex;gap:6px;font-size:11px;flex-wrap:wrap">
-        <span style="background:#27ae6015;color:#27ae60;padding:3px 8px;border-radius:12px;font-weight:500">승인 ${approved}</span>
-        <span style="background:#3498db15;color:#3498db;padding:3px 8px;border-radius:12px;font-weight:500">검증완료 ${verified}</span>
-        <span style="background:#f39c1215;color:#f39c12;padding:3px 8px;border-radius:12px;font-weight:500">대기 ${pending}</span>
-        <span style="background:#e74c3c15;color:#e74c3c;padding:3px 8px;border-radius:12px;font-weight:500">실패 ${failed}</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${badges.map(b => `<div style="display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;background:${b.color}08;border-radius:6px;color:${b.color};font-weight:500">
+          <span style="width:6px;height:6px;border-radius:50%;background:${b.color}"></span>${b.label} ${b.count}
+        </div>`).join('')}
       </div>
-    </div>`
+    `)
   },
 
   _supplierRiskBar() {
     const suppliers = Store.getSuppliers()
     const summary = { A: 0, B: 0, C: 0, D: 0 }
     suppliers.forEach(s => { if (s.last_vsme_grade && summary[s.last_vsme_grade] !== undefined) summary[s.last_vsme_grade]++ })
-    const colors = { A: '#27ae60', B: '#3498db', C: '#f39c12', D: '#e74c3c' }
+    const colors = { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#ef4444' }
     const bars = Object.entries(summary).map(([g, count]) => {
       const pct = suppliers.length ? Math.round(count / suppliers.length * 100) : 0
-      return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
-        <span style="width:16px;text-align:center;font-weight:700;color:${colors[g]}">${g}</span>
-        <div style="flex:1;background:#f0f0f0;height:14px;border-radius:7px;overflow:hidden">
-          <div style="background:${colors[g]};height:100%;width:${pct}%;border-radius:7px"></div>
+      return `<div style="margin:6px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:12px;color:#555;font-weight:500">${g}등급</span>
+          <span style="font-size:11px;color:#bbb">${count}개사</span>
         </div>
-        <span style="width:20px;font-weight:600;color:${colors[g]}">${count}</span>
+        <div style="background:#f5f5f5;height:5px;border-radius:3px;overflow:hidden">
+          <div style="background:${colors[g]};height:100%;width:${pct}%;border-radius:3px"></div>
+        </div>
       </div>`
     }).join('')
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">협력사 등급 분포</h3>
-      <div style="font-size:28px;font-weight:700;margin-bottom:8px">${suppliers.length} <span style="font-size:13px;color:#999;font-weight:400">개사</span></div>
-      ${suppliers.length ? bars : '<div style="color:#999;font-size:12px">등록된 협력사 없음</div>'}
-    </div>`
+    return this._card('협력사 등급', `
+      <div style="font-size:24px;font-weight:700;color:#1a1a2e;margin-bottom:12px">${suppliers.length} <span style="font-size:13px;color:#bbb;font-weight:400">개사</span></div>
+      ${suppliers.length ? bars : '<div style="color:#bbb;font-size:12px">등록된 협력사 없음</div>'}
+    `)
   },
 
   _riskHeatmap(risks) {
     const cats = risks.categories
     const levels = [
-      { min: 0, max: 39, label: '낮음', bg: '#27ae6015', border: '#27ae60' },
-      { min: 40, max: 59, label: '보통', bg: '#f1c40f15', border: '#f1c40f' },
-      { min: 60, max: 79, label: '높음', bg: '#f39c1215', border: '#f39c12' },
-      { min: 80, max: 100, label: '위험', bg: '#e74c3c15', border: '#e74c3c' }
+      { min: 0, max: 39, label: '낮음', color: '#10b981' },
+      { min: 40, max: 59, label: '보통', color: '#f59e0b' },
+      { min: 60, max: 79, label: '높음', color: '#f97316' },
+      { min: 80, max: 100, label: '위험', color: '#ef4444' }
     ]
     const trendIcons = { worsening: '↑', improving: '↓', stable: '→' }
-    const trendColors = { worsening: '#e74c3c', improving: '#27ae60', stable: '#999' }
+    const trendColors = { worsening: '#ef4444', improving: '#10b981', stable: '#94a3b8' }
     const rows = cats.map(cat => {
       const level = levels.find(l => cat.risk.score >= l.min && cat.risk.score <= l.max) || levels[0]
-      return `<tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:12px">${cat.icon} ${cat.label}</td>
-        <td style="padding:8px;text-align:center;border-bottom:1px solid #f0f0f0">
-          <span style="display:inline-block;width:36px;height:24px;line-height:24px;text-align:center;border-radius:4px;background:${level.bg};border:1px solid ${level.border};color:${level.border};font-weight:700;font-size:12px">${cat.risk.score}</span>
-        </td>
-        <td style="padding:8px;text-align:center;border-bottom:1px solid #f0f0f0;font-size:12px;color:${cat.risk.color};font-weight:600">${cat.risk.label}</td>
-        <td style="padding:8px;text-align:center;border-bottom:1px solid #f0f0f0;font-size:16px;color:${trendColors[cat.risk.trend]}">${trendIcons[cat.risk.trend]}</td>
-      </tr>`
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f8f8f8">
+        <span style="font-size:14px;width:24px">${cat.icon}</span>
+        <span style="flex:1;font-size:12px;color:#555;font-weight:500">${cat.label}</span>
+        <span style="display:inline-block;width:32px;height:22px;line-height:22px;text-align:center;border-radius:4px;background:${level.color}10;color:${level.color};font-weight:700;font-size:11px">${cat.risk.score}</span>
+        <span style="font-size:11px;color:${level.color};font-weight:500;width:36px;text-align:right">${cat.risk.label}</span>
+        <span style="font-size:13px;color:${trendColors[cat.risk.trend]};width:16px;text-align:center">${trendIcons[cat.risk.trend]}</span>
+      </div>`
     }).join('')
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">리스크 매트릭스</h3>
-      <table style="width:100%;border-collapse:collapse">
-        <tr style="background:#f8f9fa">
-          <th style="padding:6px 12px;text-align:left;font-size:11px;color:#888;border-bottom:2px solid #eee">카테고리</th>
-          <th style="padding:6px 8px;text-align:center;font-size:11px;color:#888;border-bottom:2px solid #eee">점수</th>
-          <th style="padding:6px 8px;text-align:center;font-size:11px;color:#888;border-bottom:2px solid #eee">수준</th>
-          <th style="padding:6px 8px;text-align:center;font-size:11px;color:#888;border-bottom:2px solid #eee">추세</th>
-        </tr>
-        ${rows}
-      </table>
-    </div>`
+    return this._card('리스크 매트릭스', rows || '<div style="color:#bbb;font-size:12px;text-align:center;padding:16px">데이터 없음</div>')
   },
 
   _alertFeed(alerts) {
-    const colors = { critical: '#e74c3c', warning: '#f39c12', info: '#3498db' }
-    const items = alerts.slice(0, 8).map(a => `<div style="padding:8px 12px;margin-bottom:4px;background:${colors[a.severity]}08;border-left:3px solid ${colors[a.severity]};border-radius:0 6px 6px 0;font-size:12px">
-      ${a.icon} <span style="color:${colors[a.severity]};font-weight:600">${a.category}</span> ${a.message}
+    const colors = { critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6' }
+    const items = alerts.slice(0, 6).map(a => `<div style="padding:8px 0;border-bottom:1px solid #f8f8f8;font-size:12px">
+      <span style="color:${colors[a.severity]};font-weight:600">${a.icon} ${a.category}</span>
+      <span style="color:#666;margin-left:4px">${a.message}</span>
     </div>`).join('')
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">알림 (${alerts.length}건)</h3>
-      ${items || '<div style="text-align:center;padding:20px;color:#27ae60;font-size:13px">알림이 없습니다</div>'}
-    </div>`
+    return this._card(`알림 (${alerts.length}건)`, items || '<div style="text-align:center;padding:16px;color:#10b981;font-size:12px">알림이 없습니다</div>')
   },
 
   _kssbStatus() {
@@ -321,20 +315,19 @@ const Dashboard = {
     const mandatory = agencies.filter(a => a.track_type === 'MANDATORY')
     const kssbAssessments = Store.getAssessments().filter(a => a.authority_code === 'KSSB' || a.authority_code === 'ISSB')
     const hasKssb = kssbAssessments.length > 0
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">법정 공시 현황</h3>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-        <div style="width:48px;height:48px;border-radius:12px;background:${hasKssb ? '#27ae6015' : '#e74c3c15'};display:flex;align-items:center;justify-content:center;font-size:24px">${hasKssb ? '✅' : '⚠️'}</div>
+    return this._card('법정 공시 현황', `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <div style="width:36px;height:36px;border-radius:8px;background:${hasKssb ? '#10b98110' : '#ef444410'};display:flex;align-items:center;justify-content:center;font-size:18px">${hasKssb ? '✓' : '!'}</div>
         <div>
-          <div style="font-size:16px;font-weight:700;color:${hasKssb ? '#27ae60' : '#e74c3c'}">${hasKssb ? 'KSSB 진행중' : '미착수'}</div>
-          <div style="font-size:11px;color:#999">${kssbAssessments.length}건 평가 등록됨</div>
+          <div style="font-size:15px;font-weight:700;color:${hasKssb ? '#10b981' : '#ef4444'}">${hasKssb ? 'KSSB 진행중' : '미착수'}</div>
+          <div style="font-size:11px;color:#bbb">${kssbAssessments.length}건 평가</div>
         </div>
       </div>
       <div style="font-size:12px;color:#888;line-height:1.6">
         <div>대상: ${mandatory.map(a => a.name).join(', ') || '없음'}</div>
-        <div>시행일: ${mandatory[0]?.effective_date || '-'}</div>
+        ${mandatory[0]?.effective_date ? `<div>시행일: ${mandatory[0].effective_date}</div>` : ''}
       </div>
-    </div>`
+    `)
   },
 
   _budgetGauge() {
@@ -342,20 +335,18 @@ const Dashboard = {
     const totalPlanned = budget.reduce((s, b) => s + (b.planned_amount || 0), 0)
     const totalActual = budget.reduce((s, b) => s + (b.actual_amount || 0), 0)
     const rate = totalPlanned ? Math.round(totalActual / totalPlanned * 100) : 0
-    const color = rate > 100 ? '#e74c3c' : rate > 80 ? '#f39c12' : '#27ae60'
-    return `<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
-      <h3 style="margin:0 0 12px;font-size:13px;color:#666;font-weight:600">예산 집행률</h3>
-      <div style="display:flex;align-items:center;gap:16px">
-        <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-          ${this._ring(Math.min(rate, 100), color, 80, 8)}
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:${color}">${totalPlanned ? rate + '%' : '-'}</div>
+    const color = rate > 100 ? '#ef4444' : rate > 80 ? '#f59e0b' : '#10b981'
+    return this._card('예산 집행률', `
+      <div style="display:flex;align-items:center;gap:20px">
+        <div style="position:relative;width:64px;height:64px;flex-shrink:0">
+          ${this._ring(Math.min(rate, 100), color, 64, 6)}
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:${color}">${totalPlanned ? rate + '%' : '-'}</div>
         </div>
-        <div>
-          <div style="font-size:12px;color:#666">계획: ₩${(totalPlanned/10000).toFixed(0)}만</div>
-          <div style="font-size:12px;color:#666">집행: ₩${(totalActual/10000).toFixed(0)}만</div>
-          <div style="font-size:11px;color:${color};margin-top:4px;font-weight:500">${rate > 100 ? '초과 집행' : rate > 80 ? '양호' : '여유'}</div>
+        <div style="font-size:12px;color:#666;line-height:1.8">
+          <div>계획: <strong>₩${(totalPlanned/10000).toFixed(0)}만</strong></div>
+          <div>집행: <strong>₩${(totalActual/10000).toFixed(0)}만</strong></div>
         </div>
       </div>
-    </div>`
+    `)
   }
 }
