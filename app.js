@@ -270,7 +270,7 @@
       }
     })
     initKeepAlive()
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && _evidencePreviewId) { _evidencePreviewId = null; _evidencePreviewIdx = -1; _evidencePreviewFullscreen = false; const c = document.getElementById('page-evidence'); if (c) renderEvidenceMgmt() } })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && _evidencePreviewId) { _evidencePreviewId = null; _evidencePreviewFullscreen = false; const c = document.getElementById('page-evidence'); if (c) renderEvidenceMgmt() } })
   }
 
   // ==================== Navigation ====================
@@ -560,9 +560,10 @@
       el('div', { style: 'display:flex;gap:6px;margin-bottom:12px' },
         el('button', { className: 'btn' + (_indicatorTab === 'list' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'list'; _editingIndicator = null; renderIndicators() } }, '📋 지표 목록'),
         el('button', { className: 'btn' + (_indicatorTab === 'mapping' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'mapping'; _editingIndicator = null; renderIndicators() } }, '🔗 매핑 관리')
-      ),
-      _indicatorTab === 'list' ? renderIndicatorSplitView() : renderIndicatorMapping()
+      )
     )
+    if (_indicatorTab === 'list') renderIndicatorSplitView()
+    else renderIndicatorMapping()
   }
 
   function renderIndicatorSplitView() {
@@ -726,7 +727,6 @@
 
     mainContent.append(rightPanel)
     c.append(mainContent)
-    return c
   }
 
   function renderIndicatorEditForm(ind) {
@@ -982,32 +982,19 @@
     _evidenceAssId = _evidenceAssId || assessments[0].id
     if (!assessments.find(a => a.id === _evidenceAssId)) _evidenceAssId = assessments[0].id
     const evidences = Evidence.getAll(_evidenceAssId)
-
-    if (_evidencePreviewId && !evidences.find(e => e.id === _evidencePreviewId)) {
-      _evidencePreviewId = null
-      _evidencePreviewIdx = -1
-    }
-
     const searchQuery = _evidenceSearchQuery || ''
 
-    const leftPanel = el('div', { style: 'flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column' },
-      el('div', { style: 'padding:16px 20px;background:#fff;border-bottom:1px solid #eee' },
-        el('div', { style: 'display:flex;gap:12px;align-items:center;margin-bottom:12px' },
-          el('h3', { style: 'margin:0;font-size:16px' }, '📎 증빙 관리'),
-          el('select', { id: 'evAssSelect', style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px', onChange: () => { _evidenceAssId = parseInt(document.getElementById('evAssSelect').value); _evidencePreviewId = null; _evidencePreviewIdx = -1; renderEvidenceMgmt() } },
-            ...assessments.map(a => el('option', { value: a.id, selected: a.id === _evidenceAssId }, a.title))
-          ),
-          el('button', { className: 'btn btn-primary btn-sm', onClick: openAddEvidence }, '+ 증빙 추가')
+    c.append(
+      el('div', { style: 'display:flex;gap:12px;align-items:center;margin-bottom:16px' },
+        el('h3', { style: 'margin:0;font-size:16px;white-space:nowrap' }, '📎 증빙 관리'),
+        el('select', { id: 'evAssSelect', style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px', onChange: () => { _evidenceAssId = parseInt(document.getElementById('evAssSelect').value); renderEvidenceMgmt() } },
+          ...assessments.map(a => el('option', { value: a.id, selected: a.id === _evidenceAssId }, a.title))
         ),
-        el('div', { style: 'display:flex;gap:8px;align-items:center' },
-          el('input', { id: 'evSearch', type: 'text', placeholder: '🔍 제목, 유형, 태그로 검색...', value: searchQuery, style: 'flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px', onInput: () => { _evidenceSearchQuery = document.getElementById('evSearch').value; renderEvidenceMgmt() } }),
-          el('span', { style: 'font-size:11px;color:#888;white-space:nowrap' }, `${evidences.length}건`)
-        )
-      ),
-      el('div', { id: 'evListContainer', style: 'flex:1;overflow-y:auto;padding:16px 20px' })
+        el('input', { id: 'evSearch', type: 'text', placeholder: '🔍 제목/유형/태그 검색...', value: searchQuery, style: 'flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px', onInput: () => { _evidenceSearchQuery = document.getElementById('evSearch').value; renderEvidenceMgmt() } }),
+        el('span', { style: 'font-size:11px;color:#888;white-space:nowrap' }, `${evidences.length}건`),
+        el('button', { className: 'btn btn-primary', onClick: openAddEvidence }, '+ 증빙 추가')
+      )
     )
-
-    const evListContainer = leftPanel.querySelector('#evListContainer')
 
     const filteredEvidences = evidences.filter(ev => {
       if (!searchQuery) return true
@@ -1023,73 +1010,133 @@
     })
 
     if (!filteredEvidences.length) {
-      evListContainer.append(
+      c.append(
         el('div', { style: 'text-align:center;padding:40px 20px;color:#ccc' },
           el('div', { style: 'font-size:48px;margin-bottom:12px' }, '📄'),
           el('p', { style: 'margin:0;font-size:14px;color:#999' }, searchQuery ? `"${searchQuery}" 검색 결과 없음` : '등록된 증빙이 없습니다'),
           !searchQuery ? el('button', { className: 'btn btn-primary', style: 'margin-top:12px', onClick: openAddEvidence }, '+ 첫 증빙 추가') : null
         )
       )
-    } else {
-      filteredEvidences.forEach(ev => {
-        const files = Store.getEvidenceFiles(ev.id)
-        const tags = Evidence.getTags(ev.id)
-        const tagCodes = tags.map(t => { const ind = Store.getIndicators().find(i => i.id === t.indicator_id); return ind ? ind.indicator_code : null }).filter(Boolean)
-        const fileLabels = { pdf: 'PDF', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
-        const statusLabels = { self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증' }
-        const statusColors = { self: '#f59e0b', internal_reviewed: '#3b82f6', externally_verified: '#10b981' }
-        const fileIcon = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
-        const isPreview = _evidencePreviewId === ev.id
-
-        const card = el('div', {
-          style: `background:#fff;border:1px solid ${isPreview ? '#7C3AED' : '#f0f0f0'};border-radius:10px;padding:16px;margin-bottom:12px;cursor:pointer;transition:all .2s;${isPreview ? 'box-shadow:0 2px 12px rgba(124,58,237,.12)' : ''}`,
-          onClick: () => openEvidencePreview(ev.id),
-          onMouseEnter: e => { if (!isPreview) e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,.06)' },
-          onMouseLeave: e => { if (!isPreview) e.currentTarget.style.boxShadow = 'none' }
-        },
-          el('div', { style: 'display:flex;align-items:flex-start;gap:12px' },
-            el('div', { style: `width:40px;height:40px;border-radius:8px;background:${statusColors[ev.status] || '#f0f0f0'}10;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0` }, fileIcon[ev.file_type] || '📁'),
-            el('div', { style: 'flex:1;min-width:0' },
-              el('div', { style: 'font-size:14px;font-weight:600;color:#1a1a2e;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, ev.title),
-              el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' },
-                el('span', { style: `font-size:10px;padding:2px 6px;border-radius:4px;background:${statusColors[ev.status] || '#f0f0f0'}10;color:${statusColors[ev.status] || '#666'};font-weight:500` }, statusLabels[ev.status] || ev.status || '-'),
-                el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#f0f0f0;color:#666' }, fileLabels[ev.file_type] || ev.file_type || '-'),
-                files.length > 0 ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#7C3AED10;color:#7C3AED' }, `${files.length}개 파일`) : null,
-                ev.contains_sensitive_data ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#ef444410;color:#ef4444' }, '🔒 민감') : null
-              ),
-              tagCodes.length ? el('div', { style: 'margin-top:6px;display:flex;gap:4px;flex-wrap:wrap' },
-                ...tagCodes.map(code => el('span', { style: 'font-size:9px;padding:1px 5px;border-radius:3px;background:#f0f7ff;color:#3b82f6;font-family:monospace' }, code))
-              ) : null
-            ),
-            el('div', { style: 'display:flex;gap:4px;flex-shrink:0' },
-              el('button', { className: 'btn btn-sm', style: { background: isPreview ? '#7C3AED' : '#f0f0f0', color: isPreview ? '#fff' : '#333', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: (e) => { e.stopPropagation(); editEvidence(ev.id) } }, '수정'),
-              el('button', { className: 'btn btn-sm', style: { background: '#fee2e2', color: '#e74c3c', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: (e) => { e.stopPropagation(); if (confirm('삭제?')) { Store.deleteEvidence(ev.id); if (_evidencePreviewId === ev.id) { _evidencePreviewId = null; _evidencePreviewIdx = -1 } renderEvidenceMgmt() } } }, '삭제')
-            )
-          )
-        )
-        evListContainer.append(card)
-      })
+      return
     }
 
-    const rightPanel = _evidencePreviewId ? renderEvidencePreviewPanel(evidences) : el('div', { style: 'width:320px;min-width:320px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-left:1px solid #e9ecef;color:#aaa;font-size:13px;text-align:center;padding:20px' },
-      el('div', {},
-        el('div', { style: 'font-size:48px;margin-bottom:12px' }, '👁'),
-        el('p', { style: 'margin:0 0 4px' }, '증빙을 선택하면 미리보기가 표시됩니다'),
-        el('p', { style: 'margin:0;font-size:11px;color:#ccc' }, '목록에서 문서를 클릭하세요')
+    const fileLabels = { pdf: 'PDF', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
+    const statusLabels = { self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증' }
+    const statusColors = { self: '#f59e0b', internal_reviewed: '#3b82f6', externally_verified: '#10b981' }
+    const fileIcon = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
+
+    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' })
+
+    filteredEvidences.forEach(ev => {
+      const files = Store.getEvidenceFiles(ev.id)
+      const tags = Evidence.getTags(ev.id)
+      const tagCodes = tags.map(t => { const ind = Store.getIndicators().find(i => i.id === t.indicator_id); return ind ? ind.indicator_code : null }).filter(Boolean)
+
+      const isEditing = _evidencePreviewId === ev.id
+
+      const card = el('div', {
+        style: `background:#fff;border:1px solid ${isEditing ? '#7C3AED' : '#f0f0f0'};border-radius:10px;padding:16px;transition:all .2s;${isEditing ? 'box-shadow:0 2px 12px rgba(124,58,237,.12)' : ''}`
+      },
+        el('div', { style: 'display:flex;align-items:flex-start;gap:10px;margin-bottom:10px' },
+          el('div', { style: `width:36px;height:36px;border-radius:8px;background:${statusColors[ev.status] || '#f0f0f0'}10;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0` }, fileIcon[ev.file_type] || '📁'),
+          el('div', { style: 'flex:1;min-width:0' },
+            el('div', { style: 'font-size:13px;font-weight:600;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, ev.title),
+            el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap' },
+              el('span', { style: `font-size:10px;padding:2px 6px;border-radius:4px;background:${statusColors[ev.status] || '#f0f0f0'}10;color:${statusColors[ev.status] || '#666'};font-weight:500` }, statusLabels[ev.status] || ev.status || '-'),
+              el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#f0f0f0;color:#666' }, fileLabels[ev.file_type] || ev.file_type || '-'),
+              files.length > 0 ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#7C3AED10;color:#7C3AED' }, `${files.length}개 파일`) : null,
+              ev.contains_sensitive_data ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#ef444410;color:#ef4444' }, '🔒 민감') : null
+            )
+          )
+        ),
+        tagCodes.length ? el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px' },
+          ...tagCodes.map(code => el('span', { style: 'font-size:9px;padding:1px 5px;border-radius:3px;background:#f0f7ff;color:#3b82f6;font-family:monospace' }, code))
+        ) : null,
+        isEditing ? renderEvidenceInlineEdit(ev, assessments) : el('div', { style: 'display:flex;gap:6px;justify-content:flex-end' },
+          el('button', { className: 'btn btn-sm', style: { background: '#f0f0f0', color: '#333', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: () => openEvidencePreview(ev.id) }, '열람'),
+          el('button', { className: 'btn btn-sm', style: { background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: () => openEvidencePreview(ev.id) }, '수정'),
+          el('button', { className: 'btn btn-sm', style: { background: '#fee2e2', color: '#e74c3c', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: () => { if (confirm('삭제?')) { Store.deleteEvidence(ev.id); _evidencePreviewId = null; renderEvidenceMgmt() } } }, '삭제')
+        )
+      )
+      grid.append(card)
+    })
+
+    c.append(grid)
+  }
+
+  function renderEvidenceInlineEdit(ev, assessments) {
+    const allIndicators = Store.getIndicators() || []
+    const tags = Evidence.getTags(ev.id)
+    const tagIndicatorIds = tags.map(t => t.indicator_id)
+    const fileLabels = { pdf: 'PDF', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
+    const statusLabels = { self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증' }
+    const fileIcons = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
+    const files = Store.getEvidenceFiles(ev.id)
+
+    return el('div', { style: 'border-top:1px solid #eee;padding-top:10px;margin-top:6px' },
+      el('div', { style: 'display:flex;flex-direction:column;gap:8px' },
+        el('div', { style: 'display:flex;gap:6px;align-items:center' },
+          el('label', { style: 'font-size:11px;color:#666;min-width:40px' }, '제목'),
+          el('input', { id: 'evEditTitle', type: 'text', value: ev.title || '', style: 'flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px' })
+        ),
+        el('div', { style: 'display:flex;gap:6px;align-items:center' },
+          el('label', { style: 'font-size:11px;color:#666;min-width:40px' }, '유형'),
+          el('select', { id: 'evEditType', style: 'flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px' },
+            ...Object.entries(fileLabels).map(([k, v]) => el('option', { value: k, selected: k === ev.file_type }, v))
+          )
+        ),
+        el('div', { style: 'display:flex;gap:6px;align-items:center' },
+          el('label', { style: 'font-size:11px;color:#666;min-width:40px' }, '상태'),
+          el('select', { id: 'evEditStatus', style: 'flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px' },
+            ...Object.entries(statusLabels).map(([k, v]) => el('option', { value: k, selected: k === ev.status }, v))
+          )
+        ),
+        el('div', { style: 'display:flex;gap:6px;align-items:flex-start' },
+          el('label', { style: 'font-size:11px;color:#666;min-width:40px;padding-top:4px' }, '태그'),
+          el('div', { id: 'evEditTags', style: 'flex:1;display:flex;flex-wrap:wrap;gap:4px;padding:4px;border:1px solid #ddd;border-radius:5px;min-height:28px' },
+            ...allIndicators.map(ind => {
+              const checked = tagIndicatorIds.includes(ind.id)
+              return el('label', { style: `font-size:10px;padding:2px 5px;border-radius:3px;cursor:pointer;${checked ? 'background:#7C3AED;color:#fff' : 'background:#f0f0f0;color:#666'}` },
+                el('input', { type: 'checkbox', checked, style: 'display:none', onChange: () => {
+                  const cb = document.querySelectorAll('#evEditTags input[type=checkbox]')
+                  const newIds = []
+                  cb.forEach((c, i) => { if (c.checked) newIds.push(allIndicators[i].id) })
+                  Store.db.evidence_indicator.deleteMany({ where: { evidence_id: ev.id } })
+                  newIds.forEach(indId => Store.db.evidence_indicator.insertOne({ evidence_id: ev.id, indicator_id: indId }))
+                } }),
+                ind.indicator_code
+              )
+            })
+          )
+        ),
+        el('div', { style: 'display:flex;gap:6px;align-items:flex-start' },
+          el('label', { style: 'font-size:11px;color:#666;min-width:40px;padding-top:4px' }, '파일'),
+          el('div', { style: 'flex:1;display:flex;flex-direction:column;gap:4px' },
+            ...files.map(f => el('div', { style: 'display:flex;align-items:center;gap:6px;padding:4px 6px;background:#f8f9fa;border-radius:4px;font-size:11px' },
+              el('span', {}, fileIcons[f.file_type] || '📁'),
+              el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, f.original_name || f.file_name),
+              el('button', { style: { background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 11, padding: '0 2px' }, onClick: () => { Store.deleteEvidenceFile(f.id); renderEvidenceMgmt() } }, '✕')
+            )),
+            files.length === 0 ? el('span', { style: 'font-size:11px;color:#aaa' }, '첨부 파일 없음') : null
+          )
+        ),
+        el('div', { style: 'display:flex;gap:6px;justify-content:flex-end;margin-top:4px' },
+          el('button', { className: 'btn btn-sm', style: { background: '#f0f0f0', color: '#333', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11 }, onClick: () => { _evidencePreviewId = null; renderEvidenceMgmt() } }, '취소'),
+          el('button', { className: 'btn btn-sm', style: { background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11 }, onClick: () => {
+            const title = document.getElementById('evEditTitle').value
+            const fileType = document.getElementById('evEditType').value
+            const status = document.getElementById('evEditStatus').value
+            Store.db.evidence.update({ id: ev.id }, { title, file_type: fileType, status })
+            _evidencePreviewId = null
+            renderEvidenceMgmt()
+          } }, '저장')
+        )
       )
     )
-
-    const splitContainer = _evidencePreviewId
-      ? el('div', { style: 'display:flex;gap:0;height:calc(100vh - 140px);min-height:400px' }, leftPanel, rightPanel)
-      : leftPanel
-    c.append(splitContainer)
   }
 
   function openEvidencePreview(evId) {
-    if (_evidencePreviewId === evId) { _evidencePreviewId = null; _evidencePreviewIdx = -1; renderEvidenceMgmt(); return }
-    const evidences = Evidence.getAll(_evidenceAssId)
-    _evidencePreviewId = evId
-    _evidencePreviewIdx = evidences.findIndex(e => e.id === evId)
+    _evidencePreviewId = _evidencePreviewId === evId ? null : evId
     renderEvidenceMgmt()
   }
 
