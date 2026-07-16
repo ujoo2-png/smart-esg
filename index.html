@@ -52,7 +52,8 @@
         <span id="user-info">로그인 필요</span>
         <button id="login-btn-top" onclick="showAuthModal('login')" style="display:none">로그인</button>
         <button id="logout-btn-top" onclick="doLogoutUI()" style="display:none">로그아웃</button>
-        <button id="help-btn" title="도움말" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px">❓</button>
+        <button id="help-btn" title="도움말" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px" onclick="toggleHelp()">❓</button>
+        <button id="export-btn" title="데이터 내보내기" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px" onclick="showExportModal()">📥</button>
       </div>
     </header>
     <section id="content">

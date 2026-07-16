@@ -1,6 +1,11 @@
 ;(function() {
   const _tableState = {}
   const PAGE_SIZE = 15
+  let _evidencePreviewId = null
+  let _evidencePreviewIdx = -1
+  let _evidencePreviewWidth = 480
+  let _evidencePreviewFullscreen = false
+  let _evidencePreviewSearch = ''
 
   const el = (tag, attrs = {}, ...children) => {
     const e = document.createElement(tag)
@@ -260,6 +265,7 @@
       }
     })
     initKeepAlive()
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && _evidencePreviewId) { _evidencePreviewId = null; _evidencePreviewIdx = -1; _evidencePreviewFullscreen = false; const c = document.getElementById('page-evidence'); if (c) renderEvidenceMgmt() } })
   }
 
   // ==================== Navigation ====================
@@ -540,258 +546,246 @@
   let _indicatorSearch = ''
   let _selectedIndicators = new Set()
   let _editingIndicator = null
-  let _showQuickForm = false
 
   function renderIndicators() {
     const c = document.getElementById('page-indicator')
     if (!c) return
     c.innerHTML = ''
-    const allIndicators = Store.getIndicators().filter(i => i.authority_code === _selectedAuthority)
-    const totalCount = allIndicators.length
-    const activeCount = allIndicators.filter(i => i.is_active !== false).length
-    const groups = Indicator.getGroups(_selectedAuthority)
-
     c.append(
       el('div', { style: 'display:flex;gap:6px;margin-bottom:12px' },
-        el('button', { className: 'btn' + (_indicatorTab === 'list' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'list'; renderIndicators() } }, '📋 지표 목록'),
-        el('button', { className: 'btn' + (_indicatorTab === 'mapping' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'mapping'; renderIndicators() } }, '🔗 매핑 관리')
+        el('button', { className: 'btn' + (_indicatorTab === 'list' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'list'; _editingIndicator = null; renderIndicators() } }, '📋 지표 목록'),
+        el('button', { className: 'btn' + (_indicatorTab === 'mapping' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'mapping'; _editingIndicator = null; renderIndicators() } }, '🔗 매핑 관리')
       ),
-      _indicatorTab === 'list' ? renderIndicatorListInline() : renderIndicatorMapping()
+      _indicatorTab === 'list' ? renderIndicatorSplitView() : renderIndicatorMapping()
     )
   }
 
-  function renderIndicatorListInline() {
+  function renderIndicatorSplitView() {
     const allIndicators = Store.getIndicators().filter(i => i.authority_code === _selectedAuthority)
     const groups = Indicator.getGroups(_selectedAuthority)
     const filtered = allIndicators.filter(i => {
       if (_indicatorSearch) {
         const q = _indicatorSearch.toLowerCase()
-        const nameMatch = (i.indicator_name || '').toLowerCase().includes(q)
-        const codeMatch = (i.indicator_code || '').toLowerCase().includes(q)
-        if (!nameMatch && !codeMatch) return false
+        if (!(i.indicator_name || '').toLowerCase().includes(q) && !(i.indicator_code || '').toLowerCase().includes(q)) return false
       }
       if (_materialityFilter === 'active' && i.is_active === false) return false
       if (_materialityFilter === 'inactive' && i.is_active !== false) return false
       return true
     })
     const activeCount = allIndicators.filter(i => i.is_active !== false).length
+    const editingInd = _editingIndicator ? Store.getIndicators().find(i => i.id === _editingIndicator) : null
 
-    const wrapper = el('div')
+    const leftPanel = el('div', { style: 'flex:1;min-width:0;overflow-y:auto;max-height:calc(100vh - 160px)' })
 
-    wrapper.append(
-      el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
-        el('select', { id: 'authSelect', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _selectedAuthority = document.getElementById('authSelect').value; _materialityFilter = 'all'; _indicatorSearch = ''; _selectedIndicators.clear(); renderIndicators() } },
+    leftPanel.append(
+      el('div', { style: 'padding:10px 12px;background:#fff;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5' },
+        el('select', { id: 'authSelect', style: 'font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px', onChange: () => { _selectedAuthority = document.getElementById('authSelect').value; _materialityFilter = 'all'; _indicatorSearch = ''; _selectedIndicators.clear(); _editingIndicator = null; renderIndicators() } },
           ['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(code => el('option', { value: code, selected: code === _selectedAuthority }, Indicator.getAuthorityName(code)))
         ),
-        el('input', { id: 'indSearch', type: 'text', placeholder: '🔍 지표명 또는 코드 검색...', value: _indicatorSearch, style: 'flex:1;min-width:200px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onInput: () => { _indicatorSearch = document.getElementById('indSearch').value; renderIndicators() } }),
-        el('select', { id: 'materialityFilter', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _materialityFilter = document.getElementById('materialityFilter').value; renderIndicators() } },
+        el('input', { id: 'indSearch', type: 'text', placeholder: '🔍 검색', value: _indicatorSearch, style: 'flex:1;min-width:120px;font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px', onInput: () => { _indicatorSearch = document.getElementById('indSearch').value; renderIndicators() } }),
+        el('select', { id: 'materialityFilter', style: 'font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px', onChange: () => { _materialityFilter = document.getElementById('materialityFilter').value; renderIndicators() } },
           el('option', { value: 'all', selected: _materialityFilter === 'all' }, '전체'),
-          el('option', { value: 'active', selected: _materialityFilter === 'active' }, `활성 (${activeCount})`),
-          el('option', { value: 'inactive', selected: _materialityFilter === 'inactive' }, `비활성 (${allIndicators.length - activeCount})`)
-        ),
-        el('span', { style: 'font-size:12px;color:#888' }, `${filtered.length}개 표시 / ${allIndicators.length}개 전체`)
+          el('option', { value: 'active', selected: _materialityFilter === 'active' }, `활성 ${activeCount}`),
+          el('option', { value: 'inactive', selected: _materialityFilter === 'inactive' }, `비활성 ${allIndicators.length - activeCount}`)
+        )
+      ),
+      el('div', { style: 'padding:6px 12px;display:flex;gap:6px;align-items:center;position:sticky;top:40px;z-index:5;background:#f8f9fa;border-bottom:1px solid #eee' },
+        el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _editingIndicator = '__new__'; renderIndicators() } }, '+ 새 지표'),
+        el('button', { className: 'btn btn-sm', style: 'background:#f0f7ff;color:#3B82F6', onClick: () => openImportTemplate() }, '📥 템플릿'),
+        el('span', { style: 'font-size:11px;color:#888;margin-left:auto' }, `${filtered.length}/${allIndicators.length}개`)
       )
     )
 
     if (_selectedIndicators.size > 0) {
-      wrapper.append(
-        el('div', { className: 'card', style: 'padding:10px 16px;display:flex;gap:8px;align-items:center;background:#f8f6ff;border-left:3px solid #7C3AED' },
-          el('span', { style: 'font-size:13px;font-weight:600' }, `${_selectedIndicators.size}개 선택됨`),
-          el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: true })); _selectedIndicators.clear(); renderIndicators() } }, '활성화'),
-          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: false })); _selectedIndicators.clear(); renderIndicators() } }, '비활성화'),
-          el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm(`${_selectedIndicators.size}개 지표를 삭제하시겠습니까?`)) { _selectedIndicators.forEach(id => Store.deleteIndicator(id)); _selectedIndicators.clear(); renderIndicators() } } }, '삭제'),
-          el('button', { className: 'btn btn-sm', style: 'margin-left:auto', onClick: () => { _selectedIndicators.clear(); renderIndicators() } }, '선택 해제')
+      leftPanel.append(
+        el('div', { style: 'padding:6px 12px;display:flex;gap:6px;align-items:center;background:#f8f6ff;border-bottom:1px solid #e0d8f0' },
+          el('span', { style: 'font-size:11px;font-weight:600' }, `${_selectedIndicators.size}개 선택`),
+          el('button', { className: 'btn btn-sm btn-primary', style: 'font-size:11px', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: true })); _selectedIndicators.clear(); renderIndicators() } }, '활성'),
+          el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: false })); _selectedIndicators.clear(); renderIndicators() } }, '비활성'),
+          el('button', { className: 'btn btn-sm btn-danger', style: 'font-size:11px', onClick: () => { if (confirm(`${_selectedIndicators.size}개 삭제?`)) { _selectedIndicators.forEach(id => Store.deleteIndicator(id)); _selectedIndicators.clear(); renderIndicators() } } }, '삭제'),
+          el('button', { className: 'btn btn-sm', style: 'margin-left:auto;font-size:11px', onClick: () => { _selectedIndicators.clear(); renderIndicators() } }, '해제')
         )
       )
     }
-
-    if (_showQuickForm) {
-      wrapper.append(renderQuickIndicatorForm())
-    }
-
-    wrapper.append(
-      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px' },
-        el('h3', { style: 'margin:0;font-size:15px' }, `지표 관리 · ${Indicator.getAuthorityName(_selectedAuthority)}`),
-        el('div', { style: 'display:flex;gap:6px' },
-          el('button', { className: 'btn btn-sm', style: 'background:#f0f7ff;color:#3B82F6', onClick: () => openImportTemplate() }, '📥 템플릿에서 가져오기'),
-          el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _showQuickForm = !_showQuickForm; _editingIndicator = null; renderIndicators() } }, _showQuickForm ? '✕ 닫기' : '+ 새 지표 추가')
-        )
-      )
-    )
-
-    _selectedAuthority === 'ECOVADIS' && wrapper.append(
-      el('div', { style: 'padding:10px 16px;background:#f8f6ff;border-bottom:1px solid #eee;font-size:12px;color:#666' },
-        '💡 ',
-        el('strong', {}, '지표 추가 방법: '),
-        '+ 버튼 클릭 → 카드에서 클릭 → 이름/필러/그룹/부서/주기 선택 → 저장. ',
-        el('span', { style: 'color:#7C3AED' }, '카드를 클릭하면 바로 수정 폼이 열립니다.'),
-        ' | ',
-        '📊 EcoVadis 가중치: Policies 25% / Actions 40% / Results 35%'
-      )
-    )
 
     if (!filtered.length) {
-      wrapper.append(
-        el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
-          el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📋'),
-          el('p', { style: 'margin:0 0 12px;color:#888' }, _indicatorSearch ? `"${_indicatorSearch}"에 대한 검색 결과가 없습니다` : '등록된 지표가 없습니다'),
-          !_showQuickForm && el('button', { className: 'btn btn-primary', onClick: () => { _showQuickForm = true; _editingIndicator = null; renderIndicators() } }, '+ 첫 번째 지표 추가')
+      leftPanel.append(
+        el('div', { style: 'text-align:center;padding:40px 20px' },
+          el('div', { style: 'font-size:32px;margin-bottom:8px' }, '📋'),
+          el('p', { style: 'margin:0;color:#888;font-size:13px' }, _indicatorSearch ? `"${_indicatorSearch}" 검색 결과 없음` : '등록된 지표가 없습니다')
         )
       )
-      return wrapper
-    }
-
-    groups.forEach(g => {
-      const inds = filtered.filter(i => i.group_id === g.id)
-      if (!inds.length) return
-      const groupActive = inds.filter(i => i.is_active !== false).length
-      wrapper.append(
-        el('div', { className: 'card', style: 'padding:0;margin-bottom:12px;overflow:hidden' },
-          el('div', { style: 'display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(135deg,#f8f6ff,#f0f0ff);border-bottom:2px solid #e0d8f0' },
-            el('span', { style: 'font-size:18px' }, _selectedAuthority === 'ECOVADIS' ? '🌿' : _selectedAuthority === 'KSSB' ? '📜' : _selectedAuthority === 'KCGS' ? '🏢' : _selectedAuthority === 'NICE' ? '📊' : '📋'),
-            el('h4', { style: 'margin:0;font-size:14px;color:#2c3e50;font-weight:700' }, Indicator.getGroupDisplayName(g)),
-            el('span', { style: 'background:#7C3AED;color:#fff;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600' }, `${groupActive}/${inds.length}`)
-          ),
-          el('div', { style: 'padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;background:#fafafa' },
-            ...inds.map(ind => renderIndicatorCard(ind))
+    } else {
+      groups.forEach(g => {
+        const inds = filtered.filter(i => i.group_id === g.id)
+        if (!inds.length) return
+        const groupActive = inds.filter(i => i.is_active !== false).length
+        leftPanel.append(
+          el('div', { style: 'border-bottom:1px solid #eee' },
+            el('div', { style: 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f6ff' },
+              el('span', { style: 'font-size:14px' }, _selectedAuthority === 'ECOVADIS' ? '🌿' : _selectedAuthority === 'KSSB' ? '📜' : _selectedAuthority === 'KCGS' ? '🏢' : _selectedAuthority === 'NICE' ? '📊' : '📋'),
+              el('span', { style: 'font-size:12px;font-weight:700;color:#2c3e50' }, Indicator.getGroupDisplayName(g)),
+              el('span', { style: 'background:#7C3AED;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px;font-weight:600' }, `${groupActive}/${inds.length}`)
+            ),
+            ...inds.map(ind => {
+              const isActive = ind.is_active !== false
+              const isEditing = _editingIndicator === ind.id
+              const isSelected = _selectedIndicators.has(ind.id)
+              const pillarColor = ind.pillar === 'POLICY' ? '#7C3AED' : ind.pillar === 'ACTION' ? '#3B82F6' : ind.pillar === 'RESULT' ? '#10B981' : '#F59E0B'
+              return el('div', {
+                style: `padding:8px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:8px;${isEditing ? 'background:#f0ebff;border-left:3px solid #7C3AED' : 'border-left:3px solid transparent'};${!isActive ? 'opacity:.5' : ''}`,
+                onClick: (e) => { if (e.target.tagName === 'INPUT') return; _editingIndicator = ind.id; renderIndicators() }
+              },
+                el('input', { type: 'checkbox', checked: isSelected, onChange: (e) => { e.stopPropagation(); if (isSelected) _selectedIndicators.delete(ind.id); else _selectedIndicators.add(ind.id); renderIndicators() }, onClick: (e) => e.stopPropagation(), style: 'cursor:pointer;margin:0;flex-shrink:0' }),
+                el('span', { style: `width:4px;height:24px;border-radius:2px;background:${pillarColor};flex-shrink:0` }),
+                el('div', { style: 'flex:1;min-width:0' },
+                  el('div', { style: 'display:flex;gap:6px;align-items:center' },
+                    el('span', { style: 'font-family:monospace;font-size:10px;font-weight:700;color:#7C3AED' }, ind.indicator_code),
+                    el('span', { style: 'font-size:10px;color:#888' }, ind.pillar ? Indicator.getPillarName(ind.pillar) : '')
+                  ),
+                  el('div', { style: 'font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, Indicator.getDisplayName(ind))
+                ),
+                el('button', { className: 'btn btn-sm', title: isActive ? '비활성' : '활성', style: `font-size:10px;padding:2px 6px;${isActive ? 'color:#10B981' : 'color:#e74c3c'}`, onClick: (e) => { e.stopPropagation(); Indicator.toggleActive(ind.id); renderIndicators() } }, isActive ? '✓' : '✗')
+              )
+            })
           )
         )
-      )
-    })
+      })
+    }
 
-    return wrapper
-  }
+    const rightPanel = el('div', { style: 'width:420px;flex-shrink:0;border-left:1px solid #e0d8f0;overflow-y:auto;max-height:calc(100vh - 160px)' })
 
-  function renderIndicatorCard(ind) {
-    const pillarColor = ind.pillar === 'POLICY' ? '#7C3AED' : ind.pillar === 'ACTION' ? '#3B82F6' : ind.pillar === 'RESULT' ? '#10B981' : ind.pillar === 'GOVERNANCE' ? '#F59E0B' : ind.pillar === 'STRATEGY' ? '#EC4899' : ind.pillar === 'RISK_MGMT' ? '#EF4444' : '#6366F1'
-    const isSelected = _selectedIndicators.has(ind.id)
-    return el('div', { style: `background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${ind.is_active === false ? '#ccc' : pillarColor};${ind.is_active === false ? 'opacity:.5' : ''}${isSelected ? ';outline:2px solid #7C3AED;outline-offset:1px' : ''};cursor:pointer`, onClick: (e) => { if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; _editingIndicator = ind.id; _showQuickForm = true; renderIndicators() } },
-      el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px' },
-        el('div', { style: 'flex:1' },
-          el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:4px' },
-            el('input', { type: 'checkbox', checked: isSelected, onChange: (e) => { e.stopPropagation(); if (isSelected) _selectedIndicators.delete(ind.id); else _selectedIndicators.add(ind.id); renderIndicators() }, onClick: (e) => e.stopPropagation(), style: 'cursor:pointer;margin:0' }),
-            el('span', { style: 'font-family:monospace;font-size:11px;font-weight:700;color:#7C3AED;background:#f3f0ff;padding:2px 6px;border-radius:4px' }, ind.indicator_code),
-            el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:' + (ind.pillar === 'POLICY' ? '#f3e8ff;color:#7C3AED' : ind.pillar === 'ACTION' ? '#eff6ff;color:#3B82F6' : ind.pillar === 'RESULT' ? '#ecfdf5;color:#10B981' : '#fef3c7;color:#D97706') }, ind.pillar ? Indicator.getPillarName(ind.pillar) : '-')
-          ),
-          el('div', { style: 'font-size:13px;font-weight:600;color:#1a1a2e;line-height:1.4' }, Indicator.getDisplayName(ind))
-        ),
-        el('div', { style: 'display:flex;gap:4px' },
-          el('button', { className: 'btn btn-sm btn-secondary', title: '수정', onClick: (e) => { e.stopPropagation(); _editingIndicator = ind.id; _showQuickForm = true; renderIndicators() } }, '✏'),
-          el('button', { className: 'btn btn-sm', title: ind.is_active !== false ? '비활성화' : '활성화', style: ind.is_active !== false ? 'background:#f0fff4;color:#10B981' : 'background:#fff5f5;color:#e74c3c', onClick: (e) => { e.stopPropagation(); Indicator.toggleActive(ind.id); renderIndicators() } }, ind.is_active !== false ? '✓' : '✗')
+    if (_editingIndicator === '__new__') {
+      rightPanel.append(renderIndicatorEditForm(null))
+    } else if (editingInd) {
+      rightPanel.append(renderIndicatorEditForm(editingInd))
+    } else {
+      rightPanel.append(
+        el('div', { style: 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:#ccc' },
+          el('div', { style: 'font-size:48px;margin-bottom:12px' }, '📌'),
+          el('p', { style: 'margin:0;font-size:14px;color:#999' }, '지표를 선택하면 여기에 수정 화면이 표시됩니다'),
+          el('p', { style: 'margin:8px 0 0;font-size:12px;color:#ccc' }, '목록에서 지표를 클릭하세요')
         )
-      ),
-      el('div', { style: 'display:flex;gap:6px;font-size:11px;color:#888;flex-wrap:wrap' },
-        ind.dept_code ? el('span', { style: 'background:#f0f0f0;padding:2px 6px;border-radius:4px' }, ind.dept_code) : null,
-        ind.review_cycle ? el('span', { style: 'background:#f0f0f0;padding:2px 6px;border-radius:4px' }, ind.review_cycle === 'annual' ? '매년' : ind.review_cycle === 'semi_annual' ? '반기' : ind.review_cycle === 'quarterly' ? '분기' : '매월') : null,
-        ind.scope2_split_required ? el('span', { style: 'background:#fef3c7;padding:2px 6px;border-radius:4px;color:#D97706;font-weight:600' }, '🌍 Scope2') : null
       )
-    )
+    }
+
+    return el('div', { style: 'display:flex;gap:0;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);min-height:600px' }, leftPanel, rightPanel)
   }
 
-  function renderQuickIndicatorForm() {
-    const isEdit = _editingIndicator != null
-    const ind = isEdit ? Store.getIndicators().find(i => i.id === _editingIndicator) : null
+  function renderIndicatorEditForm(ind) {
+    const isEdit = !!ind
     const groups = Indicator.getGroups(_selectedAuthority)
     const pillarOptions = Indicator.getPillarOptions(_selectedAuthority)
     const depts = Store.getDepartments().filter(d => d.is_active !== false)
 
-    const nameInput = el('input', { value: ind?.indicator_name ?? '', required: true, placeholder: '지표 이름을 입력하세요', style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' })
-    const pillarSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
-      el('option', { value: '' }, '-- 필러 선택 --'),
-      ...pillarOptions.map(p => el('option', { value: p, selected: ind?.pillar === p }, Indicator.getPillarName(p)))
+    const form = el('div', { style: 'padding:0' })
+
+    form.append(
+      el('div', { style: 'padding:14px 16px;background:linear-gradient(135deg,#f8f6ff,#f0f0ff);border-bottom:2px solid #e0d8f0;display:flex;justify-content:space-between;align-items:center' },
+        el('h3', { style: 'margin:0;font-size:15px;color:#2c3e50' }, isEdit ? `✏ ${ind.indicator_code}` : '+ 새 지표 추가'),
+        isEdit ? el('span', { style: 'font-size:11px;color:#888' }, Indicator.getAuthorityName(_selectedAuthority)) : null
+      )
     )
-    const groupSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
+
+    const nameInput = el('input', { value: ind?.indicator_name ?? '', required: true, placeholder: '지표 이름을 입력하세요', style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' })
+    const pillarSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
+      el('option', { value: '' }, '-- 필러 선택 --'),
+      ...pillarOptions.map(p => el('option', { value: p, selected: ind?.pillar === p }, Indicator.getPillarName(p) + ' (' + p + ')'))
+    )
+    const groupSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
       el('option', { value: '' }, '-- 그룹 선택 --'),
       ...groups.map(g => el('option', { value: g.id, selected: ind?.group_id === g.id }, Indicator.getGroupDisplayName(g)))
     )
-    const deptSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
+    const deptSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
       el('option', { value: '' }, '-- 담당부서 --'),
       ...depts.map(d => el('option', { value: d.dept_code, selected: ind?.dept_code === d.dept_code }, d.dept_name))
     )
-    const cycleSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
+    const cycleSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
       [['annual', '매년'], ['semi_annual', '반기'], ['quarterly', '분기'], ['monthly', '매월']].map(([v, l]) => el('option', { value: v, selected: ind?.review_cycle === v }, l))
     )
     const scope2Check = el('input', { type: 'checkbox', checked: ind?.scope2_split_required === true, style: 'cursor:pointer' })
 
-    const card = el('div', { className: 'card', style: 'border-left:3px solid #7C3AED;background:#fafbff;margin-bottom:12px' },
-      el('div', { style: 'padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e0d8f0' },
-        el('h4', { style: 'margin:0;font-size:14px' }, isEdit ? `✏ 지표 수정: ${ind?.indicator_code || ''}` : '+ 새 지표 추가'),
-        el('button', { className: 'btn btn-sm', onClick: () => { _showQuickForm = false; _editingIndicator = null; renderIndicators() } }, '✕')
-      ),
-      el('div', { style: 'padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px' },
-        el('div', { style: 'grid-column:1/3' },
-          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '지표명 *'),
-          nameInput
-        ),
-        el('div', {},
-          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '필러 유형'),
-          pillarSel
-        ),
-        el('div', {},
-          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '그룹'),
-          groupSel
-        ),
-        el('div', {},
-          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '담당부서'),
-          deptSel
-        ),
-        el('div', {},
-          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '검토주기'),
-          cycleSel
-        ),
-        el('div', { style: 'grid-column:1/3;display:flex;align-items:center;gap:8px' },
+    const mkField = (label, input, hint) => el('div', { style: 'margin-bottom:12px' },
+      el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px' }, label),
+      input,
+      hint ? el('div', { style: 'font-size:10px;color:#aaa;margin-top:3px' }, hint) : null
+    )
+
+    const saveData = () => {
+      if (!nameInput.value.trim()) return alert('지표명을 입력하세요')
+      const data = {
+        authority_code: _selectedAuthority,
+        indicator_name: nameInput.value.trim(),
+        pillar: pillarSel.value || null,
+        group_id: parseInt(groupSel.value) || groups[0]?.id,
+        dept_code: deptSel.value,
+        review_cycle: cycleSel.value,
+        scope2_split_required: scope2Check.checked,
+        is_active: true
+      }
+      if (isEdit) Store.updateIndicator(ind.id, data)
+      else Store.addIndicator(data)
+      _editingIndicator = null
+      renderIndicators()
+    }
+
+    form.append(
+      el('div', { style: 'padding:16px' },
+        mkField('지표명 *', nameInput, '예: 환경경영, 온실가스 배출량 관리'),
+        mkField('필러 유형', pillarSel, 'POLICY=정책, ACTION=조치·이행, RESULT=결과·보고'),
+        mkField('그룹', groupSel),
+        mkField('담당부서', deptSel),
+        mkField('검토주기', cycleSel),
+        el('div', { style: 'padding:10px 12px;background:#f8f9fa;border-radius:8px;display:flex;align-items:center;gap:10px;margin-bottom:16px' },
           scope2Check,
-          el('label', { style: 'font-size:12px;color:#555;cursor:pointer' }, '🌍 Scope2 이중보고 대상 (location-based / market-based)')
+          el('label', { style: 'font-size:12px;color:#555;cursor:pointer' }, '🌍 Scope2 이중보고 대상')
         )
       ),
-      el('div', { style: 'padding:8px 16px 12px;display:flex;gap:6px;justify-content:flex-end' },
-        el('button', { className: 'btn btn-secondary btn-sm', onClick: () => { _showQuickForm = false; _editingIndicator = null; renderIndicators() } }, '취소'),
-        el('button', { className: 'btn btn-primary btn-sm', onClick: () => {
-          if (!nameInput.value.trim()) return alert('지표명을 입력하세요')
-          const data = {
-            authority_code: _selectedAuthority,
-            indicator_name: nameInput.value.trim(),
-            pillar: pillarSel.value || null,
-            group_id: parseInt(groupSel.value) || groups[0]?.id,
-            dept_code: deptSel.value,
-            review_cycle: cycleSel.value,
-            scope2_split_required: scope2Check.checked,
-            is_active: true
-          }
-          if (isEdit && ind) Store.updateIndicator(ind.id, data)
-          else Store.addIndicator(data)
-          _showQuickForm = false; _editingIndicator = null; renderIndicators()
-        } }, isEdit ? '💾 저장' : '+ 추가')
+      el('div', { style: 'padding:12px 16px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end;background:#fafafa' },
+        el('button', { className: 'btn btn-secondary btn-sm', onClick: () => { _editingIndicator = null; renderIndicators() } }, '취소'),
+        el('button', { className: 'btn btn-sm', style: 'background:#10B981;color:#fff', onClick: saveData }, isEdit ? '💾 저장' : '+ 추가')
       )
     )
-    return card
+
+    if (isEdit) {
+      form.append(
+        el('div', { style: 'padding:12px 16px;border-top:1px solid #eee' },
+          el('div', { style: 'font-size:11px;color:#888;margin-bottom:8px' }, '연결 정보'),
+          el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
+            el('span', { style: 'font-size:10px;padding:3px 8px;background:#f0f0f0;border-radius:4px' }, `기관: ${Indicator.getAuthorityName(_selectedAuthority)}`),
+            el('span', { style: 'font-size:10px;padding:3px 8px;background:#f0f0f0;border-radius:4px' }, `코드: ${ind.indicator_code}`),
+            ind.scope2_split_required ? el('span', { style: 'font-size:10px;padding:3px 8px;background:#fef3c7;border-radius:4px;color:#D97706' }, '🌍 Scope2') : null,
+            Store.getIndicatorMappings().filter(m => m.source_indicator_id === ind.id).length > 0 ? el('span', { style: 'font-size:10px;padding:3px 8px;background:#ecfdf5;border-radius:4px;color:#10B981' }, `매핑 ${Store.getIndicatorMappings().filter(m => m.source_indicator_id === ind.id).length}건`) : null
+          )
+        )
+      )
+    }
+
+    return form
   }
 
   function openImportTemplate() {
     const templates = {
-      'ECOVADIS': { name: 'EcoVadis 18개 골격', count: 18, desc: '환경(5), 인권/사회(4), 윤리(4), 지속가능조달(4), 360도(1)' },
-      'KSSB': { name: 'KSSB 한국형 기준', count: 8, desc: '거버넌스/전략/리스크관리/측정 (개인/조직 각 4개)' },
-      'KCGS': { name: 'KCGS 통합보고 기준', count: 3, desc: '지배구조/사회/환경' },
-      'NICE': { name: 'NICE ESG 평가', count: 3, desc: '환경/사회/지배구조' },
-      'K-ESG': { name: 'K-ESG 기업환경책임', count: 6, desc: 'E1/E2/S1/S2/G1/G2' }
+      'ECOVADIS': { name: 'EcoVadis 18개 골격', desc: '환경(5), 인권/사회(4), 윤리(4), 지속가능조달(4), 360도(1)' },
+      'KSSB': { name: 'KSSB 한국형 기준', desc: '거버넌스/전략/리스크관리/측정 (제1호/제2호)' },
+      'KCGS': { name: 'KCGS 통합보고 기준', desc: '지배구조/사회/환경' },
+      'NICE': { name: 'NICE ESG 평가', desc: '환경/사회/지배구조' },
+      'K-ESG': { name: 'K-ESG 기업환경책임', desc: 'E1/E2/S1/S2/G1/G2' }
     }
-    const form = el('div', { style: 'display:flex;flex-direction:column;gap:12px' },
-      el('p', { style: 'margin:0;font-size:13px;color:#666' }, '기준 템플릿에서 표준 지표를 가져옵니다. 이미 동일한 코드의 지표가 있으면 건너뜁니다.'),
+    const form = el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
+      el('p', { style: 'margin:0;font-size:13px;color:#666' }, '기준 템플릿에서 표준 지표를 가져옵니다.'),
       ...Object.entries(templates).map(([code, t]) => {
         const existing = Store.getIndicators().filter(i => i.authority_code === code).length
-        return el('div', { style: `padding:12px;border:1px solid ${existing > 0 ? '#ddd' : '#7C3AED33'};border-radius:8px;background:${existing > 0 ? '#f9f9f9' : '#fafbff'};display:flex;justify-content:space-between;align-items:center` },
+        return el('div', { style: `padding:10px 12px;border:1px solid ${existing > 0 ? '#ddd' : '#7C3AED33'};border-radius:8px;background:${existing > 0 ? '#f9f9f9' : '#fafbff'};display:flex;justify-content:space-between;align-items:center` },
           el('div', {},
             el('div', { style: 'font-weight:600;font-size:13px' }, `${Indicator.getAuthorityName(code)} — ${t.name}`),
-            el('div', { style: 'font-size:12px;color:#888;margin-top:2px' }, t.desc),
-            el('div', { style: 'font-size:11px;color:#888;margin-top:4px' }, `현재 ${existing}개 지표 등록됨`)
+            el('div', { style: 'font-size:11px;color:#888;margin-top:2px' }, `${t.desc} (현재 ${existing}개)`)
           ),
           el('button', { className: `btn btn-sm ${existing > 0 ? 'btn-secondary' : 'btn-primary'}`, onClick: () => {
-            if (existing > 0 && !confirm(`${Indicator.getAuthorityName(code)} 템플릿을 다시 가져오시겠습니까? 기존과 중복될 수 있습니다.`)) return
-            let count = 0
-            if (code === 'ECOVADIS') { /* EcoVadis는 이미 시드에 포함 */ alert('EcoVadis 18개 골격은 이미 기본 포함되어 있습니다.'); return }
+            if (existing > 0) return alert('이미 등록된 기관입니다.')
             _selectedAuthority = code
             closeModal(); renderIndicators()
-          } }, existing > 0 ? '확인됨' : '가져오기')
+          } }, existing > 0 ? '등록됨' : '가져오기')
         )
       })
     )
@@ -931,12 +925,18 @@
     _evidenceAssId = _evidenceAssId || assessments[0].id
     if (!assessments.find(a => a.id === _evidenceAssId)) _evidenceAssId = assessments[0].id
     const evidences = Evidence.getAll(_evidenceAssId)
-    c.append(
-      el('div', { className: 'card' },
+
+    if (_evidencePreviewId && !evidences.find(e => e.id === _evidencePreviewId)) {
+      _evidencePreviewId = null
+      _evidencePreviewIdx = -1
+    }
+
+    const leftPanel = el('div', { style: 'flex:1;min-width:0;overflow:hidden' },
+      el('div', { className: 'card', style: 'height:100%;display:flex;flex-direction:column' },
         el('div', { className: 'card-header' },
           el('h3', {}, '증빙 관리'),
           el('div', { style: 'display:flex;gap:8px;align-items:center' },
-            el('select', { id: 'evAssSelect', onChange: () => { _evidenceAssId = parseInt(document.getElementById('evAssSelect').value); renderEvidenceMgmt() } },
+            el('select', { id: 'evAssSelect', onChange: () => { _evidenceAssId = parseInt(document.getElementById('evAssSelect').value); _evidencePreviewId = null; _evidencePreviewIdx = -1; renderEvidenceMgmt() } },
               ...assessments.map(a => el('option', { value: a.id, selected: a.id === _evidenceAssId }, a.title))
             ),
             el('button', { className: 'btn btn-primary', onClick: openAddEvidence }, '+ 증빙 추가')
@@ -952,12 +952,13 @@
           { label: '제목', value: ev => { const c = el('span', {}); const files = Store.getEvidenceFiles(ev.id); c.append(ev.title, files.length > 0 ? el('span', { style: 'color:#7C3AED;font-size:11px;margin-left:4px' }, `[${files.length}개 파일]`) : ev.file_data ? el('a', { href: ev.file_data, download: ev.file_name, style: 'color:#7C3AED;text-decoration:none;font-size:11px;margin-left:4px' }, `📎${ev.file_name}`) : null); return c } },
           { label: '유형', value: ev => el('span', {}, { pdf: 'PDF 문서', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }[ev.file_type] || ev.file_type || '-'), align: 'center' },
           { label: '상태', value: ev => evidenceStatusBadge(ev.status), align: 'center' },
-          { label: '태그', value: ev => { const tags = Evidence.getTags(ev.id); return tags.map(t => { const ind = Store.getIndicators().find(i => i.id === t.indicator_id); return ind ? ind.indicator_code : '?' }).join(', ') || '-' } }
+          { label: '태그', value: ev => { const tags = Evidence.getTags(ev.id); return tags.map(t => { const ind = Store.getIndicators().find(i => i.id === t.indicator_id); return ind ? ind.indicator_code : '?' }).join(', ') || '-' } },
+          { label: '열람', value: ev => el('button', { className: 'btn btn-sm', style: { background: _evidencePreviewId === ev.id ? '#7C3AED' : '#f0f0f0', color: _evidencePreviewId === ev.id ? '#fff' : '#333', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }, onClick: () => openEvidencePreview(ev.id) }, '👁 열람'), align: 'center' }
         ], evidences, {
           bulkDelete: id => Store.deleteEvidence(id),
           actions: ev => [
             el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => editEvidence(ev.id) }, '수정'),
-            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.deleteEvidence(ev.id); renderEvidenceMgmt() } }, '삭제')
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.deleteEvidence(ev.id); if (_evidencePreviewId === ev.id) { _evidencePreviewId = null; _evidencePreviewIdx = -1 } renderEvidenceMgmt() } }, '삭제')
           ]
         }) : el('div', { style: 'text-align:center;padding:30px' },
           el('div', { style: 'font-size:32px;margin-bottom:8px' }, '📎'),
@@ -966,6 +967,118 @@
           el('button', { className: 'btn btn-primary', style: 'margin-top:8px', onClick: openAddEvidence }, '+ 첫 증빙 추가')
         )
       )
+    )
+
+    const rightPanel = _evidencePreviewId ? renderEvidencePreviewPanel(evidences) : el('div', { style: 'width:320px;min-width:320px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-left:1px solid #e9ecef;border-radius:0 0 8px 0;color:#aaa;font-size:13px;text-align:center;padding:20px' },
+      el('div', {},
+        el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '👁'),
+        el('p', { style: { margin: '0 0 4px' } }, '증빙을 선택하면 미리보기가 표시됩니다'),
+        el('p', { style: { margin: '0', fontSize: '11px', color: '#ccc' } }, '목록에서 "열람" 버튼을 클릭하세요')
+      )
+    )
+
+    const splitContainer = el('div', { style: 'display:flex;gap:0;height:calc(100vh - 140px);min-height:400px' }, leftPanel, rightPanel)
+    c.append(splitContainer)
+  }
+
+  function openEvidencePreview(evId) {
+    if (_evidencePreviewId === evId) { _evidencePreviewId = null; _evidencePreviewIdx = -1; renderEvidenceMgmt(); return }
+    const evidences = Evidence.getAll(_evidenceAssId)
+    _evidencePreviewId = evId
+    _evidencePreviewIdx = evidences.findIndex(e => e.id === evId)
+    renderEvidenceMgmt()
+  }
+
+  function renderEvidencePreviewPanel(evidences) {
+    const ev = evidences.find(e => e.id === _evidencePreviewId)
+    if (!ev) return el('div', { style: 'width:480px;min-width:480px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-left:1px solid #e9ecef' }, '증빙을 찾을 수 없습니다')
+
+    const files = Store.getEvidenceFiles(ev.id)
+    const allFiles = []
+    if (ev.file_data) allFiles.push({ file_name: ev.file_name || '첨부파일', file_data: ev.file_data, file_size: ev.file_size || 0, mime_type: ev.file_type === 'pdf' ? 'application/pdf' : ev.file_type === 'img' ? 'image/*' : '' })
+    files.forEach(f => allFiles.push(f))
+
+    const panelWidth = _evidencePreviewFullscreen ? '100%' : (_evidencePreviewWidth + 'px')
+
+    const navInfo = el('span', { style: 'font-size:11px;color:#888' }, `${_evidencePreviewIdx + 1} / ${evidences.length}`)
+
+    const prevBtn = el('button', { className: 'btn btn-sm btn-secondary', disabled: _evidencePreviewIdx <= 0, onClick: () => { if (_evidencePreviewIdx > 0) { _evidencePreviewId = evidences[_evidencePreviewIdx - 1].id; _evidencePreviewIdx--; renderEvidenceMgmt() } } }, '◀')
+    const nextBtn = el('button', { className: 'btn btn-sm btn-secondary', disabled: _evidencePreviewIdx >= evidences.length - 1, onClick: () => { if (_evidencePreviewIdx < evidences.length - 1) { _evidencePreviewId = evidences[_evidencePreviewIdx + 1].id; _evidencePreviewIdx++; renderEvidenceMgmt() } } }, '▶')
+
+    const fileLabels = { pdf: 'PDF 문서', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
+    const statusLabels = { self: '자가입력', internal_reviewed: '내부검토완료', externally_verified: '외부검증완료' }
+
+    const searchInput = el('input', { type: 'text', placeholder: '파일명 검색...', style: 'flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px', value: _evidencePreviewSearch, onInput: e => { _evidencePreviewSearch = e.target.value } })
+
+    const fileInfo = el('div', { style: 'padding:10px 16px;background:#f8f9fa;border-bottom:1px solid #e9ecef;font-size:11px;color:#555;line-height:1.8' },
+      el('div', { style: { fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '4px' } }, ev.title),
+      el('div', {}, `유형: ${fileLabels[ev.file_type] || ev.file_type || '-'} | 상태: ${statusLabels[ev.status] || ev.status || '-'}`),
+      el('div', {}, `유효기간: ${ev.expiry_date || '없음'}${ev.contains_sensitive_data ? ' | 🔒 민감정보 포함' : ''}`),
+      el('div', {}, `태그: ${Evidence.getTags(ev.id).map(t => { const ind = Store.getIndicators().find(i => i.id === t.indicator_id); return ind ? ind.indicator_code : '?' }).join(', ') || '없음'}`)
+    )
+
+    const previewContent = el('div', { style: 'flex:1;overflow:auto;padding:16px;background:#fff' })
+
+    if (allFiles.length === 0) {
+      previewContent.append(el('div', { style: 'text-align:center;padding:40px 20px;color:#aaa' },
+        el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '📄'),
+        el('p', { style: { margin: '0' } }, '첨부된 파일이 없습니다'),
+        el('p', { style: { margin: '4px 0 0', fontSize: '11px' } }, '수정 버튼을 클릭하여 파일을 첨부하세요')
+      ))
+    } else {
+      allFiles.forEach((f, i) => {
+        const fileName = (f.file_name || '').toLowerCase()
+        const isPDF = f.mime_type === 'application/pdf' || fileName.endsWith('.pdf')
+        const isImage = f.mime_type?.startsWith('image') || fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/)
+
+        const fileBlock = el('div', { style: 'margin-bottom:16px;border:1px solid #e9ecef;border-radius:8px;overflow:hidden' },
+          el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8f9fa;border-bottom:1px solid #e9ecef;font-size:11px' },
+            el('span', { style: { fontWeight: '600' } }, `📎 ${f.file_name || '파일 ' + (i + 1)}`),
+            el('div', { style: { display: 'flex', gap: '4px' } },
+              el('button', { className: 'btn btn-sm btn-secondary', style: { fontSize: '10px', padding: '2px 6px' }, onClick: () => { const w = window.open('', '_blank'); if (w) { w.document.write(`<html><head><title>${f.file_name || '파일'}</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5">${isPDF ? `<iframe src="${f.file_data}" style="width:100%;height:100vh;border:none"></iframe>` : isImage ? `<img src="${f.file_data}" style="max-width:100%;max-height:100vh">` : `<p>미리보기 불가</p>`}</body></html>`); w.document.close() } } }, '⛶'),
+              el('a', { href: f.file_data, download: f.file_name || 'download', style: 'display:inline-flex;align-items:center;background:#27ae60;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;text-decoration:none' }, '⬇')
+            )
+          )
+        )
+
+        if (isPDF && f.file_data) {
+          const iframe = el('iframe', { src: f.file_data, style: 'width:100%;height:500px;border:none' })
+          fileBlock.append(iframe)
+        } else if (isImage && f.file_data) {
+          const img = el('img', { src: f.file_data, style: 'max-width:100%;max-height:500px;display:block;margin:0 auto;padding:8px' })
+          fileBlock.append(img)
+        } else {
+          fileBlock.append(el('div', { style: 'padding:20px;text-align:center;color:#999;font-size:12px' },
+            el('div', { style: { fontSize: '24px', marginBottom: '8px' } }, '📄'),
+            el('p', { style: { margin: '0' } }, '이 파일 형식은 브라우저에서 미리보기가 불가합니다'),
+            el('p', { style: { margin: '4px 0 0', fontSize: '11px' } }, `파일 크기: ${f.file_size ? (f.file_size / 1024).toFixed(1) + 'KB' : '알 수 없음'}`)
+          ))
+        }
+
+        if (_evidencePreviewSearch && !(f.file_name || '').toLowerCase().includes(_evidencePreviewSearch.toLowerCase())) {
+          fileBlock.style.display = 'none'
+        }
+
+        previewContent.append(fileBlock)
+      })
+    }
+
+    const resizeHandle = el('div', { style: 'width:4px;cursor:col-resize;background:#e0e0e0;transition:background 0.2s', onMouseDown: e => { e.preventDefault(); const startX = e.clientX; const startW = _evidencePreviewWidth; const onMove = ev => { _evidencePreviewWidth = Math.max(300, Math.min(800, startW - (ev.clientX - startX))); const rp = document.getElementById('evidence-preview-panel'); if (rp) rp.style.width = _evidencePreviewWidth + 'px' }; const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor = ''; document.body.style.userSelect = '' }; document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp) }, onMouseEnter: e => { e.target.style.background = '#7C3AED' }, onMouseLeave: e => { e.target.style.background = '#e0e0e0' } })
+
+    return el('div', { id: 'evidence-preview-panel', style: { width: panelWidth, minWidth: _evidencePreviewFullscreen ? '100%' : '300px', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e9ecef', background: '#fff', transition: 'width 0.2s' } },
+      el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8f9fa;border-bottom:1px solid #e9ecef' },
+        el('div', { style: 'display:flex;align-items:center;gap:6px' },
+          prevBtn, navInfo, nextBtn
+        ),
+        el('div', { style: 'display:flex;align-items:center;gap:4px' },
+          searchInput,
+          el('button', { className: 'btn btn-sm btn-secondary', style: { fontSize: '11px', padding: '3px 8px' }, onClick: () => { _evidencePreviewFullscreen = !_evidencePreviewFullscreen; renderEvidenceMgmt() } }, _evidencePreviewFullscreen ? '✕ 닫기' : '⛶ 전체'),
+          el('button', { className: 'btn btn-sm btn-secondary', style: { fontSize: '11px', padding: '3px 8px', background: '#e74c3c', color: '#fff', border: 'none' }, onClick: () => { _evidencePreviewId = null; _evidencePreviewIdx = -1; renderEvidenceMgmt() } }, '✕')
+        )
+      ),
+      fileInfo,
+      previewContent,
+      resizeHandle
     )
   }
 
@@ -1044,7 +1157,7 @@
     addBtn.onclick = () => addTagRow(null)
     tagContainer.append(addBtn)
 
-    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, fileListContainer), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'display:flex;align-items:center;gap:8px;margin-top:8px' }, sensitiveCheck, '민감정보 포함 (임금·인사 등)'), el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
+    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'font-size:12px' }, sensitiveCheck, ' 민감정보 포함'), el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, fileListContainer), el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
     modal(isEdit ? '증빙 수정' : '증빙 추가', form)
     document.getElementById('modal-save').onclick = function save() {
       const pendingFiles = window._pendingFiles || []
@@ -1112,32 +1225,100 @@
     if (!assessments.find(a => a.id === _ghgAssId)) _ghgAssId = assessments[0].id
     const summary = GHG.getSummary(_ghgAssId)
     const activities = Store.getGHGActivities().filter(a => a.assessment_id === _ghgAssId)
+    const entries = Object.values(summary)
+    const totalEmissions = entries.reduce((s, e) => s + e.total, 0)
+
+    const scopeColors = { '1': '#3498db', '2_location-based': '#2ecc71', '2_market-based': '#27ae60', '3': '#9b59b6' }
+    const scopeLabels = { '1': 'Scope 1', '2_location-based': 'Scope 2 (위치)', '2_market-based': 'Scope 2 (시장)', '3': 'Scope 3' }
+
+    let barsHtml = ''
+    if (entries.length) {
+      const maxVal = Math.max(...entries.map(e => e.total), 1)
+      barsHtml = entries.map(e => {
+        const key = `${e.scope}${e.scope2_method ? '_' + e.scope2_method : ''}`
+        const color = scopeColors[key] || '#999'
+        const label = scopeLabels[key] || `Scope ${e.scope}`
+        const pct = (e.total / maxVal * 100).toFixed(0)
+        return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0">
+          <span style="width:110px;font-size:12px;color:#555;text-align:right">${label}</span>
+          <div style="flex:1;background:#f0f0f0;height:24px;border-radius:12px;overflow:hidden">
+            <div style="background:${color};height:100%;width:${pct}%;border-radius:12px;display:flex;align-items:center;padding-left:8px;font-size:11px;color:#fff;font-weight:600;min-width:${pct > 10 ? '0' : '40px'}">${e.total.toFixed(1)}</div>
+          </div>
+          <span style="width:80px;font-size:12px;color:#666">${e.count}건</span>
+        </div>`
+      }).join('')
+    }
+
+    const byType = {}
+    activities.forEach(a => { if (!byType[a.energy_type]) byType[a.energy_type] = 0; byType[a.energy_type] += a.co2eq || 0 })
+    const typeEntries = Object.entries(byType).sort((a, b) => b[1] - a[1])
+    const maxType = typeEntries.length ? typeEntries[0][1] : 1
+    const typeColors = { electricity: '#3498db', natural_gas: '#e67e22', diesel: '#7f8c8d', gasoline: '#e74c3c', water: '#00bcd4', waste: '#795548', other: '#9e9e9e' }
+    const typeBars = typeEntries.map(([type, val]) => {
+      const pct = (val / maxType * 100).toFixed(0)
+      return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
+        <span style="width:80px;color:#555;text-align:right">${ENERGY_LABELS[type] || type}</span>
+        <div style="flex:1;background:#f0f0f0;height:16px;border-radius:8px;overflow:hidden">
+          <div style="background:${typeColors[type] || '#999'};height:100%;width:${pct}%;border-radius:8px"></div>
+        </div>
+        <span style="width:60px;font-weight:600;text-align:right">${val.toFixed(2)}</span>
+      </div>`
+    }).join('')
+
     c.append(
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, '온실가스 관리'),
-          el('div', { style: 'display:flex;gap:8px' },
-            el('select', { id: 'ghgAssSelect', onChange: () => { _ghgAssId = parseInt(document.getElementById('ghgAssSelect').value); renderGHG() } },
-              ...assessments.map(a => el('option', { value: a.id, selected: a.id === _ghgAssId }, a.title))
-            ),
-            el('button', { className: 'btn btn-primary', onClick: openAddGHG }, '+ 활동자료 입력')
-          )
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '🌍 온실가스 관리'),
+        el('div', { style: 'display:flex;gap:8px;align-items:center' },
+          el('select', { id: 'ghgAssSelect', style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: () => { _ghgAssId = parseInt(document.getElementById('ghgAssSelect').value); renderGHG() } },
+            ...assessments.map(a => el('option', { value: a.id, selected: a.id === _ghgAssId }, a.title))
+          ),
+          el('button', { className: 'btn btn-primary', onClick: openAddGHG }, '+ 활동자료 입력')
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:20px;background:#f8f9fa;border-bottom:1px solid #eee' },
+        el('div', { style: 'text-align:center;padding:16px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('div', { style: 'font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px' }, '총 배출량'),
+          el('div', { style: 'font-size:28px;font-weight:700;color:#333;margin-top:4px' }, totalEmissions.toFixed(1)),
+          el('div', { style: 'font-size:11px;color:#aaa' }, 'tCO2eq')
         ),
-        Object.keys(summary).length ? el('div', { style: 'padding:12px 20px;background:#f8f9fa;border-bottom:1px solid #eee;font-size:13px' },
-          el('pre', { style: 'margin:0;white-space:pre-wrap' }, GHG.formatSummary(summary))
-        ) : null,
+        el('div', { style: 'text-align:center;padding:16px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('div', { style: 'font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px' }, '활동자료'),
+          el('div', { style: 'font-size:28px;font-weight:700;color:#333;margin-top:4px' }, activities.length),
+          el('div', { style: 'font-size:11px;color:#aaa' }, '건 등록')
+        ),
+        el('div', { style: 'text-align:center;padding:16px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('div', { style: 'font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px' }, '에너지 유형'),
+          el('div', { style: 'font-size:28px;font-weight:700;color:#333;margin-top:4px' }, typeEntries.length),
+          el('div', { style: 'font-size:11px;color:#aaa' }, '종류 사용')
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px' },
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, 'Scope별 배출량'),
+          el('div', { innerHTML: barsHtml || '<div style="color:#999;font-size:12px;text-align:center;padding:20px">데이터 없음 — 활동자료를 등록하세요</div>' })
+        ),
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '에너지 유형별 배출량'),
+          el('div', { innerHTML: typeBars || '<div style="color:#999;font-size:12px;text-align:center;padding:20px">데이터 없음</div>' })
+        )
+      ),
+      el('div', { className: 'card', style: 'margin:0 20px 20px' },
         activities.length ? sortableTable('ghg', [
-          { label: '유형', value: a => (ENERGY_LABELS[a.energy_type] || a.energy_type) + ' (' + a.energy_type + ')' },
-          { label: 'Scope', value: a => `Scope ${a.scope}` },
-          { label: '구분', value: a => a.scope2_method === 'location-based' ? '위치기준' : a.scope2_method === 'market-based' ? '시장기준' : '-' },
+          { label: '유형', value: a => (ENERGY_LABELS[a.energy_type] || a.energy_type) },
+          { label: 'Scope', value: a => el('span', { style: `background:${scopeColors[a.scope + (a.scope2_method ? '_'+a.scope2_method : '')] || '#999'}20;color:${scopeColors[a.scope + (a.scope2_method ? '_'+a.scope2_method : '')] || '#999'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600` }, `Scope ${a.scope}${a.scope2_method ? ' (' + (a.scope2_method === 'location-based' ? '위치' : '시장') + ')' : ''}`) },
           { label: '값', value: a => `${a.value} ${a.unit}` },
-          { label: 'tCO2eq', value: a => a.co2eq ? a.co2eq.toFixed(4) : '-' }
+          { label: 'tCO2eq', value: a => el('span', { style: 'font-weight:600' }, a.co2eq ? a.co2eq.toFixed(4) : '-') },
+          { label: '계수', value: a => { const f = GHG.getFactor(a.energy_type, a.scope, a.scope2_method); return f ? `${f.factor} ${f.unit}` : '-' } }
         ], activities, {
           bulkDelete: id => Store.deleteGHGActivity(id),
           actions: a => [
             el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.deleteGHGActivity(a.id); renderGHG() } }, '삭제')
           ]
-        }) : el('p', { style: 'padding:16px;color:#999' }, '등록된 활동자료가 없습니다.')
+        }) : el('div', { style: 'text-align:center;padding:30px;color:#999' },
+          el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '📊'),
+          el('p', { style: { margin: '0 0 8px' } }, '등록된 활동자료가 없습니다'),
+          el('p', { style: { margin: '0', fontSize: '12px', color: '#aaa' } }, '+ 버튼을 클릭하여 온실가스 배출 활동을 등록하세요')
+        )
       )
     )
   }
@@ -1166,13 +1347,19 @@
 
   function renderSupplier() {
     const c = document.getElementById('page-supplier')
+    if (!c) return
     c.innerHTML = ''
+    const summary = Supplier.getSummary()
     c.append(
-      el('div', { style: 'display:flex;gap:8px;margin-bottom:12px' },
-        el('button', { className: 'btn' + (_supplierTab === 'list' ? ' btn-primary' : ''), onClick: () => { _supplierTab = 'list'; renderSupplier() } }, '📋 협력사 목록'),
-        el('button', { className: 'btn' + (_supplierTab === 'vsme' ? ' btn-primary' : ''), onClick: () => { _supplierTab = 'vsme'; renderSupplier() } }, '📝 VSME 자가진단')
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '🏢 협력사 리스크 관리'),
+        el('div', { style: 'display:flex;gap:6px' },
+          el('button', { className: 'btn btn-sm' + (_supplierTab === 'list' ? ' btn-primary' : ''), onClick: () => { _supplierTab = 'list'; renderSupplier() } }, '📋 목록'),
+          el('button', { className: 'btn btn-sm' + (_supplierTab === 'vsme' ? ' btn-primary' : ''), onClick: () => { _supplierTab = 'vsme'; renderSupplier() } }, '📝 VSME 자가진단'),
+          el('button', { className: 'btn btn-sm' + (_supplierTab === 'grade' ? ' btn-primary' : ''), onClick: () => { _supplierTab = 'grade'; renderSupplier() } }, '📊 등급 분석')
+        )
       ),
-      _supplierTab === 'list' ? renderSupplierList() : renderVSMEPanel()
+      _supplierTab === 'list' ? renderSupplierList() : _supplierTab === 'vsme' ? renderVSMEPanel() : renderSupplierGradePanel()
     )
   }
 
@@ -1180,38 +1367,44 @@
     const suppliers = Supplier.getAll()
     const summary = Supplier.getSummary()
     const container = el('div', {})
+    const gradeColors = { A: '#27ae60', B: '#3498db', C: '#f39c12', D: '#e74c3c' }
 
     container.append(
-      el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px' },
-        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1)' },
-          el('div', { style: 'font-size:12px;color:#888' }, '총 협력사'),
-          el('div', { style: 'font-size:28px;font-weight:700' }, summary.total)
+      el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px' },
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);text-align:center' },
+          el('div', { style: 'font-size:11px;color:#999;text-transform:uppercase' }, '총 협력사'),
+          el('div', { style: 'font-size:28px;font-weight:700;margin-top:4px' }, summary.total),
+          el('div', { style: 'font-size:11px;color:#aaa' }, `진단완료 ${summary.graded}건`)
         ),
-        ...Supplier.RISK_GRADES.map(g => el('div', { style: `background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1);border-left:4px solid ${g.color}` },
-          el('div', { style: 'font-size:12px;color:#888' }, `${g.grade}등급 (${g.label})`),
-          el('div', { style: 'font-size:28px;font-weight:700;color:' + g.color }, summary.riskCounts[g.grade] || 0)
-        )),
-        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1);border-left:4px solid #ccc' },
-          el('div', { style: 'font-size:12px;color:#888' }, '미진단'),
-          el('div', { style: 'font-size:28px;font-weight:700;color:#999' }, summary.riskCounts.unscored || 0)
+        ...Supplier.RISK_GRADES.map(g => {
+          const pct = summary.total ? Math.round((summary.riskCounts[g.grade] || 0) / summary.total * 100) : 0
+          return el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);text-align:center;border-top:3px solid ' + g.color },
+            el('div', { style: 'font-size:11px;color:#999' }, `${g.grade}등급 · ${g.label}`),
+            el('div', { style: `font-size:28px;font-weight:700;color:${g.color};margin-top:4px` }, summary.riskCounts[g.grade] || 0),
+            el('div', { style: 'font-size:11px;color:#aaa' }, `${pct}%`)
+          )
+        }),
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);text-align:center;border-top:3px solid #ccc' },
+          el('div', { style: 'font-size:11px;color:#999' }, '미진단'),
+          el('div', { style: 'font-size:28px;font-weight:700;color:#999;margin-top:4px' }, summary.riskCounts.unscored || 0)
         )
       ),
       el('div', { className: 'card' },
         el('div', { className: 'card-header' },
-          el('h3', {}, '협력사 목록'),
+          el('h3', {}, `협력사 목록 (${suppliers.length}건)`),
           el('button', { className: 'btn btn-primary', onClick: openAddSupplier }, '+ 협력사 추가')
         ),
         suppliers.length ? sortableTable('suppliers', [
-          { label: '회사명', key: 'name', value: s => s.name || '-' },
+          { label: '회사명', key: 'name', value: s => el('span', { style: 'font-weight:600' }, s.name || '-') },
           { label: '업종', key: 'industry', value: s => s.industry || '-' },
           { label: '대표자', key: 'ceo', value: s => s.ceo || '-' },
           { label: '규모', key: 'employee_count', value: s => s.employee_count ? s.employee_count + '명' : '-', align: 'center' },
           { label: '리스크등급', value: s => {
-            if (!s.last_vsme_grade) return el('span', { style: 'color:#ccc' }, '미진단')
+            if (!s.last_vsme_grade) return el('span', { style: 'background:#f5f5f5;color:#999;padding:2px 10px;border-radius:10px;font-size:11px' }, '미진단')
             const g = Supplier.getGrade(s.last_vsme_score)
-            return el('span', { style: `background:${g.color};color:#fff;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600` }, `${s.last_vsme_grade}등급 (${s.last_vsme_score}점)`)
+            return el('span', { style: `background:${g.color}15;color:${g.color};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;border:1px solid ${g.color}30` }, `${s.last_vsme_grade}등급 · ${s.last_vsme_score}점`)
           }, align: 'center' },
-          { label: '최근 진단', key: 'last_vsme_date', value: s => s.last_vsme_date ? new Date(s.last_vsme_date).toLocaleDateString('ko-KR') : '-' }
+          { label: '최근 진단', key: 'last_vsme_date', value: s => s.last_vsme_date ? el('span', { style: 'font-size:12px;color:#888' }, new Date(s.last_vsme_date).toLocaleDateString('ko-KR')) : el('span', { style: 'color:#ccc' }, '-') }
         ], suppliers, {
           bulkDelete: id => Supplier.delete(id),
           actions: s => [
@@ -1219,7 +1412,11 @@
             el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => editSupplier(s.id) }, '수정'),
             el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('정말 삭제?')) { Supplier.delete(s.id); renderSupplier() } } }, '삭제')
           ]
-        }) : el('p', { style: 'padding:20px;color:#999' }, '등록된 협력사가 없습니다.')
+        }) : el('div', { style: 'text-align:center;padding:30px;color:#999' },
+          el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '🏢'),
+          el('p', { style: { margin: '0 0 8px' } }, '등록된 협력사가 없습니다'),
+          el('p', { style: { margin: '0', fontSize: '12px', color: '#aaa' } }, '+ 버튼으로 협력사를 추가하세요')
+        )
       )
     )
     return container
@@ -1256,34 +1453,157 @@
     }
   }
 
-  function renderVSMEPanel() {
+  function renderSupplierGradePanel() {
     const suppliers = Supplier.getAll()
-    const container = el('div', { className: 'card' },
-      el('div', { className: 'card-header' },
-        el('h3', {}, 'VSME 자가진단'),
-        el('div', { style: 'font-size:12px;color:#888' }, 'EcoVadis SP테마 + VSME 중소기업 자율보고 기준')
+    const summary = Supplier.getSummary()
+    const container = el('div', {})
+
+    const maxBar = Math.max(...Supplier.RISK_GRADES.map(g => summary.riskCounts[g.grade] || 0), 1)
+
+    const gradeBar = Supplier.RISK_GRADES.map(g => {
+      const cnt = summary.riskCounts[g.grade] || 0
+      const pct = summary.total ? Math.round(cnt / summary.total * 100) : 0
+      const barW = Math.round(cnt / maxBar * 100)
+      return `<div style="display:flex;align-items:center;gap:12px;margin:8px 0">
+        <div style="width:48px;height:48px;border-radius:10px;background:${g.color}15;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid ${g.color}30">
+          <span style="font-size:18px;font-weight:700;color:${g.color}">${g.grade}</span>
+        </div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+            <span style="font-size:12px;font-weight:500;color:#555">${g.label}</span>
+            <span style="font-size:11px;color:#999">${cnt}개사 (${pct}%)</span>
+          </div>
+          <div style="background:#f0f0f0;height:10px;border-radius:5px;overflow:hidden">
+            <div style="background:${g.color};height:100%;width:${barW}%;border-radius:5px;transition:width 0.3s"></div>
+          </div>
+        </div>
+      </div>`
+    }).join('')
+
+    const unscoredPct = summary.total ? Math.round((summary.riskCounts.unscored || 0) / summary.total * 100) : 0
+    const scoredSuppliers = suppliers.filter(s => s.last_vsme_score)
+    const avgScore = scoredSuppliers.length ? (scoredSuppliers.reduce((sum, s) => sum + s.last_vsme_score, 0) / scoredSuppliers.length).toFixed(1) : 0
+
+    const supplierCards = suppliers.slice(0, 10).map(s => {
+      const grade = s.last_vsme_grade ? Supplier.getGrade(s.last_vsme_score) : null
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #f5f5f5">
+        <div style="width:36px;height:36px;border-radius:8px;background:${grade ? grade.color + '15' : '#f5f5f5'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${grade ? grade.color : '#ccc'};font-size:14px;border:1px solid ${grade ? grade.color + '30' : '#eee'}">
+          ${grade ? grade.grade : '-'}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:500;color:#333">${s.name}</div>
+          <div style="font-size:11px;color:#999">${s.industry || '미분류'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:600;color:${grade ? grade.color : '#ccc'}">${s.last_vsme_score || '-'}점</div>
+          <div style="font-size:10px;color:#aaa">${s.last_vsme_date ? new Date(s.last_vsme_date).toLocaleDateString('ko-KR') : '미진단'}</div>
+        </div>
+      </div>`
+    }).join('')
+
+    container.append(
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '📊 협력사 등급 분석')
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;background:#f8f9fa;border-bottom:1px solid #eee' },
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '총 협력사'),
+          el('div', { style: 'font-size:22px;font-weight:700;margin-top:2px' }, summary.total)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '평균 점수'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#7C3AED;margin-top:2px' }, avgScore)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '진단 완료'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#27ae60;margin-top:2px' }, summary.graded)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '미진단'),
+          el('div', { style: `font-size:22px;font-weight:700;color:${unscoredPct > 20 ? '#e74c3c' : '#f39c12'};margin-top:2px` }, summary.riskCounts.unscored || 0),
+          el('div', { style: 'font-size:10px;color:#aaa' }, `${unscoredPct}%`)
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px' },
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '등급별 분포'),
+          el('div', { innerHTML: gradeBar || '<div style="color:#999;font-size:12px;text-align:center;padding:20px">데이터 없음</div>' })
+        ),
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '협력사 순위'),
+          el('div', { innerHTML: supplierCards || '<div style="color:#999;font-size:12px;text-align:center;padding:20px">등록된 협력사 없음</div>' })
+        )
       )
     )
-    if (!suppliers.length) {
-      container.append(el('p', { style: 'padding:20px;color:#999' }, '먼저 협력사를 등록해주세요.'))
-      return container
-    }
-    suppliers.forEach(s => {
+    return container
+  }
+
+  function renderVSMEPanel() {
+    const suppliers = Supplier.getAll()
+    const container = el('div', {})
+    const totalYes = suppliers.reduce((sum, s) => {
+      const latest = Supplier.getLatestVSME(s.id)
+      return sum + (latest?.answers?.filter(a => a === 'yes').length || 0)
+    }, 0)
+    const totalQ = suppliers.reduce((sum, s) => {
+      const latest = Supplier.getLatestVSME(s.id)
+      const checklist = Supplier.getVSMEChecklist(latest?.mode || 'basic')
+      return sum + (checklist.length || 0)
+    }, 0)
+    const avgPct = totalQ ? Math.round(totalYes / totalQ * 100) : 0
+
+    const supplierCards = suppliers.map(s => {
       const latest = Supplier.getLatestVSME(s.id)
       const grade = latest ? Supplier.getGrade(latest.score) : null
-      container.append(
-        el('div', { style: 'padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between' },
-          el('div', {},
-            el('div', { style: 'font-weight:600;font-size:14px' }, s.name),
-            el('div', { style: 'font-size:12px;color:#888' }, latest ? `최근: ${latest.mode === 'basic' ? '기본' : '종합'} ${latest.score}점 ${latest.grade}등급 (${new Date(latest.assessed_at).toLocaleDateString('ko-KR')})` : '미진단')
+      const checklist = Supplier.getVSMEChecklist(latest?.mode || 'basic')
+      const yesCount = latest?.answers?.filter(a => a === 'yes').length || 0
+      const completionPct = checklist.length ? Math.round(yesCount / checklist.length * 100) : 0
+      return el('div', { style: `display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:8px;background:${grade ? grade.color + '08' : '#fafafa'};border:1px solid ${grade ? grade.color + '20' : '#f0f0f0'};margin-bottom:8px` },
+        el('div', { style: `width:44px;height:44px;border-radius:10px;background:${grade ? grade.color + '15' : '#f0f0f0'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${grade ? grade.color : '#ccc'};font-size:16px;border:1px solid ${grade ? grade.color + '30' : '#eee'}` },
+          grade ? grade.grade : '-'
+        ),
+        el('div', { style: 'flex:1' },
+          el('div', { style: 'font-weight:600;font-size:14px' }, s.name),
+          el('div', { style: 'font-size:12px;color:#888;margin-top:2px' },
+            latest ? `${latest.mode === 'basic' ? '기본' : '종합'} · ${latest.score}점 · ${new Date(latest.assessed_at).toLocaleDateString('ko-KR')}` : '미진단'
           ),
-          el('div', { style: 'display:flex;gap:6px' },
-            el('button', { className: 'btn btn-sm btn-primary', onClick: () => openVSMEForSupplier(s.id) }, '자가진단 실시'),
-            latest ? el('button', { className: 'btn btn-sm btn-secondary', onClick: () => showVSMEHistory(s.id) }, '이력') : null
-          )
+          latest ? el('div', { style: 'margin-top:4px;background:#e0e0e0;height:6px;border-radius:3px;overflow:hidden;width:120px' },
+            el('div', { style: `background:${grade ? grade.color : '#ccc'};height:100%;width:${completionPct}%` })
+          ) : null
+        ),
+        el('div', { style: 'display:flex;gap:6px' },
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => openVSMEForSupplier(s.id) }, '자가진단'),
+          latest ? el('button', { className: 'btn btn-sm btn-secondary', onClick: () => showVSMEHistory(s.id) }, '이력') : null
         )
       )
     })
+
+    container.append(
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '📝 VSME 자가진단')
+      ),
+      el('div', { style: 'padding:16px 20px;background:#f8f9fa;border-bottom:1px solid #eee;display:flex;gap:16px' },
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:100px' },
+          el('div', { style: 'font-size:11px;color:#999' }, '대상 협력사'),
+          el('div', { style: 'font-size:22px;font-weight:700;margin-top:2px' }, suppliers.length)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:100px' },
+          el('div', { style: 'font-size:11px;color:#999' }, '진행률'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#7C3AED;margin-top:2px' }, `${avgPct}%`)
+        ),
+        el('div', { style: 'flex:1;display:flex;align-items:center' },
+          el('div', { style: 'flex:1;background:#e0e0e0;height:10px;border-radius:5px;overflow:hidden' },
+            el('div', { style: `background:#7C3AED;height:100%;width:${avgPct}%` })
+          )
+        )
+      ),
+      el('div', { style: 'padding:16px 20px' },
+        suppliers.length ? supplierCards : el('div', { style: 'text-align:center;padding:30px;color:#999' },
+          el('p', { style: 'margin:0' }, '먼저 협력사를 등록해주세요.'),
+          el('button', { className: 'btn btn-primary', style: 'margin-top:8px', onClick: () => { _supplierTab = 'list'; renderSupplier() } }, '협력사 등록하러 가기')
+        )
+      )
+    )
     return container
   }
 
@@ -1357,6 +1677,7 @@
 
   // ==================== AI 보고서 ====================
   let _aiAssId = null
+  let _aiGenerating = false
   function renderAI() {
     const c = document.getElementById('page-ai')
     if (!c) return
@@ -1379,27 +1700,84 @@
     const groups = Indicator.getGroups(assessment.authority_code)
     const indicators = groups.flatMap(g => Store.getIndicators().filter(i => i.group_id === g.id && i.is_active !== false))
     const drafts = Store.getAIDrafts().filter(d => d.assessment_id === _aiAssId)
+
+    const total = indicators.length
+    const generated = drafts.length
+    const approved = drafts.filter(d => d.human_status === 'approved').length
+    const verified = drafts.filter(d => d.ver_status === 'pass').length
+    const pct = total ? Math.round(approved / total * 100) : 0
+
     c.append(
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, 'AI 보고서'),
-          el('select', { onChange: e => { _aiAssId = parseInt(e.target.value); renderAI() } },
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '🤖 AI 보고서 초안'),
+        el('div', { style: 'display:flex;gap:8px;align-items:center' },
+          el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: e => { _aiAssId = parseInt(e.target.value); renderAI() } },
             ...assessments.map(a => el('option', { value: a.id, selected: a.id === _aiAssId }, a.title))
           )
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;background:#f8f9fa;border-bottom:1px solid #eee' },
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '전체 지표'),
+          el('div', { style: 'font-size:22px;font-weight:700;margin-top:2px' }, total)
         ),
-        el('div', { style: 'display:grid;grid-template-columns:280px 1fr;gap:12px;padding:12px;min-height:500px' },
-          el('div', { style: 'max-height:600px;overflow-y:auto;border-right:1px solid #eee;padding-right:8px' }, ...indicators.map(ind => {
-            const draft = drafts.find(d => d.indicator_id === ind.id)
-            const sc = draft?.human_status === 'approved' ? '#27ae60' : draft?.ver_status === 'fail' ? '#e74c3c' : draft ? '#f39c12' : '#999'
-            const st = draft ? AI.getDraftStatus(draft) : '미생성'
-            return el('div', { style: `padding:8px;background:#fff;border-radius:6px;margin-bottom:4px;box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer;border-left:3px solid ${sc}`,
-              onClick: () => showAIDetail(ind.id) },
-              el('div', { style: 'font-weight:500;font-size:12px' }, Indicator.getNameAndCode(ind)),
-              el('div', { style: `font-size:10px;color:${sc}` }, st)
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '생성 완료'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#3498db;margin-top:2px' }, generated)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '검증 통과'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#f39c12;margin-top:2px' }, verified)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
+          el('div', { style: 'font-size:11px;color:#999' }, '승인 완료'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#27ae60;margin-top:2px' }, approved)
+        )
+      ),
+      el('div', { style: 'padding:12px 20px;border-bottom:1px solid #eee' },
+        el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:8px' },
+          el('div', { style: 'flex:1;background:#eee;height:8px;border-radius:4px;overflow:hidden' },
+            el('div', { style: `background:#7C3AED;height:100%;width:${pct}%;border-radius:4px;transition:width 0.3s` })
+          ),
+          el('span', { style: 'font-size:12px;font-weight:600;color:#7C3AED' }, `${pct}%`)
+        ),
+        el('div', { style: 'display:flex;gap:8px;align-items:center' },
+          el('button', { className: 'btn btn-primary btn-sm', disabled: _aiGenerating, onClick: async () => {
+            _aiGenerating = true; renderAI()
+            for (const ind of indicators) {
+              if (!drafts.find(d => d.indicator_id === ind.id)) {
+                await AI.generateReport(_aiAssId, ind.id, currentUser?.role)
+              }
+            }
+            _aiGenerating = false; renderAI()
+          }}, _aiGenerating ? '⏳ 생성 중...' : '🚀 전체 일괄 생성'),
+          el('span', { style: 'font-size:11px;color:#999' }, `미생성: ${total - generated}건`)
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:280px 1fr;gap:0;min-height:500px' },
+        el('div', { style: 'border-right:1px solid #eee;overflow-y:auto;max-height:600px' },
+          ...groups.map(g => {
+            const gInds = indicators.filter(i => i.group_id === g.id)
+            return el('div', {},
+              el('div', { style: 'padding:8px 12px;background:#f8f9fa;font-size:11px;font-weight:600;color:#888;border-bottom:1px solid #f0f0f0;text-transform:uppercase;letter-spacing:0.5px' }, g.group_name),
+              ...gInds.map(ind => {
+                const draft = drafts.find(d => d.indicator_id === ind.id)
+                const sc = draft?.human_status === 'approved' ? '#27ae60' : draft?.ver_status === 'fail' ? '#e74c3c' : draft?.ver_status === 'pass' ? '#3498db' : draft ? '#f39c12' : '#ddd'
+                const statusLabel = draft ? AI.getDraftStatus(draft) : '미생성'
+                return el('div', { style: `padding:8px 12px;border-bottom:1px solid #f5f5f5;cursor:pointer;transition:background 0.15s;border-left:3px solid ${sc}`,
+                  onClick: () => showAIDetail(ind.id), onMouseEnter: e => { e.currentTarget.style.background = '#fafafa' }, onMouseLeave: e => { e.currentTarget.style.background = '' } },
+                  el('div', { style: 'font-weight:500;font-size:12px' }, Indicator.getNameAndCode(ind)),
+                  el('div', { style: `font-size:10px;color:${sc};margin-top:2px` }, statusLabel)
+                )
+              })
             )
-          })),
-          el('div', { id: 'aiDetail', style: 'background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1);min-height:200px' },
-            el('p', { style: 'color:#999;text-align:center' }, '왼쪽에서 항목을 선택하세요')
+          })
+        ),
+        el('div', { id: 'aiDetail', style: 'padding:20px;min-height:300px' },
+          el('div', { style: 'text-align:center;padding:60px 20px;color:#999' },
+            el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '👈'),
+            el('div', { style: { fontSize: '13px' } }, '왼쪽에서 지표를 선택하세요'),
+            el('div', { style: { fontSize: '11px', color: '#bbb', marginTop: '4px' } }, 'AI가 증빙 데이터를 기반으로 보고서 초안을 생성합니다')
           )
         )
       )
@@ -1477,31 +1855,90 @@
     const assessments = Store.getAssessments() || []
     c.innerHTML = ''
     if (!assessments.length) {
-      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📊'), el('h3', { style: 'margin:0 0 8px' }, 'GRI Standards 준수율'), el('p', { style: 'margin:0 0 16px;color:#888;font-size:13px' }, 'GRI 분석을 위해 먼저 평가를 생성하세요.'), el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')))
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
+        el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📊'),
+        el('h3', { style: 'margin:0 0 8px' }, 'GRI Standards 준수율'),
+        el('p', { style: 'margin:0 0 16px;color:#888;font-size:13px' }, 'GRI 분석을 위해 먼저 평가를 생성하세요.'),
+        el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')
+      ))
       return
     }
     if (!_griAssId || !assessments.find(a => a.id === _griAssId)) _griAssId = assessments[0]?.id
     const selectedId = _griAssId
     const report = GRI.generateComplianceReport(selectedId)
+    const rate = report.rate
+
+    const catNames = { universal: '보편적', economic: '경제', environmental: '환경', social: '사회' }
+    const catColors = { universal: '#7C3AED', economic: '#f39c12', environmental: '#27ae60', social: '#3498db' }
+    const catIcons = { universal: '📋', economic: '💰', environmental: '🌿', social: '👥' }
+
+    const categoryStats = {}
+    report.rate.details.forEach(d => {
+      const std = GRI_STANDARDS.find(s => s.code === d.code)
+      if (!std) return
+      if (!categoryStats[std.category]) categoryStats[std.category] = { total: 0, compliant: 0, partial: 0, non: 0 }
+      categoryStats[std.category].total++
+      if (d.status === 'compliant') categoryStats[std.category].compliant++
+      else if (d.status === 'with_reference') categoryStats[std.category].partial++
+      else categoryStats[std.category].non++
+    })
+
+    const catBars = Object.entries(categoryStats).map(([cat, s]) => {
+      const cPct = s.total ? Math.round(s.compliant / s.total * 100) : 0
+      const pPct = s.total ? Math.round((s.compliant + s.partial) / s.total * 100) : 0
+      return `<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:12px;font-weight:600;color:#555">${catIcons[cat] || ''} ${catNames[cat] || cat}</span>
+          <span style="font-size:11px;color:#999">${s.total}개 항목</span>
+        </div>
+        <div style="background:#f0f0f0;height:20px;border-radius:10px;overflow:hidden;position:relative">
+          <div style="background:#27ae60;height:100%;width:${cPct}%;position:absolute;border-radius:10px 0 0 10px"></div>
+          <div style="background:#f39c12;height:100%;width:${pPct - cPct}%;position:absolute;left:${cPct}%"></div>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff">${s.compliant}/${s.total}</div>
+        </div>
+      </div>`
+    }).join('')
+
     c.append(
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, 'GRI Standards 준수율'),
-          el('div', { style: 'display:flex;gap:8px;align-items:center' },
-            el('select', { id: 'griAssSelect', onChange: (e) => { _griAssId = e.target.value; renderGRI() } },
-              ...assessments.map(a => el('option', { value: a.id, selected: a.id === selectedId }, a.title))
-            )
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '📊 GRI Standards 준수 분석'),
+        el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: e => { _griAssId = e.target.value; renderGRI() } },
+          ...assessments.map(a => el('option', { value: a.id, selected: a.id === selectedId }, a.title))
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;background:#f8f9fa;border-bottom:1px solid #eee' },
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
+          el('div', { style: 'font-size:11px;color:#999' }, '완전준수'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#27ae60;margin-top:2px' }, rate.full_rate + '%'),
+          el('div', { style: 'font-size:11px;color:#aaa' }, `${rate.full_compliance}건`)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
+          el('div', { style: 'font-size:11px;color:#999' }, '부분준수 포함'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#f39c12;margin-top:2px' }, rate.with_ref_rate + '%'),
+          el('div', { style: 'font-size:11px;color:#aaa' }, `${rate.with_reference}건`)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
+          el('div', { style: 'font-size:11px;color:#999' }, '필수 항목'),
+          el('div', { style: 'font-size:22px;font-weight:700;margin-top:2px' }, rate.total_required),
+          el('div', { style: 'font-size:11px;color:#aaa' }, '개 GRI 기준')
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
+          el('div', { style: 'font-size:11px;color:#999' }, '미준수'),
+          el('div', { style: `font-size:22px;font-weight:700;color:${rate.non_compliant > 0 ? '#e74c3c' : '#27ae60'};margin-top:2px` }, rate.non_compliant),
+          el('div', { style: 'font-size:11px;color:#aaa' }, '건 개선 필요')
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 2fr;gap:16px;padding:20px' },
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '카테고리별 준수 현황'),
+          el('div', { innerHTML: catBars || '<div style="color:#999;font-size:12px">데이터 없음</div>' }),
+          el('div', { style: 'margin-top:12px;display:flex;gap:12px;font-size:11px;color:#888' },
+            el('span', {}, '🟢 완전준수'),
+            el('span', {}, '🟡 부분준수'),
+            el('span', {}, '⚪ 미준수')
           )
         ),
-        el('div', { style: 'padding:12px 20px;background:#f8f9fa;border-bottom:1px solid #eee;font-size:13px;display:flex;gap:24px' },
-          el('span', {}, `완전준수: <strong style="color:#27ae60">${report.rate.full_rate}%</strong>`),
-          el('span', {}, `부분준수 포함: <strong style="color:#f39c12">${report.rate.with_ref_rate}%</strong>`),
-          el('span', {}, `필수 항목: <strong>${report.rate.total_required}개</strong>`),
-          el('span', {}, `완전: <strong>${report.rate.full_compliance}</strong>`),
-          el('span', {}, `부분: <strong>${report.rate.with_reference}</strong>`),
-          el('span', {}, `미준수: <strong style="color:#e74c3c">${report.rate.non_compliant}</strong>`)
-        ),
-        el('div', { innerHTML: report.html, style: 'padding:16px 20px' })
+        el('div', { innerHTML: report.html, style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:auto;max-height:500px' })
       )
     )
   }
@@ -1513,21 +1950,79 @@
     const assessments = Store.getAssessments() || []
     c.innerHTML = ''
     if (!assessments.length) {
-      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('div', { style: 'font-size:36px;margin-bottom:12px' }, '⚠️'), el('h3', { style: 'margin:0 0 8px' }, 'AI 리스크 예측'), el('p', { style: 'margin:0 0 16px;color:#888;font-size:13px' }, '리스크 분석을 위해 먼저 평가를 생성하세요.'), el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')))
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
+        el('div', { style: 'font-size:36px;margin-bottom:12px' }, '⚠️'),
+        el('h3', { style: 'margin:0 0 8px' }, 'AI 리스크 예측'),
+        el('p', { style: 'margin:0 0 16px;color:#888;font-size:13px' }, '리스크 분석을 위해 먼저 평가를 생성하세요.'),
+        el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')
+      ))
       return
     }
     if (!_riskAssId || !assessments.find(a => a.id === _riskAssId)) _riskAssId = assessments[0]?.id
     const selectedId = _riskAssId
     const report = RISK.generateReport(selectedId)
+    const overall = report.overall
+    const cats = report.categories
+    const alerts = report.alerts
+
+    const trendIcons = { worsening: '↑', improving: '↓', stable: '→' }
+    const trendLabels = { worsening: '악화', improving: '개선', stable: '유지' }
+    const trendColors = { worsening: '#e74c3c', improving: '#27ae60', stable: '#999' }
+    const levelBg = { critical: '#e74c3c', high: '#f39c12', medium: '#f1c40f', low: '#27ae60' }
+
+    const catCards = cats.map(cat => {
+      const bg = levelBg[cat.risk.level] || '#999'
+      return `<div style="background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-left:4px solid ${bg}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div style="font-size:20px;margin-bottom:4px">${cat.icon}</div>
+            <div style="font-size:13px;font-weight:600;color:#333">${cat.label}</div>
+          </div>
+          <span style="font-size:24px;font-weight:700;color:${bg}">${cat.risk.score}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${bg}15;color:${bg};font-weight:600">${cat.risk.label}</span>
+          <span style="font-size:11px;color:${trendColors[cat.risk.trend]}">${trendIcons[cat.risk.trend]} ${trendLabels[cat.risk.trend]}</span>
+        </div>
+      </div>`
+    }).join('')
+
+    const alertCards = alerts.slice(0, 6).map(a => {
+      const colors = { critical: '#e74c3c', warning: '#f39c12', info: '#3498db' }
+      const bg = colors[a.severity] || '#999'
+      return `<div style="padding:10px 14px;margin-bottom:6px;background:${bg}08;border-left:3px solid ${bg};border-radius:0 8px 8px 0;font-size:12px">
+        ${a.icon} <span style="color:${bg};font-weight:600">[${a.category}]</span> ${a.message}
+      </div>`
+    }).join('')
+
     c.append(
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, 'AI 리스크 예측'),
-          el('select', { id: 'riskAssSelect', onChange: (e) => { _riskAssId = e.target.value; renderRisk() } },
-            ...assessments.map(a => el('option', { value: a.id, selected: a.id === selectedId }, a.title))
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '⚠️ 리스크 매트릭스'),
+        el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: e => { _riskAssId = e.target.value; renderRisk() } },
+          ...assessments.map(a => el('option', { value: a.id, selected: a.id === selectedId }, a.title))
+        )
+      ),
+      el('div', { style: 'padding:20px;background:linear-gradient(135deg,#667eea10,#764ba210);border-bottom:1px solid #eee' },
+        el('div', { style: 'display:flex;align-items:center;gap:20px' },
+          el('div', { style: 'position:relative;width:100px;height:100px;flex-shrink:0' },
+            el('div', { style: `width:100px;height:100px;border-radius:50%;border:8px solid ${overall.color}20;display:flex;align-items:center;justify-content:center` },
+              el('div', { style: `font-size:32px;font-weight:700;color:${overall.color}` }, overall.score)
+            )
+          ),
+          el('div', {},
+            el('div', { style: 'font-size:11px;color:#999;text-transform:uppercase;letter-spacing:0.5px' }, '종합 리스크'),
+            el('div', { style: `font-size:20px;font-weight:700;color:${overall.color};margin-top:4px` }, overall.label),
+            el('div', { style: 'font-size:12px;color:#888;margin-top:4px' }, `${cats.length}개 카테고리 분석 · ${alerts.length}건 알림`)
           )
-        ),
-        el('div', { innerHTML: report.html, style: 'padding:16px 20px' })
+        )
+      ),
+      el('div', { style: 'padding:20px' },
+        el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '카테고리별 리스크'),
+        el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px', innerHTML: catCards }),
+        alerts.length ? el('div', {},
+          el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, `알림 (${alerts.length}건)`),
+          el('div', { innerHTML: alertCards })
+        ) : el('div', { style: 'text-align:center;padding:20px;color:#27ae60;font-size:13px' }, '알림이 없습니다')
       )
     )
   }
@@ -1539,44 +2034,93 @@
     const assessments = Store.getAssessments() || []
     c.innerHTML = ''
     if (!assessments.length) {
-      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📈'), el('h3', { style: 'margin:0 0 8px' }, '벤치마크 모니터링'), el('p', { style: 'margin:0 0 16px;color:#888;font-size:13px' }, '벤치마크 비교를 위해 먼저 평가를 생성하세요.'), el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')))
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
+        el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📈'),
+        el('h3', { style: 'margin:0 0 8px' }, '벤치마크 모니터링'),
+        el('p', { style: 'margin:0 0 16px;color:#888;font-size:13px' }, '벤치마크 비교를 위해 먼저 평가를 생성하세요.'),
+        el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')
+      ))
       return
     }
     if (!_monitorAssId || !assessments.find(a => a.id === _monitorAssId)) _monitorAssId = assessments[0]?.id
     const selectedId = _monitorAssId
     const benchmarks = MONITORING.getBenchmarks()
-    const industries = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px' },
-      ...benchmarks.industries.map(ind => el('div', { style: 'background:#fff;border-radius:8px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.1);text-align:center' },
-        el('div', { style: 'font-size:11px;color:#888' }, ind.label),
-        el('div', { style: 'font-size:20px;font-weight:700;color:#7C3AED' }, ind.avg_score),
-        el('div', { style: 'font-size:10px;color:#aaa' }, `${ind.sample_size}개사`)
-      ))
-    )
-    const industrySelect = el('select', { id: 'monitorIndustry', onChange: (e) => { _monitorIndustry = e.target.value } },
-      ...benchmarks.industries.map(ind => el('option', { value: ind.code, selected: ind.code === _monitorIndustry }, `${ind.label} (${ind.avg_score}점)`))
-    )
-    const compareBtn = el('button', { className: 'btn btn-primary', onClick: () => {
-      const report = MONITORING.generateReport(selectedId, _monitorIndustry)
-      document.getElementById('monitorResult').innerHTML = report
-    }}, '벤치마크 비교 실행')
+    const assessment = Store.getAssessments().find(a => a.id === selectedId)
+    const companyScore = assessment?.total_score || 0
+    const allComparison = MONITORING.compareToAll(selectedId) || []
+
+    const sorted = [...benchmarks.industries].sort((a, b) => b.avg_score - a.avg_score)
+    const maxScore = Math.max(...sorted.map(i => i.avg_score), companyScore, 1)
+
+    const industryBars = sorted.map(ind => {
+      const pct = (ind.avg_score / maxScore * 100).toFixed(0)
+      return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
+        <span style="width:80px;color:#555;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ind.label}</span>
+        <div style="flex:1;background:#f0f0f0;height:18px;border-radius:9px;overflow:hidden;position:relative">
+          <div style="background:#7C3AED;height:100%;width:${pct}%;border-radius:9px"></div>
+          <span style="position:absolute;right:6px;top:1px;font-size:10px;font-weight:600;color:#fff">${ind.avg_score}</span>
+        </div>
+        <span style="width:30px;font-size:10px;color:#aaa">${ind.sample_size}개사</span>
+      </div>`
+    }).join('')
+
+    const companyLine = companyScore > 0 ? `<div style="position:absolute;left:${(companyScore / maxScore * 100)}%;top:0;bottom:0;width:2px;background:#e74c3c;z-index:1">
+      <span style="position:absolute;top:-16px;left:-20px;font-size:10px;color:#e74c3c;font-weight:700">자사 ${companyScore}</span>
+    </div>` : ''
+
+    const alertRules = MONITORING.getAlertRules()
+    const ruleItems = alertRules.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-radius:6px;font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+      <span style="width:8px;height:8px;border-radius:50%;background:${r.enabled ? '#27ae60' : '#ccc'}"></span>
+      <span style="flex:1;color:#333">${r.name}</span>
+      <span style="color:#999;font-size:11px">${r.description}</span>
+    </div>`).join('')
+
+    const comparisonCards = allComparison.sort((a, b) => b.avg - a.avg).slice(0, 6).map(c => {
+      const diff = companyScore - c.avg
+      const color = diff > 0 ? '#27ae60' : diff > -10 ? '#f39c12' : '#e74c3c'
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-radius:6px;font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.04)">
+        <span style="flex:1;color:#555">${c.industry}</span>
+        <span style="font-weight:600;color:#666">${c.avg}</span>
+        <span style="width:40px;text-align:right;font-weight:600;color:${color}">${diff > 0 ? '+' : ''}${diff}</span>
+      </div>`
+    }).join('')
+
     c.append(
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' }, el('h3', {}, '📈 실시간 벤치마크 모니터링')),
-        el('div', { style: 'padding:16px 20px' },
-          el('p', { style: 'font-size:12px;color:#888;margin-bottom:12px' }, `글로벌 평균: ${benchmarks.global_avg}점 | 출처: ${benchmarks.sample_source} | 갱신: ${benchmarks.last_updated}`),
-          industries,
-          el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:12px' },
-            el('span', { style: 'font-size:12px;color:#666' }, '비교 대상 업종:'),
-            industrySelect,
-            el('span', { style: 'font-size:12px;color:#666' }, '내 평가:'),
-            el('select', { id: 'monitorAss', onChange: (e) => { _monitorAssId = e.target.value } },
-              assessments.map(a => el('option', { value: a.id, selected: a.id === selectedId }, `${a.title} (${a.assessment_year}년)`))
-            ),
-            compareBtn
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '📈 벤치마크 모니터링'),
+        el('div', { style: 'display:flex;gap:8px;align-items:center' },
+          el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: e => { _monitorIndustry = e.target.value } },
+            ...benchmarks.industries.map(ind => el('option', { value: ind.code, selected: ind.code === _monitorIndustry }, `${ind.label} (${ind.avg_score}점)`))
           ),
-          el('div', { id: 'monitorResult' })
+          el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: e => { _monitorAssId = e.target.value; renderMonitor() } },
+            assessments.map(a => el('option', { value: a.id, selected: a.id === selectedId }, `${a.title} (${a.assessment_year}년)`))
+          ),
+          el('button', { className: 'btn btn-primary', onClick: () => { renderMonitor() } }, '비교 실행')
         )
-      )
+      ),
+      el('div', { style: 'padding:12px 20px;background:#f8f9fa;border-bottom:1px solid #eee;font-size:12px;color:#888;display:flex;gap:16px' },
+        el('span', {}, `글로벌 평균: ${benchmarks.global_avg}점`),
+        el('span', {}, `출처: ${benchmarks.sample_source}`),
+        el('span', {}, `갱신: ${benchmarks.last_updated}`),
+        el('span', { style: `font-weight:600;color:${companyScore > benchmarks.global_avg ? '#27ae60' : '#e74c3c'}` }, `자사: ${companyScore}점`)
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:20px' },
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+          el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '업종별 평균 점수'),
+          el('div', { style: 'position:relative', innerHTML: industryBars + companyLine })
+        ),
+        el('div', {},
+          el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:12px' },
+            el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '자사 비교'),
+            el('div', { innerHTML: comparisonCards || '<div style="color:#999;font-size:12px">비교 불가</div>' })
+          ),
+          el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+            el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '알림 규칙'),
+            el('div', { style: 'display:flex;flex-direction:column;gap:6px', innerHTML: ruleItems })
+          )
+        )
+      ),
+      el('div', { id: 'monitorResult', style: 'padding:0 20px 20px' })
     )
   }
 
@@ -1589,94 +2133,119 @@
     const assurance = ISSA.getAssurance(companyId)
     const completion = ISSA.getCompletionPercent(assurance)
     const stageInfo = ISSA.getStageInfo(assurance.stage)
-    const stages = ISSA_STAGES.map(s => {
-      const isActive = s.key === assurance.stage
-      const isPast = ISSA_STAGES.findIndex(x => x.key === s.key) < ISSA_STAGES.findIndex(x => x.key === assurance.stage)
-      return el('div', { style: `flex:1;text-align:center;padding:10px;${isActive ? 'background:#f8f6ff;border-radius:8px;border:2px solid #7C3AED' : isPast ? 'opacity:.6' : ''}` },
-        el('div', { style: 'font-size:20px' }, s.icon),
-        el('div', { style: `font-size:11px;font-weight:${isActive ? '700' : '400'};color:${isActive ? '#7C3AED' : '#666'}` }, s.label)
-      )
-    })
-    const findingForm = el('div', { style: 'margin-top:12px' },
-      el('div', { className: 'form-group' }, el('label', {}, '지적사항 유형'), el('select', { id: 'findCategory' },
-        ['환경', '사회', '지배구조', '데이터', '절차', '기타'].map(cat => el('option', { value: cat }, cat))
-      )),
-      el('div', { className: 'form-group' }, el('label', {}, '심각도'), el('select', { id: 'findSeverity' },
-        [{ key: 'low', label: '낮음' }, { key: 'medium', label: '보통' }, { key: 'high', label: '높음' }].map(s => el('option', { value: s.key }, s.label))
-      )),
-      el('div', { className: 'form-group' }, el('label', {}, '설명'), el('textarea', { id: 'findDesc', rows: 2, style: 'width:100%;padding:8px;border:1px solid #ddd;border-radius:6px' })),
-      el('div', { className: 'form-group' }, el('label', {}, '권고사항'), el('textarea', { id: 'findRec', rows: 2, style: 'width:100%;padding:8px;border:1px solid #ddd;border-radius:6px' }))
-    )
-    const statement = ISSA.generateStatement(assurance, companyName)
+    const openFindings = assurance.findings?.filter(f => f.status === 'open') || []
+    const closedFindings = assurance.findings?.filter(f => f.status === 'closed') || []
+
+    const stageIdx = ISSA_STAGES.findIndex(x => x.key === assurance.stage)
+    const stageHtml = ISSA_STAGES.map((s, i) => {
+      const isDone = i < stageIdx
+      const isCurrent = i === stageIdx
+      const isFuture = i > stageIdx
+      return `<div style="flex:1;text-align:center;position:relative">
+        <div style="width:40px;height:40px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:18px;background:${isDone ? '#7C3AED' : isCurrent ? '#7C3AED15' : '#f5f5f5'};border:2px solid ${isDone || isCurrent ? '#7C3AED' : '#e0e0e0'};color:${isDone ? '#fff' : isCurrent ? '#7C3AED' : '#bbb'}">
+          ${isDone ? '✓' : s.icon}
+        </div>
+        <div style="font-size:11px;font-weight:${isCurrent ? '700' : '400'};color:${isCurrent ? '#7C3AED' : isDone ? '#666' : '#bbb'}">${s.label}</div>
+        ${isDone ? `<div style="position:absolute;top:18px;left:calc(50% + 24px);right:calc(-50% + 24px);height:2px;background:#7C3AED"></div>` : ''}
+      </div>`
+    }).join('')
+
+    const findingCards = (assurance.findings || []).map(f => {
+      const sevColors = { high: '#e74c3c', medium: '#f39c12', low: '#3498db' }
+      const sevBg = { high: '#fdf0f0', medium: '#fdf6e3', low: '#f0f4fa' }
+      const sevLabels = { high: '높음', medium: '보통', low: '낮음' }
+      return `<div style="display:flex;align-items:start;gap:10px;padding:10px 12px;border-radius:8px;background:${sevBg[f.severity] || '#fafafa'};border:1px solid ${sevColors[f.severity]}20;margin-bottom:6px">
+        <div style="width:32px;height:32px;border-radius:8px;background:${sevColors[f.severity]}15;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${sevColors[f.severity]};flex-shrink:0">
+          ${f.severity === 'high' ? '!' : f.severity === 'medium' ? '~' : 'i'}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:#333">${f.category} · ${sevLabels[f.severity] || f.severity}</div>
+          <div style="font-size:12px;color:#555;margin-top:2px;line-height:1.4">${f.description}</div>
+          ${f.recommendation ? `<div style="font-size:11px;color:#888;margin-top:2px">권고: ${f.recommendation}</div>` : ''}
+        </div>
+        <div style="flex-shrink:0;text-align:right">
+          <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;${f.status === 'open' ? 'background:#e74c3c15;color:#e74c3c' : 'background:#27ae6015;color:#27ae60'}">${f.status === 'open' ? '미해결' : '해결완료'}</span>
+          ${f.status === 'open' ? `<button class="btn btn-sm btn-success" style="margin-top:4px;font-size:11px" onclick="(function(){ISSA.resolveFinding('${companyId}','${f.id}');renderISSA()})()">해결처리</button>` : ''}
+        </div>
+      </div>`
+    }).join('')
+
     c.append(
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, '🛡️ ISSA 5000 감사 보증'),
-          el('div', { style: 'font-size:12px;color:#888' }, `완료율: ${completion}%`)
-        ),
-        el('div', { style: 'padding:16px 20px;display:flex;gap:8px;align-items:center;border-bottom:1px solid #eee' }, ...stages),
-        el('div', { style: 'padding:16px 20px;display:flex;gap:24px;font-size:13px;border-bottom:1px solid #eee;flex-wrap:wrap' },
-          el('span', {}, `감사인: <strong>${assurance.auditor_name || '-'}</strong>`),
-          el('span', {}, `감사기관: <strong>${assurance.auditor_firm || '-'}</strong>`),
-          el('span', {}, `보증수준: <strong>${ISSA.getAssuranceLevel(assurance.assurance_level)?.label || assurance.assurance_level}</strong>`),
-          el('span', {}, `미해결: <strong style="color:#e74c3c">${assurance.findings?.filter(f => f.status === 'open').length || 0}건</strong>`)
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '🛡️ ISSA 5000 감사 보증'),
+        el('div', { style: 'display:flex;gap:12px;align-items:center' },
+          el('span', { style: 'font-size:12px;color:#999' }, `${completion}% 완료`),
+          el('span', { style: 'font-size:12px;padding:2px 8px;border-radius:10px;background:#7C3AED15;color:#7C3AED;font-weight:600' }, `${openFindings.length}건 미해결`)
         )
       ),
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, '감사 기본 정보'),
-          el('div', { style: 'display:flex;gap:6px' },
-            ISSA_STAGES.map(s => el('button', { className: 'btn btn-sm' + (s.key === assurance.stage ? ' btn-primary' : ''), onClick: () => { ISSA.setStage(companyId, s.key); renderISSA() } }, `${s.icon} ${s.label}`))
+      el('div', { style: 'padding:20px;background:#f8f9fa;border-bottom:1px solid #eee' },
+        el('div', { style: 'margin-bottom:12px' },
+          el('div', { style: 'background:#e0e0e0;height:6px;border-radius:3px;overflow:hidden' },
+            el('div', { style: `background:#7C3AED;height:100%;width:${completion}%` })
           )
         ),
-        el('div', { style: 'padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px' },
-          el('div', { className: 'form-group' }, el('label', {}, '감사인명'), el('input', { id: 'issaAuditor', value: assurance.auditor_name || '', onBlur: e => { assurance.auditor_name = e.target.value; ISSA.saveAssurance(assurance) } })),
-          el('div', { className: 'form-group' }, el('label', {}, '감사기관'), el('input', { id: 'issaFirm', value: assurance.auditor_firm || '', onBlur: e => { assurance.auditor_firm = e.target.value; ISSA.saveAssurance(assurance) } })),
-          el('div', { className: 'form-group' }, el('label', {}, '면허번호'), el('input', { id: 'issaLicense', value: assurance.auditor_license || '', onBlur: e => { assurance.auditor_license = e.target.value; ISSA.saveAssurance(assurance) } })),
-          el('div', { className: 'form-group' }, el('label', {}, '보증 수준'), el('select', { id: 'issaLevel', onChange: e => { assurance.assurance_level = e.target.value; ISSA.saveAssurance(assurance); renderISSA() } },
-            ASSURANCE_LEVELS.map(l => el('option', { value: l.key, selected: l.key === assurance.assurance_level }, `${l.label} (${l.description})`))
-          )),
-          el('div', { className: 'form-group' }, el('label', {}, '감사 시작일'), el('input', { type: 'date', id: 'issaStart', value: assurance.scope_start || '', onBlur: e => { assurance.scope_start = e.target.value; ISSA.saveAssurance(assurance) } })),
-          el('div', { className: 'form-group' }, el('label', {}, '감사 종료일'), el('input', { type: 'date', id: 'issaEnd', value: assurance.scope_end || '', onBlur: e => { assurance.scope_end = e.target.value; ISSA.saveAssurance(assurance) } })),
-          el('div', { className: 'form-group' }, el('label', {}, '중대성 기준(%)'), el('input', { type: 'number', id: 'issaThresh', value: assurance.materiality_threshold || 10, onBlur: e => { assurance.materiality_threshold = parseInt(e.target.value) || 10; ISSA.saveAssurance(assurance) } })),
-          el('div', { className: 'form-group' }, el('label', {}, '서명일'), el('input', { type: 'date', id: 'issaSign', value: assurance.sign_date || '', onBlur: e => { assurance.sign_date = e.target.value; ISSA.saveAssurance(assurance) } }))
+        el('div', { style: 'display:flex;gap:4px;align-items:flex-start', innerHTML: stageHtml })
+      ),
+      el('div', { style: 'padding:12px 20px;background:#fff;border-bottom:1px solid #eee;display:flex;gap:20px;font-size:12px;flex-wrap:wrap' },
+        el('span', {}, `감사인: ${assurance.auditor_name || '-'}`),
+        el('span', {}, `기관: ${assurance.auditor_firm || '-'}`),
+        el('span', {}, `보증수준: ${ISSA.getAssuranceLevel(assurance.assurance_level)?.label || assurance.assurance_level || '-'}`),
+        assurance.scope_start ? el('span', {}, `기간: ${assurance.scope_start} ~ ${assurance.scope_end || '-'}`) : null
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px' },
+        el('div', { className: 'card', style: 'margin:0' },
+          el('div', { className: 'card-header' },
+            el('h3', { style: 'font-size:14px' }, '감사 기본 정보'),
+            el('div', { style: 'display:flex;gap:4px' },
+              ISSA_STAGES.map(s => el('button', { className: 'btn btn-sm' + (s.key === assurance.stage ? ' btn-primary' : ''), onClick: () => { ISSA.setStage(companyId, s.key); renderISSA() } }, `${s.icon} ${s.label}`))
+            )
+          ),
+          el('div', { style: 'padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '감사인명'), el('input', { style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', value: assurance.auditor_name || '', onBlur: e => { assurance.auditor_name = e.target.value; ISSA.saveAssurance(assurance) } })),
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '감사기관'), el('input', { style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', value: assurance.auditor_firm || '', onBlur: e => { assurance.auditor_firm = e.target.value; ISSA.saveAssurance(assurance) } })),
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '면허번호'), el('input', { style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', value: assurance.auditor_license || '', onBlur: e => { assurance.auditor_license = e.target.value; ISSA.saveAssurance(assurance) } })),
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '보증 수준'), el('select', { style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', onChange: e => { assurance.assurance_level = e.target.value; ISSA.saveAssurance(assurance); renderISSA() } },
+              ASSURANCE_LEVELS.map(l => el('option', { value: l.key, selected: l.key === assurance.assurance_level }, `${l.label} (${l.description})`))
+            )),
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '감사 시작일'), el('input', { type: 'date', style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', value: assurance.scope_start || '', onBlur: e => { assurance.scope_start = e.target.value; ISSA.saveAssurance(assurance) } })),
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '감사 종료일'), el('input', { type: 'date', style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', value: assurance.scope_end || '', onBlur: e => { assurance.scope_end = e.target.value; ISSA.saveAssurance(assurance) } })),
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '중대성 기준(%)'), el('input', { type: 'number', style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', value: assurance.materiality_threshold || 10, onBlur: e => { assurance.materiality_threshold = parseInt(e.target.value) || 10; ISSA.saveAssurance(assurance) } })),
+            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#888' }, '서명일'), el('input', { type: 'date', style: 'width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', value: assurance.sign_date || '', onBlur: e => { assurance.sign_date = e.target.value; ISSA.saveAssurance(assurance) } }))
+          )
+        ),
+        el('div', { className: 'card', style: 'margin:0' },
+          el('div', { className: 'card-header' },
+            el('h3', { style: 'font-size:14px' }, `지적사항 (${assurance.findings?.length || 0}건)`),
+            el('button', { className: 'btn btn-primary btn-sm', onClick: () => {
+              const desc = document.getElementById('findDesc')?.value
+              if (!desc) return alert('설명을 입력하세요')
+              ISSA.addFinding(companyId, {
+                category: document.getElementById('findCategory')?.value,
+                severity: document.getElementById('findSeverity')?.value,
+                description: desc,
+                recommendation: document.getElementById('findRec')?.value
+              })
+              renderISSA()
+            }}, '+ 추가')
+          ),
+          el('div', { style: 'padding:12px;border-bottom:1px solid #f0f0f0;background:#fafafa' },
+            el('div', { style: 'display:grid;grid-template-columns:1fr 80px;gap:6px;margin-bottom:6px' },
+              el('select', { id: 'findCategory', style: 'padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:11px' },
+                ['환경', '사회', '지배구조', '데이터', '절차', '기타'].map(cat => el('option', { value: cat }, cat))
+              ),
+              el('select', { id: 'findSeverity', style: 'padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:11px' },
+                [{ key: 'low', label: '낮음' }, { key: 'medium', label: '보통' }, { key: 'high', label: '높음' }].map(s => el('option', { value: s.key }, s.label))
+              )
+            ),
+            el('textarea', { id: 'findDesc', rows: 2, placeholder: '설명', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:11px;resize:vertical;margin-bottom:6px' }),
+            el('textarea', { id: 'findRec', rows: 1, placeholder: '권고사항 (선택)', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:11px;resize:vertical' })
+          ),
+          el('div', { style: 'padding:12px;max-height:350px;overflow-y:auto', innerHTML: findingCards || '<div style="text-align:center;padding:20px;color:#999;font-size:12px">지적사항이 없습니다.</div>' })
         )
       ),
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, `지적사항 (${assurance.findings?.length || 0}건)`),
-          el('button', { className: 'btn btn-primary btn-sm', onClick: () => {
-            const desc = document.getElementById('findDesc')?.value
-            if (!desc) return alert('설명을 입력하세요')
-            ISSA.addFinding(companyId, {
-              category: document.getElementById('findCategory')?.value,
-              severity: document.getElementById('findSeverity')?.value,
-              description: desc,
-              recommendation: document.getElementById('findRec')?.value
-            })
-            renderISSA()
-          }}, '+ 지적사항 추가')
-        ),
-        findingForm,
-        assurance.findings?.length ? el('table', { style: 'font-size:12px' },
-          el('thead', {}, el('tr', {}, el('th', {}, 'ID'), el('th', {}, '유형'), el('th', {}, '심각도'), el('th', {}, '설명'), el('th', {}, '상태'), el('th', {}, '관리'))),
-          el('tbody', {}, ...assurance.findings.map(f => {
-            const sevColors = { high: '#e74c3c', medium: '#f39c12', low: '#3498db' }
-            const sevLabels = { high: '높음', medium: '보통', low: '낮음' }
-            return el('tr', {},
-              el('td', {}, f.id),
-              el('td', {}, f.category),
-              el('td', { style: `color:${sevColors[f.severity]};font-weight:600` }, sevLabels[f.severity] || f.severity),
-              el('td', {}, f.description),
-              el('td', { style: f.status === 'open' ? 'color:#e74c3c;font-weight:600' : 'color:#27ae60' }, f.status === 'open' ? '미해결' : '해결완료'),
-              el('td', {}, f.status === 'open' ? el('button', { className: 'btn btn-sm btn-success', onClick: () => { ISSA.resolveFinding(companyId, f.id); renderISSA() } }, '해결처리') : null)
-            )
-          }))
-        ) : el('p', { style: 'padding:16px;color:#999;text-align:center' }, '지적사항이 없습니다.')
-      ),
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' }, el('h3', {}, '보증 의견서')),
-        el('div', { innerHTML: ISSA.generateReport(companyId), style: 'padding:16px 20px' })
+      el('div', { className: 'card', style: 'margin:0 20px 20px' },
+        el('div', { className: 'card-header' }, el('h3', { style: 'font-size:14px' }, '보증 의견서')),
+        el('div', { innerHTML: ISSA.generateReport(companyId), style: 'padding:16px 20px;font-size:12px;line-height:1.7' })
       )
     )
   }
@@ -1838,40 +2407,59 @@
     const assessment = Store.getAssessments().find(a => a.id === _editorAssId)
     const allIndicators = Store.getIndicators().filter(i => i.authority_code === assessment.authority_code && i.is_active !== false)
     const evidences = Evidence.getAll(_editorAssId)
+    const allTags = Store.getEvidenceTags()
+    const linked = allIndicators.filter(ind => allTags.some(t => t.indicator_id === ind.id))
+    const unlinked = allIndicators.filter(ind => !allTags.some(t => t.indicator_id === ind.id))
+    const pct = allIndicators.length ? Math.round(linked.length / allIndicators.length * 100) : 0
 
     c.append(
-      el('div', { className: 'card' },
-        el('div', { className: 'card-header' },
-          el('h3', {}, '📝 보고서 편집기 — 지표 ↔ 증빙 연결'),
-          el('div', { style: 'display:flex;gap:8px;align-items:center' },
-            el('select', { id: 'editorAssSelect', onChange: () => { _editorAssId = parseInt(document.getElementById('editorAssSelect').value); _editorSelectedIndicator = null; renderReportEditor() } },
-              ...assessments.map(a => el('option', { value: a.id, selected: a.id === _editorAssId }, `${a.title} (${a.assessment_year}년)`))
-            )
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '📝 보고서 편집기'),
+        el('div', { style: 'display:flex;gap:8px;align-items:center' },
+          el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: () => { _editorAssId = parseInt(document.getElementById('editorAssSelect')?.value || document.querySelector('.card-header select')?.value); _editorSelectedIndicator = null; renderReportEditor() } },
+            ...assessments.map(a => el('option', { value: a.id, selected: a.id === _editorAssId }, `${a.title} (${a.assessment_year}년)`))
           )
-        ),
-        el('div', { style: 'display:grid;grid-template-columns:320px 1fr;gap:0;min-height:500px' },
-          el('div', { style: 'border-right:1px solid #eee;overflow-y:auto;max-height:600px' },
-            el('div', { style: 'padding:10px 16px;background:#f8f9fa;border-bottom:1px solid #eee;font-size:12px;font-weight:600;color:#555' }, `지표 목록 (${allIndicators.length}개)`),
-            ...allIndicators.map(ind => {
-              const tags = Store.getEvidenceTags().filter(t => t.indicator_id === ind.id)
-              const isSelected = _editorSelectedIndicator === ind.id
-              return el('div', {
-                style: `padding:10px 16px;border-bottom:1px solid #f0f0f0;cursor:pointer;${isSelected ? 'background:#f0ebff;border-left:3px solid #7C3AED' : ''}`,
-                onClick: () => { _editorSelectedIndicator = ind.id; renderReportEditor() }
-              },
-                el('div', { style: 'display:flex;justify-content:space-between;align-items:center' },
-                  el('span', { style: 'font-weight:500;font-size:13px' }, Indicator.getNameAndCode(ind)),
-                  tags.length ? el('span', { style: 'background:#7C3AED;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px' }, tags.length) : null
-                ),
-                el('div', { style: 'font-size:11px;color:#888;margin-top:2px' }, `${Indicator.getPillarName(ind.pillar)} | ${ind.dept_code || '미지정'}`)
-              )
-            })
+        )
+      ),
+      el('div', { style: 'padding:12px 20px;background:#f8f9fa;border-bottom:1px solid #eee' },
+        el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:6px' },
+          el('div', { style: 'flex:1;background:#eee;height:8px;border-radius:4px;overflow:hidden' },
+            el('div', { style: `background:#7C3AED;height:100%;width:${pct}%;border-radius:4px;transition:width 0.3s` })
           ),
-          el('div', { style: 'overflow-y:auto;max-height:600px;padding:16px' },
-            _editorSelectedIndicator ? renderEditorDetail(_editorSelectedIndicator, evidences) : el('div', { style: 'text-align:center;padding:60px 20px;color:#999' },
-              el('div', { style: 'font-size:32px;margin-bottom:8px' }, '👈'),
-              el('div', { style: 'font-size:13px' }, '왼쪽에서 지표를 선택하면 연결할 증빙을 관리할 수 있습니다.')
+          el('span', { style: 'font-size:12px;font-weight:600;color:#7C3AED' }, `${pct}%`)
+        ),
+        el('div', { style: 'display:flex;gap:16px;font-size:12px;color:#666' },
+          el('span', {}, `연결 완료: ${linked.length}건`),
+          el('span', {}, `미연결: ${unlinked.length}건`),
+          el('span', {}, `증빙: ${evidences.length}건`)
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:320px 1fr;gap:0;min-height:500px' },
+        el('div', { style: 'border-right:1px solid #eee;overflow-y:auto;max-height:600px' },
+          el('div', { style: 'padding:8px 16px;background:#f8f9fa;border-bottom:1px solid #eee;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.5px' }, `전체 지표 (${allIndicators.length}개)`),
+          ...allIndicators.map(ind => {
+            const tags = allTags.filter(t => t.indicator_id === ind.id)
+            const isSelected = _editorSelectedIndicator === ind.id
+            const hasLink = tags.length > 0
+            return el('div', {
+              style: `padding:10px 16px;border-bottom:1px solid #f5f5f5;cursor:pointer;transition:background 0.15s;border-left:3px solid ${isSelected ? '#7C3AED' : hasLink ? '#27ae60' : 'transparent'}`,
+              onClick: () => { _editorSelectedIndicator = ind.id; renderReportEditor() },
+              onMouseEnter: e => { if (!isSelected) e.currentTarget.style.background = '#fafafa' },
+              onMouseLeave: e => { if (!isSelected) e.currentTarget.style.background = '' }
+            },
+              el('div', { style: 'display:flex;justify-content:space-between;align-items:center' },
+                el('span', { style: `font-weight:500;font-size:12px;color:${hasLink ? '#333' : '#999'}` }, Indicator.getNameAndCode(ind)),
+                hasLink ? el('span', { style: 'background:#27ae60;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px' }, `${tags.length}건`) : el('span', { style: 'background:#eee;color:#999;font-size:10px;padding:1px 6px;border-radius:99px' }, '미연결')
+              ),
+              el('div', { style: 'font-size:10px;color:#aaa;margin-top:2px' }, Indicator.getPillarName(ind.pillar))
             )
+          })
+        ),
+        el('div', { style: 'overflow-y:auto;max-height:600px;padding:16px' },
+          _editorSelectedIndicator ? renderEditorDetail(_editorSelectedIndicator, evidences) : el('div', { style: 'text-align:center;padding:60px 20px;color:#999' },
+            el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '👈'),
+            el('div', { style: { fontSize: '13px' } }, '왼쪽에서 지표를 선택하세요'),
+            el('div', { style: { fontSize: '11px', color: '#bbb', marginTop: '4px' } }, '각 지표에 증빙을 연결하여 보고서를 구성합니다')
           )
         )
       )
@@ -2248,12 +2836,15 @@
     _dashAssId = _dashAssId || assessments[0]?.id
     if (!assessments.find(a => a.id === _dashAssId)) _dashAssId = assessments[0]?.id
     c.append(
-      el('div', { style: 'display:flex;gap:8px;margin-bottom:12px;align-items:center' },
-        el('select', { id: 'dashAssSelect', onChange: () => { _dashAssId = parseInt(document.getElementById('dashAssSelect').value); renderDashboard() } },
-          ...assessments.map(a => el('option', { value: a.id, selected: a.id === _dashAssId }, `${a.title} (${a.assessment_year}년)`))
-        ),
-        el('button', { className: 'btn btn-primary', onClick: () => Report.print(_dashAssId) }, '🖨 보고서 출력'),
-        el('button', { className: 'btn btn-secondary', onClick: () => Report.downloadHTML(_dashAssId) }, '⬇ HTML 다운로드')
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0;margin-bottom:16px' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '📊 대시보드'),
+        el('div', { style: 'display:flex;gap:8px;align-items:center' },
+          el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: () => { _dashAssId = parseInt(document.getElementById('dashAssSelect')?.value || document.querySelector('.card-header select')?.value); renderDashboard() } },
+            ...assessments.map(a => el('option', { value: a.id, selected: a.id === _dashAssId }, `${a.title} (${a.assessment_year}년)`))
+          ),
+          el('button', { className: 'btn btn-secondary', style: 'font-size:12px', onClick: () => Report.print(_dashAssId) }, '🖨 출력'),
+          el('button', { className: 'btn btn-secondary', style: 'font-size:12px', onClick: () => Report.downloadHTML(_dashAssId) }, '⬇ HTML')
+        )
       ),
       el('div', { id: 'dashGrid' })
     )
@@ -2679,6 +3270,76 @@
   window.renderAIHistory = renderAIHistory
   window.renderBudget = renderBudget
   window.renderMasking = renderMasking
+
+  // ==================== 데이터 내보내기 ====================
+  function exportCSV(data, filename) {
+    if (!data.length) return alert('내보낼 데이터가 없습니다.')
+    const keys = Object.keys(data[0])
+    const csvRows = [keys.join(','), ...data.map(row => keys.map(k => {
+      let val = row[k]
+      if (val === null || val === undefined) val = ''
+      val = String(val).replace(/"/g, '""')
+      return `"${val}"`
+    }).join(','))]
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportExcel(data, filename, sheetName) {
+    if (!data.length) return alert('내보낼 데이터가 없습니다.')
+    const keys = Object.keys(data[0])
+    let xml = '<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n<Styles><Style ss:ID="hdr"><Font ss:Bold="1"/><Interior ss:Color="#7C3AED" ss:Pattern="Solid"/></Style></Styles>\n<Worksheet ss:Name="' + (sheetName || 'Sheet1') + '">\n<Table>\n'
+    xml += '<Row>' + keys.map(k => `<Cell ss:StyleID="hdr"><Data ss:Type="String">${k}</Data></Cell>`).join('') + '</Row>\n'
+    data.forEach(row => {
+      xml += '<Row>' + keys.map(k => {
+        let val = row[k]
+        if (val === null || val === undefined) val = ''
+        const type = typeof val === 'number' ? 'Number' : 'String'
+        return `<Cell><Data ss:Type="${type}">${String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</Data></Cell>`
+      }).join('') + '</Row>\n'
+    })
+    xml += '</Table>\n</Worksheet>\n</Workbook>'
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  window.exportData = function(type) {
+    const dataMap = {
+      assessments: Store.getAssessments() || [],
+      indicators: Store.getIndicators() || [],
+      evidence: Store.getEvidence() || [],
+      ghg: Store.getGHGActivities() || [],
+      suppliers: Supplier.getAll() || [],
+      drafts: Store.getAIDrafts() || []
+    }
+    const data = dataMap[type]
+    if (!data || !data.length) return alert('내보낼 데이터가 없습니다.')
+    const ts = new Date().toISOString().slice(0, 10)
+    exportExcel(data, `SmartESG_${type}_${ts}.xlsx`, type)
+  }
+
+  window.showExportModal = function() {
+    modal('데이터 내보내기', el('div', {},
+      el('p', { style: 'font-size:13px;color:#666;margin-bottom:16px' }, '내보낼 데이터 유형을 선택하세요.'),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
+        ['assessments', 'indicators', 'evidence', 'ghg', 'suppliers', 'drafts'].map(type => {
+          const labels = { assessments: '📋 평가', indicators: '📌 지표', evidence: '📎 증빙', ghg: '🏭 온실가스', suppliers: '🏢 협력사', drafts: '🤖 AI 초안' }
+          const count = (dataMap => dataMap[type]?.length || 0)({ assessments: Store.getAssessments(), indicators: Store.getIndicators(), evidence: Store.getEvidence(), ghg: Store.getGHGActivities(), suppliers: Supplier.getAll(), drafts: Store.getAIDrafts() })
+          return el('button', { className: 'btn btn-secondary', style: 'text-align:left;padding:12px;display:flex;justify-content:space-between;align-items:center', onClick: () => { closeModal(); window.exportData(type) } },
+            el('span', {}, labels[type] || type),
+            el('span', { style: 'font-size:11px;color:#999' }, `${count}건`)
+          )
+        })
+      )
+    ))
+    document.getElementById('modal-save').style.display = 'none'
+  }
 
   document.addEventListener('DOMContentLoaded', _initApp)
   if (document.readyState !== 'loading') _initApp()
