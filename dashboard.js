@@ -1,3 +1,6 @@
+// 대시보드 시각화 모듈
+// 부문별 점수, 준비도, 위험도, 미완료 과제
+
 const Dashboard = {
   render(containerId, assessmentId) {
     const container = document.getElementById(containerId)
@@ -5,7 +8,7 @@ const Dashboard = {
 
     const assessment = Store.getAssessments().find(a => a.id === assessmentId)
     if (!assessment) {
-      container.innerHTML = '<p style="text-align:center;padding:40px;color:#999">평가 데이터가 없습니다.</p>'
+      container.innerHTML = '<p>평가 데이터가 없습니다.</p>'
       return
     }
 
@@ -14,420 +17,256 @@ const Dashboard = {
     const evidenceCount = Evidence.countByStatus(assessmentId)
     const drafts = Store.getAIDrafts().filter(d => d.assessment_id === assessmentId)
     const ghgSummary = GHG.getSummary(assessmentId)
-    const risks = RISK.generateReport(assessmentId)
-    const alerts = RISK.generateAlerts(assessmentId)
-    const suppliers = Store.getSuppliers ? Store.getSuppliers() : []
 
-    container.innerHTML = ''
-    const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:20px' })
-
-    wrap.append(
-      this._kpiRow(assessment, items, evidenceCount, risks),
-      this._chartRow1(items, groups, assessment.authority_code, ghgSummary),
-      this._chartRow2(evidenceCount, drafts, suppliers),
-      this._chartRow3(risks, alerts),
-      this._chartRow4(items, groups, assessment.authority_code)
-    )
-
-    container.append(wrap)
+    container.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+        ${this._scoreCard(assessment)}
+        ${this._themeRadar(items, groups, assessment.authority_code)}
+        ${this._evidenceCard(evidenceCount)}
+        ${this._draftStatusCard(drafts)}
+        ${this._ghgCard(ghgSummary)}
+        ${this._supplierRiskCard()}
+        ${this._completionCard(items)}
+        ${this._kssbSubmissionCard()}
+        ${this._aiUnapprovedCard(assessmentId)}
+        ${this._budgetProgressCard()}
+        ${this._ghgTrendCard(assessmentId)}
+      </div>
+    `
   },
 
-  _kpi(a, label, value, sub, pct, color) {
-    const size = 72, stroke = 6
-    const r = (size - stroke) / 2, c = 2 * Math.PI * r
-    const targetOffset = c - (Math.min(pct, 100) / 100) * c
-
-    const circle = el('circle', { cx: size/2, cy: size/2, r: r, fill: 'none', stroke: '#f0f0f0', stroke-width: stroke })
-    const active = el('circle', {
-      cx: size/2, cy: size/2, r: r, fill: 'none',
-      stroke: color, 'stroke-width': stroke,
-      'stroke-dasharray': c, 'stroke-dashoffset': c,
-      'stroke-linecap': 'round',
-      style: 'transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1)'
-    })
-    const svg = el('svg', { width: size, height: size, style: 'transform:rotate(-90deg);flex-shrink:0' }, circle, active)
-
-    const card = el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px;display:flex;align-items:center;gap:20px' },
-      el('div', { style: 'position:relative;width:' + size + 'px;height:' + size + 'px;flex-shrink:0' },
-        svg,
-        el('div', { style: 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:' + color }, value)
-      ),
-      el('div', {},
-        el('div', { style: 'font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px' }, label),
-        el('div', { style: 'font-size:22px;font-weight:700;color:#1a1a2e;margin-top:2px' }, a),
-        el('div', { style: 'font-size:11px;color:#bbb;margin-top:4px' }, sub)
-      )
-    )
-
-    card.style.cursor = 'pointer'
-    card.addEventListener('click', () => {
-      active.style.transition = 'none'
-      active.setAttribute('stroke-dashoffset', c)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          active.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1)'
-          active.setAttribute('stroke-dashoffset', targetOffset)
-        })
-      })
-    })
-
-    setTimeout(() => active.setAttribute('stroke-dashoffset', targetOffset), 100)
-    return card
+  _scoreCard(assessment) {
+    const gradeColor = rating => {
+      const colors = { Platinum: '#8e44ad', Gold: '#f1c40f', Silver: '#95a5a6', Bronze: '#d35400' }
+      return colors[rating] || '#333'
+    }
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">총점</h3>
+  <div style="font-size:48px;font-weight:700;color:${gradeColor(assessment.rating)}">${assessment.total_score ?? '-'}</div>
+  <div style="margin-top:8px;color:#666">등급: <strong>${assessment.rating ?? '미평가'}</strong></div>
+  <div style="margin-top:4px;color:#999;font-size:12px">${assessment.authority_code}</div>
+</div>`
   },
 
-  _kpiRow(a, items, ec, risks) {
-    const gradeColor = { Platinum: '#8e44ad', Gold: '#d4a017', Silver: '#7f8c8d', Bronze: '#cd7f32' }
-    const total = items.length
-    const done = items.filter(i => i.status === 'completed' || i.status === 'excluded').length
-    const pct = total ? Math.round(done / total * 100) : 0
-    const ePct = ec.total ? Math.round(ec.externally_verified / ec.total * 100) : 0
-    const rc = risks.overall.color || '#94a3b8'
-
-    return el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:16px' },
-      this._kpi(a.rating || '미평가', '총점', `${a.total_score != null ? a.total_score.toFixed(0) : '-'}`, `${Indicator.getAuthorityName(a.authority_code)} · ${a.assessment_year}년`, a.total_score || 0, gradeColor[a.rating] || '#7C3AED'),
-      this._kpi(`${pct}%`, '완료율', `${done} / ${total}`, `${items.filter(i=>i.status==='in_progress').length}건 진행중`, pct, pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'),
-      this._kpi(`${ec.total}건`, '증빙', `외부검증 ${ec.externally_verified}건`, `검증률 ${ePct}%`, ePct, '#3b82f6'),
-      this._kpi(risks.overall.label || '미평가', '리스크', `${risks.alerts.length}건 알림`, '', risks.overall.score || 0, rc)
-    )
-  },
-
-  _barChart(title, bars) {
-    const card = el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, title)
-    )
-    bars.forEach(b => {
-      const barInner = el('div', {
-        style: `background:${b.color};height:100%;width:0%;border-radius:4px;transition:width 0s`,
-        'data-target': b.pct
-      })
-      const barWrap = el('div', { style: 'background:#f5f5f5;height:8px;border-radius:4px;overflow:hidden;cursor:pointer' }, barInner)
-      const valLabel = el('span', { style: `font-size:13px;font-weight:600;color:${b.color}` }, '0')
-
-      barWrap.addEventListener('click', () => {
-        barInner.style.transition = 'none'
-        barInner.style.width = '0%'
-        valLabel.style.transition = 'none'
-        valLabel.style.opacity = '0'
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            barInner.style.transition = 'width 1s cubic-bezier(.4,0,.2,1)'
-            barInner.style.width = b.pct + '%'
-            valLabel.style.transition = 'opacity .5s ease .4s'
-            valLabel.style.opacity = '1'
-            valLabel.textContent = b.value
-          })
-        })
-      })
-
-      card.append(el('div', { style: 'margin:10px 0' },
-        el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:5px' },
-          el('span', { style: 'font-size:12px;color:#555;font-weight:500' }, b.label),
-          valLabel
-        ),
-        barWrap,
-        b.sub ? el('div', { style: 'font-size:10px;color:#bbb;margin-top:3px' }, b.sub) : null
-      ))
-
-      setTimeout(() => {
-        barInner.style.transition = 'width 1s cubic-bezier(.4,0,.2,1)'
-        barInner.style.width = b.pct + '%'
-        valLabel.textContent = b.value
-      }, 200)
-    })
-    return card
-  },
-
-  _chartRow1(items, groups, authCode, ghgSummary) {
-    const usePillar = authCode === 'ECOVADIS'
-    const colors = ['#7C3AED', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
-    let bars = []
-
+  _themeRadar(items, groups, authorityCode) {
+    const usePillar = authorityCode === 'ECOVADIS'
+    let scoresHtml = ''
     if (usePillar) {
       const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.group_code === '_PILLAR')
-      ;['POLICY', 'ACTION', 'RESULT'].forEach((p, i) => {
-        const pItems = items.filter(it => { const ind = Store.getIndicators().find(x => x.id === it.indicator_id); return ind && ind.pillar === p })
-        const avg = pItems.length ? (pItems.reduce((s, it) => s + (it.score || 0), 0) / pItems.length) : 0
-        const pw = pillarParams.find(pp => pp.pillar === p)
-        bars.push({ label: Indicator.getPillarName(p), value: avg.toFixed(1), pct: avg, color: colors[i], sub: pw ? `가중치 ${pw.weight_pct}%` : '' })
-      })
-    } else {
-      groups.forEach((g, i) => {
-        const gItems = items.filter(it => { const inds = Indicator.getIndicators(g.id); return inds.some(ind => ind.id === it.indicator_id) })
-        const avg = gItems.length ? (gItems.reduce((s, it) => s + (it.score || 0), 0) / gItems.length) : 0
-        bars.push({ label: g.group_name, value: avg.toFixed(1), pct: avg, color: colors[i % colors.length] })
-      })
-    }
-
-    const entries = Object.values(ghgSummary)
-    const total = entries.reduce((s, e) => s + e.total, 0)
-    const ghgColors = ['#3b82f6', '#10b981', '#06b6d4', '#8b5cf6', '#f59e0b']
-    const svgSize = 120, svgR = 44, svgC = 2 * Math.PI * svgR
-    let cumPct = 0
-    const donutCircles = entries.map((e, i) => {
-      const pct = total ? e.total / total : 0
-      const dashLen = pct * svgC
-      const dashOff = svgC - cumPct * svgC
-      cumPct += pct
-      return { dashLen, dashOff, color: ghgColors[i], circumference: svgC, label: e.scope2_method ? `Scope 2 (${e.scope2_method === 'location-based' ? '위치' : '시장'})` : `Scope ${e.scope}`, value: e.total.toFixed(1) }
-    })
-
-    const ghgCard = el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, 'GHG 배출량 (tCO₂eq)')
-    )
-
-    if (entries.length) {
-      const svgCircles = donutCircles.map(d => {
-        const circ = el('circle', { cx: svgSize/2, cy: svgSize/2, r: svgR, fill: 'none', stroke: d.color, 'stroke-width': 18, 'stroke-dasharray': '0 ' + d.circumference, transform: `rotate(-90 ${svgSize/2} ${svgSize/2})` })
-        setTimeout(() => { circ.style.transition = 'stroke-dasharray .8s cubic-bezier(.4,0,.2,1)'; circ.setAttribute('stroke-dasharray', d.dashLen + ' ' + (d.circumference - d.dashLen)) }, 300)
-        return circ
-      })
-      const svg = el('svg', { width: svgSize, height: svgSize, style: 'flex-shrink:0;cursor:pointer' }, ...svgCircles)
-      svg.addEventListener('click', () => {
-        svgCircles.forEach((circ, i) => {
-          circ.style.transition = 'none'
-          circ.setAttribute('stroke-dasharray', '0 ' + svgC)
-          setTimeout(() => {
-            circ.style.transition = 'stroke-dasharray .8s cubic-bezier(.4,0,.2,1) ' + (i * 0.1) + 's'
-            circ.setAttribute('stroke-dasharray', donutCircles[i].dashLen + ' ' + (svgC - donutCircles[i].dashLen))
-          }, 50)
+      const pillars = ['POLICY', 'ACTION', 'RESULT']
+      scoresHtml = pillars.map(p => {
+        const pillarItems = items.filter(i => {
+          const ind = Store.getIndicators().find(x => x.id === i.indicator_id)
+          return ind && ind.pillar === p
         })
-      })
-
-      const legend = donutCircles.map(d => el('div', { style: 'display:flex;align-items:center;gap:8px;padding:5px 0' },
-        el('span', { style: 'width:10px;height:10px;border-radius:50%;background:' + d.color + ';flex-shrink:0' }),
-        el('span', { style: 'flex:1;font-size:12px;color:#666' }, d.label),
-        el('span', { style: 'font-size:12px;font-weight:600;color:#333' }, d.value)
-      ))
-
-      ghgCard.append(el('div', { style: 'display:flex;align-items:center;gap:24px' }, svg, el('div', { style: 'flex:1' }, ...legend)))
+        const avg = pillarItems.length
+          ? (pillarItems.reduce((sum, i) => sum + (i.score || 0), 0) / pillarItems.length).toFixed(1)
+          : '-'
+        const pw = pillarParams.find(pp => pp.pillar === p)
+        const label = Indicator.getPillarName(p)
+        return `<div style="margin:4px 0;display:flex;justify-content:space-between"><span style="font-weight:500">${label}</span><span>${avg} <span style="color:#999;font-size:11px">(${pw ? pw.weight_pct + '%' : '-'})</span></span></div>`
+      }).join('')
     } else {
-      ghgCard.append(el('div', { style: 'text-align:center;padding:24px;color:#bbb;font-size:12px' }, '데이터 없음'))
+      scoresHtml = groups.map(g => {
+        const groupItems = items.filter(i => {
+          const indicators = Indicator.getIndicators(g.id)
+          return indicators.some(ind => ind.id === i.indicator_id)
+        })
+        const avg = groupItems.length
+          ? (groupItems.reduce((sum, i) => sum + (i.score || 0), 0) / groupItems.length).toFixed(1)
+          : '-'
+        return `<div style="margin:4px 0;display:flex;justify-content:space-between"><span style="font-weight:500">${g.group_name}</span><span>${avg}</span></div>`
+      }).join('')
     }
-    ghgCard.append(el('div', { style: 'margin-top:8px;font-size:11px;color:#bbb' }, `합계 ${total.toFixed(1)} tCO₂eq`))
 
-    return el('div', { style: 'display:grid;grid-template-columns:1.2fr 0.8fr;gap:16px' },
-      this._barChart(usePillar ? '필러별 점수' : '테마별 점수', bars),
-      ghgCard
-    )
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">${usePillar ? '필러별 점수 (Policy-Action-Result)' : '테마별 점수'}</h3>
+  ${scoresHtml || '<p style="color:#999">데이터 없음</p>'}
+</div>`
   },
 
-  _stackedBar(title, segments, total) {
-    const barInner = segments.map((s, i) => {
-      const seg = el('div', {
-        style: `background:${s.color};height:100%;width:0%;transition:width 0s`,
-        'data-target': (s.count / total * 100)
-      })
-      setTimeout(() => { seg.style.transition = `width .7s cubic-bezier(.4,0,.2,1) ${i * 0.1}s`; seg.style.width = (s.count / total * 100) + '%' }, 300)
-      return seg
-    })
-
-    const bar = el('div', { style: 'display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:14px;cursor:pointer' }, ...barInner)
-    bar.addEventListener('click', () => {
-      barInner.forEach((seg, i) => {
-        seg.style.transition = 'none'
-        seg.style.width = '0%'
-        setTimeout(() => { seg.style.transition = `width .7s cubic-bezier(.4,0,.2,1) ${i * 0.1}s`; seg.style.width = segments[i].count / total * 100 + '%' }, 50)
-      })
-    })
-
-    const legend = segments.map(s => el('div', { style: 'display:flex;align-items:center;gap:6px;font-size:12px' },
-      el('span', { style: 'width:8px;height:8px;border-radius:50%;background:' + s.color + ';flex-shrink:0' }),
-      el('span', { style: 'flex:1;color:#666' }, s.label),
-      el('span', { style: 'font-weight:600;color:#333' }, s.count + '건')
-    ))
-
-    return el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, title),
-      bar,
-      ...legend,
-      el('div', { style: 'margin-top:8px;font-size:11px;color:#bbb' }, `외부검증률 ${total > 1 ? Math.round(segments[0].count / total * 100) : 0}%`)
-    )
+  _evidenceCard(count) {
+    const pct = count.total ? ((count.externally_verified / count.total) * 100).toFixed(0) : 0
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">증빙 현황</h3>
+  <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+    <span>총 ${count.total}건</span>
+    <span>외부검증 ${pct}%</span>
+  </div>
+  <div style="background:#eee;height:8px;border-radius:4px;overflow:hidden">
+    <div style="background:#27ae60;height:100%;width:${pct}%;border-radius:4px"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:#666">
+    <span>🟡 ${count.self}건 자가</span>
+    <span>🔵 ${count.internal_reviewed}건 내부검토</span>
+    <span>🟢 ${count.externally_verified}건 외부검증</span>
+  </div>
+</div>`
   },
 
-  _chartRow2(ec, drafts, suppliers) {
-    const total = ec.total || 1
-    const segs = [
-      { label: '외부검증', count: ec.externally_verified, color: '#10b981' },
-      { label: '내부검토', count: ec.internal_reviewed, color: '#3b82f6' },
-      { label: '자가입력', count: ec.self, color: '#f59e0b' }
-    ]
-
-    const dTotal = drafts.length
+  _draftStatusCard(drafts) {
+    const total = drafts.length
     const approved = drafts.filter(d => d.human_status === 'approved').length
-    const verified = drafts.filter(d => d.ver_status === 'pass').length
-    const pending = drafts.filter(d => d.ver_status === 'pending').length
-    const failed = drafts.filter(d => d.ver_status === 'fail').length
-    const dPct = dTotal ? Math.round(approved / dTotal * 100) : 0
-    const dColors = [
-      { label: '승인', count: approved, color: '#10b981' },
-      { label: '검증', count: verified, color: '#3b82f6' },
-      { label: '대기', count: pending, color: '#f59e0b' },
-      { label: '실패', count: failed, color: '#ef4444' }
-    ]
+    const pending = drafts.filter(d => d.human_status === 'pending').length
+    const rejected = drafts.filter(d => d.human_status === 'rejected').length
+    const passRate = total ? ((drafts.filter(d => d.ver_status === 'pass').length / total) * 100).toFixed(0) : 0
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">AI 초안 현황</h3>
+  <div>생성: ${total}건</div>
+  <div>AI 검증 통과율: ${passRate}%</div>
+  <div style="margin-top:8px;display:flex;gap:8px;font-size:12px">
+    <span style="background:#f39c12;color:#fff;padding:2px 8px;border-radius:10px">대기 ${pending}</span>
+    <span style="background:#27ae60;color:#fff;padding:2px 8px;border-radius:10px">승인 ${approved}</span>
+    <span style="background:#e74c3c;color:#fff;padding:2px 8px;border-radius:10px">반려 ${rejected}</span>
+  </div>
+</div>`
+  },
 
-    const draftCard = el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, 'AI 초안 진행'),
-      el('div', { style: 'display:flex;align-items:center;gap:16px;margin-bottom:14px' },
-        el('div', { style: 'font-size:20px;font-weight:700;color:#1a1a2e' }, dTotal + ''),
-        el('div', { style: 'font-size:11px;color:#bbb' }, '전체 초안')
-      ),
-      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
-        ...dColors.map(b => el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;background:' + b.color + '08;border-radius:6px;color:' + b.color + ';font-weight:500' },
-          el('span', { style: 'width:6px;height:6px;border-radius:50%;background:' + b.color }),
-          b.label + ' ' + b.count
-        ))
-      )
-    )
+  _ghgCard(summary) {
+    const entries = Object.values(summary)
+    const totalEmissions = entries.reduce((sum, s) => sum + s.total, 0)
+    const details = entries.map(s => {
+      const label = s.scope2_method
+        ? `Scope 2 (${s.scope2_method === 'location-based' ? 'LB' : 'MB'})`
+        : `Scope ${s.scope}`
+      return `<div style="display:flex;justify-content:space-between;font-size:12px;margin:2px 0">
+        <span>${label}</span><span>${s.total.toFixed(1)} tCO2eq</span>
+      </div>`
+    }).join('')
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">온실가스 배출</h3>
+  <div style="font-size:28px;font-weight:700">${totalEmissions.toFixed(1)}</div>
+  <div style="font-size:12px;color:#666;margin-bottom:8px">tCO2eq</div>
+  ${details || '<div style="color:#999">데이터 없음</div>'}
+</div>`
+  },
 
-    const summary = { A: 0, B: 0, C: 0, D: 0 }
-    suppliers.forEach(s => { if (s.last_vsme_grade && summary[s.last_vsme_grade] !== undefined) summary[s.last_vsme_grade]++ })
-    const gColors = { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#ef4444' }
-    const supplierBars = Object.entries(summary).map(([g, count]) => {
-      const pct = suppliers.length ? Math.round(count / suppliers.length * 100) : 0
-      return { label: g + '등급', value: count + '개사', pct, color: gColors[g] }
+  _supplierRiskCard() {
+    const suppliers = Store.getSuppliers()
+    const summary = { total: suppliers.length, A: 0, B: 0, C: 0, D: 0, unscored: 0 }
+    const gradeColors = { A: '#27ae60', B: '#2980b9', C: '#f39c12', D: '#e74c3c' }
+    suppliers.forEach(s => {
+      if (s.last_vsme_grade && summary[s.last_vsme_grade] !== undefined) summary[s.last_vsme_grade]++
+      else summary.unscored++
     })
-
-    return el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px' },
-      this._stackedBar('증빙 현황', segs, total),
-      draftCard,
-      this._barChart('협력사 등급', supplierBars.length && suppliers.length ? supplierBars : [{ label: '데이터 없음', value: '', pct: 0, color: '#ccc' }])
-    )
+    const bars = ['A', 'B', 'C', 'D', 'unscored'].map(g => {
+      const count = summary[g]
+      const pct = summary.total ? (count / summary.total * 100).toFixed(0) : 0
+      const label = g === 'unscored' ? '미진단' : g + '등급'
+      const color = g === 'unscored' ? '#ccc' : gradeColors[g]
+      return `<div style="margin:4px 0;display:flex;align-items:center;gap:8px;font-size:12px">
+        <span style="width:48px;text-align:right;color:#666">${label}</span>
+        <div style="flex:1;background:#eee;height:14px;border-radius:7px;overflow:hidden">
+          <div style="background:${color};height:100%;width:${pct}%;border-radius:7px"></div>
+        </div>
+        <span style="width:28px;font-weight:600;color:${color}">${count}</span>
+      </div>`
+    }).join('')
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">협력사 리스크</h3>
+  <div style="font-size:28px;font-weight:700">${summary.total}</div>
+  <div style="font-size:12px;color:#666;margin-bottom:8px">총 협력사</div>
+  ${summary.total ? bars : '<div style="color:#999;font-size:12px">등록된 협력사 없음</div>'}
+</div>`
   },
 
-  _riskRow(cats) {
-    const levels = [
-      { min: 0, max: 39, label: '낮음', color: '#10b981' },
-      { min: 40, max: 59, label: '보통', color: '#f59e0b' },
-      { min: 60, max: 79, label: '높음', color: '#f97316' },
-      { min: 80, max: 100, label: '위험', color: '#ef4444' }
-    ]
-    const trendIcons = { worsening: '↑', improving: '↓', stable: '→' }
-    const trendColors = { worsening: '#ef4444', improving: '#10b981', stable: '#94a3b8' }
-
-    const rows = cats.map(cat => {
-      const level = levels.find(l => cat.risk.score >= l.min && cat.risk.score <= l.max) || levels[0]
-      return el('div', { style: 'display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f8f8f8' },
-        el('span', { style: 'font-size:16px;width:28px' }, cat.icon),
-        el('span', { style: 'flex:1;font-size:13px;color:#555;font-weight:500' }, cat.label),
-        el('span', { style: 'display:inline-block;width:36px;height:24px;line-height:24px;text-align:center;border-radius:6px;background:' + level.color + '10;color:' + level.color + ';font-weight:700;font-size:12px' }, cat.risk.score),
-        el('span', { style: 'font-size:12px;color:' + level.color + ';font-weight:500;width:40px;text-align:right' }, cat.risk.label),
-        el('span', { style: 'font-size:14px;color:' + trendColors[cat.risk.trend] + ';width:20px;text-align:center' }, trendIcons[cat.risk.trend])
-      )
-    })
-
-    return el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, '리스크 매트릭스'),
-      ...rows
-    )
+  _completionCard(items) {
+    const total = items.length
+    const completed = items.filter(i => i.status === 'completed').length
+    const excluded = items.filter(i => i.status === 'excluded').length
+    const inProgress = items.filter(i => i.status === 'in_progress').length
+    const pending = items.filter(i => i.status === 'pending').length
+    const pct = total ? (((completed + excluded) / total) * 100).toFixed(0) : 0
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">항목 완료율</h3>
+  <div style="font-size:36px;font-weight:700">${pct}%</div>
+  <div style="background:#eee;height:8px;border-radius:4px;margin:8px 0;overflow:hidden">
+    <div style="background:#27ae60;height:100%;width:${pct}%;border-radius:4px"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:12px;color:#666">
+    <span>⬜ ${pending} 대기</span>
+    <span>🔄 ${inProgress} 진행</span>
+    <span>✅ ${completed} 완료</span>
+    <span>⏭️ ${excluded} 제외</span>
+  </div>
+</div>`
   },
 
-  _alertFeed(alerts) {
-    const colors = { critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6' }
-    const items = alerts.slice(0, 8).map(a => el('div', { style: 'padding:8px 0;border-bottom:1px solid #f8f8f8;font-size:12px' },
-      el('span', { style: 'color:' + colors[a.severity] + ';font-weight:600' }, a.icon + ' ' + a.category),
-      el('span', { style: 'color:#666;margin-left:4px' }, a.message)
-    ))
-
-    return el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, `알림 (${alerts.length}건)`),
-      items.length ? items : el('div', { style: 'text-align:center;padding:16px;color:#10b981;font-size:12px' }, '알림이 없습니다')
-    )
+  _kssbSubmissionCard() {
+    const agencies = Store.getAgencyMaster ? Store.getAgencyMaster() : []
+    const mandatory = agencies.filter(a => a.track_type === 'MANDATORY')
+    const assessments = Store.getAssessments().filter(a => a.authority_code === 'KSSB' || a.authority_code === 'ISSB')
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">📜 법정 공시 현황</h3>
+  <div style="font-size:28px;font-weight:700;color:${assessments.length ? '#27ae60' : '#e74c3c'}">${assessments.length ? '진행중' : '미착수'}</div>
+  <div style="font-size:12px;color:#666;margin-top:4px">대상 기관: ${mandatory.map(a => a.name).join(', ') || '-'}</div>
+  <div style="font-size:12px;color:#888;margin-top:4px">KSSB 공시기준 제1호·제2호 | 시행일: ${mandatory[0]?.effective_date || '-'}</div>
+</div>`
   },
 
-  _chartRow3(risks, alerts) {
-    return el('div', { style: 'display:grid;grid-template-columns:1.5fr 1fr;gap:16px' },
-      this._riskRow(risks.categories),
-      this._alertFeed(alerts)
-    )
+  _aiUnapprovedCard(assessmentId) {
+    const drafts = Store.getAIDrafts().filter(d => d.assessment_id === assessmentId)
+    const verifiedNotApproved = drafts.filter(d => d.ver_status === 'pass' && d.human_status === 'pending')
+    const totalDrafts = drafts.length
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">🔍 AI 미승인 대기</h3>
+  <div style="font-size:36px;font-weight:700;color:${verifiedNotApproved.length > 0 ? '#f39c12' : '#27ae60'}">${verifiedNotApproved.length}</div>
+  <div style="font-size:12px;color:#666">검증 통과 후 승인 대기 중</div>
+  <div style="margin-top:8px;font-size:12px;color:#888">전체 초안: ${totalDrafts}건</div>
+</div>`
   },
 
-  _miniRow(items, groups) {
-    const colors = ['#7C3AED', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
-    const rows = groups.slice(0, 6).map((g, i) => {
-      const gItems = items.filter(it => { const inds = Indicator.getIndicators(g.id); return inds.some(ind => ind.id === it.indicator_id) })
-      const avg = gItems.length ? (gItems.reduce((s, it) => s + (it.score || 0), 0) / gItems.length) : 0
-      return el('div', { style: 'display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f8f8f8' },
-        el('span', { style: 'width:8px;height:8px;border-radius:50%;background:' + colors[i % colors.length] + ';flex-shrink:0' }),
-        el('span', { style: 'flex:1;font-size:12px;color:#555' }, g.group_name),
-        el('span', { style: 'font-size:12px;font-weight:600;color:' + colors[i % colors.length] }, avg.toFixed(1))
-      )
-    })
-    return el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, '그룹별 요약'),
-      rows.length ? rows : el('div', { style: 'color:#bbb;font-size:12px;text-align:center' }, '데이터 없음')
-    )
-  },
-
-  _budgetCard() {
+  _budgetProgressCard() {
     const budget = Store.getProjectBudget ? Store.getProjectBudget() : []
     const totalPlanned = budget.reduce((s, b) => s + (b.planned_amount || 0), 0)
     const totalActual = budget.reduce((s, b) => s + (b.actual_amount || 0), 0)
     const rate = totalPlanned ? Math.round(totalActual / totalPlanned * 100) : 0
-    const color = rate > 100 ? '#ef4444' : rate > 80 ? '#f59e0b' : '#10b981'
-    const size = 80, stroke = 7, r = (size - stroke) / 2, c = 2 * Math.PI * r
-    const targetOffset = c - (Math.min(rate, 100) / 100) * c
-
-    const active = el('circle', {
-      cx: size/2, cy: size/2, r: r, fill: 'none',
-      stroke: color, 'stroke-width': stroke,
-      'stroke-dasharray': c, 'stroke-dashoffset': c,
-      'stroke-linecap': 'round',
-      style: 'transition:stroke-dashoffset 1s cubic-bezier(.4,0,.2,1)'
-    })
-    const svg = el('svg', { width: size, height: size, style: 'transform:rotate(-90deg)' },
-      el('circle', { cx: size/2, cy: size/2, r: r, fill: 'none', stroke: '#f0f0f0', 'stroke-width': stroke }),
-      active
-    )
-    setTimeout(() => active.setAttribute('stroke-dashoffset', targetOffset), 300)
-
-    const card = el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, '예산 집행률'),
-      el('div', { style: 'display:flex;align-items:center;gap:20px' },
-        el('div', { style: 'position:relative;width:' + size + 'px;height:' + size + 'px;flex-shrink:0' },
-          svg,
-          el('div', { style: 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:' + color }, totalPlanned ? rate + '%' : '-')
-        ),
-        el('div', { style: 'font-size:12px;color:#666;line-height:1.8' },
-          el('div', { innerHTML: '계획: <strong>₩' + (totalPlanned/10000).toFixed(0) + '만</strong>' }),
-          el('div', { innerHTML: '집행: <strong>₩' + (totalActual/10000).toFixed(0) + '만</strong>' })
-        )
-      )
-    )
-    card.style.cursor = 'pointer'
-    card.addEventListener('click', () => {
-      active.style.transition = 'none'
-      active.setAttribute('stroke-dashoffset', c)
-      setTimeout(() => { active.style.transition = 'stroke-dashoffset 1s cubic-bezier(.4,0,.2,1)'; active.setAttribute('stroke-dashoffset', targetOffset) }, 50)
-    })
-    return card
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">💰 예산 집행률</h3>
+  <div style="font-size:36px;font-weight:700;color:${rate > 100 ? '#e74c3c' : rate > 80 ? '#f39c12' : '#27ae60'}">${totalPlanned ? rate + '%' : '-'}</div>
+  <div style="background:#eee;height:8px;border-radius:4px;margin:8px 0;overflow:hidden">
+    <div style="background:${rate > 100 ? '#e74c3c' : rate > 80 ? '#f39c12' : '#27ae60'};height:100%;width:${Math.min(rate, 100)}%;border-radius:4px"></div>
+  </div>
+  <div style="font-size:12px;color:#666">계획: ₩${(totalPlanned/10000).toFixed(0)}만 | 집행: ₩${(totalActual/10000).toFixed(0)}만</div>
+</div>`
   },
 
-  _kssbCard() {
-    const agencies = Store.getAgencyMaster ? Store.getAgencyMaster() : []
-    const mandatory = agencies.filter(a => a.track_type === 'MANDATORY')
-    const kssbAssessments = Store.getAssessments().filter(a => a.authority_code === 'KSSB' || a.authority_code === 'ISSB')
-    const hasKssb = kssbAssessments.length > 0
-    return el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:12px;padding:20px' },
-      el('div', { style: 'font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px' }, '법정 공시 현황'),
-      el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:10px' },
-        el('div', { style: 'width:36px;height:36px;border-radius:8px;background:' + (hasKssb ? '#10b98110' : '#ef444410') + ';display:flex;align-items:center;justify-content:center;font-size:18px' }, hasKssb ? '✓' : '!'),
-        el('div', {},
-          el('div', { style: 'font-size:15px;font-weight:700;color:' + (hasKssb ? '#10b981' : '#ef4444') }, hasKssb ? 'KSSB 진행중' : '미착수'),
-          el('div', { style: 'font-size:11px;color:#bbb' }, kssbAssessments.length + '건 평가')
-        )
-      ),
-      el('div', { style: 'font-size:12px;color:#888;line-height:1.6' },
-        el('div', {}, '대상: ' + (mandatory.map(a => a.name).join(', ') || '없음')),
-        mandatory[0] && mandatory[0].effective_date ? el('div', {}, '시행일: ' + mandatory[0].effective_date) : null
-      )
-    )
-  },
-
-  _chartRow4(items, groups, authCode) {
-    return el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px' },
-      this._kssbCard(),
-      this._budgetCard(),
-      this._miniRow(items, groups)
-    )
+  _ghgTrendCard(assessmentId) {
+    const activities = Store.getGHGActivities().filter(a => a.assessment_id === assessmentId)
+    const scope1 = activities.filter(a => a.scope === 1).reduce((s, a) => s + (a.co2eq || 0), 0)
+    const scope2lb = activities.filter(a => a.scope === 2 && a.scope2_method === 'location-based').reduce((s, a) => s + (a.co2eq || 0), 0)
+    const scope2mb = activities.filter(a => a.scope === 2 && a.scope2_method === 'market-based').reduce((s, a) => s + (a.co2eq || 0), 0)
+    const scope3 = activities.filter(a => a.scope === 3).reduce((s, a) => s + (a.co2eq || 0), 0)
+    const scopes = [
+      { label: 'Scope 1', value: scope1, color: '#3498db' },
+      { label: 'Scope 2 (LB)', value: scope2lb, color: '#2ecc71' },
+      { label: 'Scope 2 (MB)', value: scope2mb, color: '#27ae60' },
+      { label: 'Scope 3', value: scope3, color: '#9b59b6' }
+    ].filter(s => s.value > 0)
+    const maxVal = Math.max(...scopes.map(s => s.value), 1)
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">🏭 Scope 배출량 분포</h3>
+  ${scopes.length ? scopes.map(s => `
+    <div style="margin:6px 0;display:flex;align-items:center;gap:8px;font-size:12px">
+      <span style="width:80px;color:#666">${s.label}</span>
+      <div style="flex:1;background:#eee;height:16px;border-radius:8px;overflow:hidden">
+        <div style="background:${s.color};height:100%;width:${(s.value/maxVal*100).toFixed(0)}%;border-radius:8px"></div>
+      </div>
+      <span style="width:70px;text-align:right;font-weight:500">${s.value.toFixed(1)}</span>
+    </div>
+  `).join('') : '<div style="color:#999;font-size:12px">데이터 없음</div>'}
+  <div style="font-size:11px;color:#999;margin-top:8px">단위: tCO2eq</div>
+</div>`
   }
 }

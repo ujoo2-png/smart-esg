@@ -2,10 +2,6 @@
   const _tableState = {}
   const PAGE_SIZE = 15
   let _evidencePreviewId = null
-  let _evidencePreviewIdx = -1
-  let _evidencePreviewWidth = 480
-  let _evidencePreviewFullscreen = false
-  let _evidencePreviewSearch = ''
   let _evidenceSearchQuery = ''
 
   const el = (tag, attrs = {}, ...children) => {
@@ -270,7 +266,7 @@
       }
     })
     initKeepAlive()
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && _evidencePreviewId) { _evidencePreviewId = null; _evidencePreviewFullscreen = false; const c = document.getElementById('page-evidence'); if (c) renderEvidenceMgmt() } })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && _evidencePreviewId) { _evidencePreviewId = null; const c = document.getElementById('page-evidence'); if (c) renderEvidenceMgmt() } })
   }
 
   // ==================== Navigation ====================
@@ -551,6 +547,7 @@
   let _indicatorSearch = ''
   let _selectedIndicators = new Set()
   let _editingIndicator = null
+  let _showQuickForm = false
 
   function renderIndicators() {
     const c = document.getElementById('page-indicator')
@@ -558,267 +555,207 @@
     c.innerHTML = ''
     c.append(
       el('div', { style: 'display:flex;gap:6px;margin-bottom:12px' },
-        el('button', { className: 'btn' + (_indicatorTab === 'list' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'list'; _editingIndicator = null; renderIndicators() } }, '📋 지표 목록'),
-        el('button', { className: 'btn' + (_indicatorTab === 'mapping' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'mapping'; _editingIndicator = null; renderIndicators() } }, '🔗 매핑 관리')
-      )
+        el('button', { className: 'btn' + (_indicatorTab === 'list' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'list'; renderIndicators() } }, '📋 지표 목록'),
+        el('button', { className: 'btn' + (_indicatorTab === 'mapping' ? ' btn-primary' : ''), onClick: () => { _indicatorTab = 'mapping'; renderIndicators() } }, '🔗 매핑 관리')
+      ),
+      _indicatorTab === 'list' ? renderIndicatorListInline() : renderIndicatorMapping()
     )
-    if (_indicatorTab === 'list') renderIndicatorSplitView()
-    else renderIndicatorMapping()
   }
 
-  function renderIndicatorSplitView() {
+  function renderIndicatorListInline() {
     const allIndicators = Store.getIndicators().filter(i => i.authority_code === _selectedAuthority)
     const groups = Indicator.getGroups(_selectedAuthority)
     const filtered = allIndicators.filter(i => {
       if (_indicatorSearch) {
         const q = _indicatorSearch.toLowerCase()
-        if (!(i.indicator_name || '').toLowerCase().includes(q) && !(i.indicator_code || '').toLowerCase().includes(q)) return false
+        const nameMatch = (i.indicator_name || '').toLowerCase().includes(q)
+        const codeMatch = (i.indicator_code || '').toLowerCase().includes(q)
+        if (!nameMatch && !codeMatch) return false
       }
       if (_materialityFilter === 'active' && i.is_active === false) return false
       if (_materialityFilter === 'inactive' && i.is_active !== false) return false
       return true
     })
     const activeCount = allIndicators.filter(i => i.is_active !== false).length
-    const editingInd = _editingIndicator ? Store.getIndicators().find(i => i.id === _editingIndicator) : null
 
-    const eGroupCodes = ['ENV', 'E1', 'E2']
-    const sGroupCodes = ['LHR', 'SOC', 'S1', 'S2']
-    const gGroupCodes = ['ETH', 'SP', 'CORP', 'GOV', 'G1', 'G2']
+    const wrapper = el('div')
 
-    const getGroupCategory = (g) => {
-      if (eGroupCodes.includes(g.group_code)) return 'E'
-      if (sGroupCodes.includes(g.group_code)) return 'S'
-      if (gGroupCodes.includes(g.group_code)) return 'G'
-      return g.group_code.startsWith('KSSB') ? 'G' : g.group_code.startsWith('KCGS') || g.group_code.startsWith('NICE') ? 'G' : 'G'
-    }
-
-    const categories = [
-      { code: 'E', label: '환경 (E)', color: '#10B981', icon: '🌿' },
-      { code: 'S', label: '사회 (S)', color: '#3B82F6', icon: '👥' },
-      { code: 'G', label: '지배구조 (G)', color: '#8B5CF6', icon: '🏛' }
-    ]
-
-    const groupedByCategory = { E: {}, S: {}, G: {} }
-    groups.forEach(g => {
-      const cat = getGroupCategory(g)
-      if (!groupedByCategory[cat]) groupedByCategory[cat] = {}
-      groupedByCategory[cat][g.id] = filtered.filter(i => i.group_id === g.id)
-    })
-
-    const c = document.getElementById('page-indicator')
-    c.innerHTML = ''
-
-    const header = el('div', { style: 'padding:16px 20px;background:#fff;border-bottom:1px solid #eee;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
-      el('h3', { style: 'margin:0;font-size:16px' }, '📋 지표 관리'),
-      el('div', { style: 'display:flex;gap:6px;align-items:center' },
-        el('select', { id: 'authSelect', style: 'font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px', onChange: () => { _selectedAuthority = document.getElementById('authSelect').value; _materialityFilter = 'all'; _indicatorSearch = ''; _selectedIndicators.clear(); _editingIndicator = null; _indicatorView = 'cards'; renderIndicators() } },
+    wrapper.append(
+      el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
+        el('select', { id: 'authSelect', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _selectedAuthority = document.getElementById('authSelect').value; _materialityFilter = 'all'; _indicatorSearch = ''; _selectedIndicators.clear(); renderIndicators() } },
           ['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(code => el('option', { value: code, selected: code === _selectedAuthority }, Indicator.getAuthorityName(code)))
         ),
-        el('input', { id: 'indSearch', type: 'text', placeholder: '🔍 검색', value: _indicatorSearch, style: 'width:180px;font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px', onInput: () => { _indicatorSearch = document.getElementById('indSearch').value; renderIndicators() } }),
-        el('select', { id: 'materialityFilter', style: 'font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:6px', onChange: () => { _materialityFilter = document.getElementById('materialityFilter').value; renderIndicators() } },
+        el('input', { id: 'indSearch', type: 'text', placeholder: '🔍 지표명 또는 코드 검색...', value: _indicatorSearch, style: 'flex:1;min-width:200px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onInput: () => { _indicatorSearch = document.getElementById('indSearch').value; renderIndicators() } }),
+        el('select', { id: 'materialityFilter', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _materialityFilter = document.getElementById('materialityFilter').value; renderIndicators() } },
           el('option', { value: 'all', selected: _materialityFilter === 'all' }, '전체'),
-          el('option', { value: 'active', selected: _materialityFilter === 'active' }, `활성 ${activeCount}`),
-          el('option', { value: 'inactive', selected: _materialityFilter === 'inactive' }, `비활성 ${allIndicators.length - activeCount}`)
-        )
-      ),
-      el('div', { style: 'margin-left:auto;display:flex;gap:6px;align-items:center' },
-        el('span', { style: 'font-size:11px;color:#888' }, `${filtered.length}/${allIndicators.length}개`),
-        el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _editingIndicator = '__new__'; renderIndicators() } }, '+ 새 지표'),
-        el('button', { className: 'btn btn-sm', style: 'background:#f0f7ff;color:#3B82F6', onClick: () => openImportTemplate() }, '📥 템플릿'),
-        _selectedIndicators.size > 0 ? el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm(`${_selectedIndicators.size}개 삭제?`)) { _selectedIndicators.forEach(id => Store.deleteIndicator(id)); _selectedIndicators.clear(); renderIndicators() } } }, '삭제') : null
+          el('option', { value: 'active', selected: _materialityFilter === 'active' }, `활성 (${activeCount})`),
+          el('option', { value: 'inactive', selected: _materialityFilter === 'inactive' }, `비활성 (${allIndicators.length - activeCount})`)
+        ),
+        el('span', { style: 'font-size:12px;color:#888' }, `${filtered.length}개 표시 / ${allIndicators.length}개 전체`)
       )
     )
-    c.append(header)
 
     if (_selectedIndicators.size > 0) {
-      c.append(el('div', { style: 'padding:6px 16px;background:#f8f6ff;border-bottom:1px solid #e0d8f0;display:flex;gap:6px;align-items:center' },
-        el('span', { style: 'font-size:11px;font-weight:600' }, `${_selectedIndicators.size}개 선택`),
-        el('button', { className: 'btn btn-sm btn-primary', style: 'font-size:11px', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: true })); _selectedIndicators.clear(); renderIndicators() } }, '활성'),
-        el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: false })); _selectedIndicators.clear(); renderIndicators() } }, '비활성'),
-        el('button', { className: 'btn btn-sm', style: 'margin-left:auto;font-size:11px', onClick: () => { _selectedIndicators.clear(); renderIndicators() } }, '해제')
-      ))
+      wrapper.append(
+        el('div', { className: 'card', style: 'padding:10px 16px;display:flex;gap:8px;align-items:center;background:#f8f6ff;border-left:3px solid #7C3AED' },
+          el('span', { style: 'font-size:13px;font-weight:600' }, `${_selectedIndicators.size}개 선택됨`),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: true })); _selectedIndicators.clear(); renderIndicators() } }, '활성화'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: false })); _selectedIndicators.clear(); renderIndicators() } }, '비활성화'),
+          el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm(`${_selectedIndicators.size}개 지표를 삭제하시겠습니까?`)) { _selectedIndicators.forEach(id => Store.deleteIndicator(id)); _selectedIndicators.clear(); renderIndicators() } } }, '삭제'),
+          el('button', { className: 'btn btn-sm', style: 'margin-left:auto', onClick: () => { _selectedIndicators.clear(); renderIndicators() } }, '선택 해제')
+        )
+      )
     }
+
+    if (_showQuickForm) {
+      wrapper.append(renderQuickIndicatorForm())
+    }
+
+    wrapper.append(
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px' },
+        el('h3', { style: 'margin:0;font-size:15px' }, `지표 관리 · ${Indicator.getAuthorityName(_selectedAuthority)}`),
+        el('div', { style: 'display:flex;gap:6px' },
+          el('button', { className: 'btn btn-sm', style: 'background:#f0f7ff;color:#3B82F6', onClick: () => openImportTemplate() }, '📥 템플릿에서 가져오기'),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _showQuickForm = !_showQuickForm; _editingIndicator = null; renderIndicators() } }, _showQuickForm ? '✕ 닫기' : '+ 새 지표 추가')
+        )
+      )
+    )
 
     if (!filtered.length) {
-      c.append(el('div', { style: 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:400px;color:#ccc' },
-        el('div', { style: 'font-size:48px;margin-bottom:12px' }, '📋'),
-        el('p', { style: 'margin:0;font-size:14px;color:#999' }, _indicatorSearch ? `"${_indicatorSearch}" 검색 결과 없음` : '등록된 지표가 없습니다')
-      ))
-      return c
+      wrapper.append(
+        el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
+          el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📋'),
+          el('p', { style: 'margin:0 0 12px;color:#888' }, _indicatorSearch ? `"${_indicatorSearch}"에 대한 검색 결과가 없습니다` : '등록된 지표가 없습니다'),
+          !_showQuickForm && el('button', { className: 'btn btn-primary', onClick: () => { _showQuickForm = true; _editingIndicator = null; renderIndicators() } }, '+ 첫 번째 지표 추가')
+        )
+      )
+      return wrapper
     }
 
-    const mainContent = el('div', { style: 'display:flex;gap:0;height:calc(100vh - 140px)' })
-
-    const leftPanel = el('div', { style: 'flex:1;min-width:0;overflow-y:auto;padding:16px' })
-
-    categories.forEach(cat => {
-      const catGroups = groupedByCategory[cat.code]
-      const groupIds = Object.keys(catGroups)
-      if (!groupIds.length) return
-
-      leftPanel.append(
-        el('div', { style: 'margin-bottom:20px' },
-          el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid ' + cat.color },
-            el('span', { style: 'font-size:18px' }, cat.icon),
-            el('h4', { style: 'margin:0;font-size:14px;color:' + cat.color }, cat.label),
-            el('span', { style: 'background:' + cat.color + ';color:#fff;font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600' },
-              `${groupIds.reduce((sum, gid) => sum + catGroups[gid].length, 0)}개 지표`)
+    groups.forEach(g => {
+      const inds = filtered.filter(i => i.group_id === g.id)
+      if (!inds.length) return
+      const groupActive = inds.filter(i => i.is_active !== false).length
+      wrapper.append(
+        el('div', { className: 'card', style: 'padding:0;margin-bottom:12px;overflow:hidden' },
+          el('div', { style: 'display:flex;align-items:center;gap:10px;padding:12px 16px;background:linear-gradient(135deg,#f8f6ff,#f0f0ff);border-bottom:2px solid #e0d8f0' },
+            el('span', { style: 'font-size:18px' }, _selectedAuthority === 'ECOVADIS' ? '🌿' : _selectedAuthority === 'KSSB' ? '📜' : _selectedAuthority === 'KCGS' ? '🏢' : _selectedAuthority === 'NICE' ? '📊' : '📋'),
+            el('h4', { style: 'margin:0;font-size:14px;color:#2c3e50;font-weight:700' }, Indicator.getGroupDisplayName(g)),
+            el('span', { style: 'background:#7C3AED;color:#fff;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600' }, `${groupActive}/${inds.length}`)
           ),
-          el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' },
-            ...groupIds.map(gid => {
-              const group = groups.find(g => g.id === gid)
-              const inds = catGroups[gid]
-              if (!inds.length) return null
-              const groupActive = inds.filter(i => i.is_active !== false).length
-
-              return el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:14px;transition:box-shadow .2s', onMouseEnter: e => e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,.06)', onMouseLeave: e => e.currentTarget.style.boxShadow = 'none' },
-                el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px' },
-                  el('div', { style: 'display:flex;align-items:center;gap:6px' },
-                    el('span', { style: `width:8px;height:8px;border-radius:50%;background:${cat.color}` }),
-                    el('span', { style: 'font-size:12px;font-weight:700;color:#2c3e50' }, Indicator.getGroupDisplayName(group))
-                  ),
-                  el('span', { style: 'background:#f0f0f0;font-size:10px;padding:2px 6px;border-radius:99px;color:#666' }, `${groupActive}/${inds.length}`)
-                ),
-                el('div', { style: 'display:flex;flex-direction:column;gap:4px' },
-                  ...inds.map(ind => {
-                    const isActive = ind.is_active !== false
-                    const isEditing = _editingIndicator === ind.id
-                    const isSelected = _selectedIndicators.has(ind.id)
-                    const pillarColor = ind.pillar === 'POLICY' ? '#7C3AED' : ind.pillar === 'ACTION' ? '#3B82F6' : ind.pillar === 'RESULT' ? '#10B981' : ind.pillar === 'GOVERNANCE' ? '#8B5CF6' : ind.pillar === 'STRATEGY' ? '#3B82F6' : ind.pillar === 'RISK_MGMT' ? '#F59E0B' : ind.pillar === 'METRICS' ? '#10B981' : '#94A3B8'
-
-                    return el('div', {
-                      style: `display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;${isEditing ? 'background:#f0ebff;border:1px solid #e0d8f0' : 'border:1px solid transparent;hover:background:#f8f9fa'};${!isActive ? 'opacity:.5' : ''}`,
-                      onClick: (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return; _editingIndicator = ind.id; renderIndicators() }
-                    },
-                      el('input', { type: 'checkbox', checked: isSelected, onChange: (e) => { e.stopPropagation(); if (isSelected) _selectedIndicators.delete(ind.id); else _selectedIndicators.add(ind.id); renderIndicators() }, onClick: (e) => e.stopPropagation(), style: 'cursor:pointer;margin:0;flex-shrink:0' }),
-                      el('span', { style: `width:3px;height:18px;border-radius:2px;background:${pillarColor};flex-shrink:0` }),
-                      el('div', { style: 'flex:1;min-width:0' },
-                        el('div', { style: 'font-size:10px;font-family:monospace;color:#7C3AED;font-weight:600' }, ind.indicator_code),
-                        el('div', { style: 'font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#333' }, Indicator.getDisplayName(ind))
-                      ),
-                      el('button', { className: 'btn btn-sm', title: isActive ? '비활성' : '활성', style: `font-size:9px;padding:1px 4px;${isActive ? 'color:#10B981' : 'color:#e74c3c'}`, onClick: (e) => { e.stopPropagation(); Indicator.toggleActive(ind.id); renderIndicators() } }, isActive ? '✓' : '✗')
-                    )
-                  })
-                )
-              )
-            }).filter(Boolean)
+          el('div', { style: 'padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;background:#fafafa' },
+            ...inds.map(ind => renderIndicatorCard(ind))
           )
         )
       )
     })
 
-    mainContent.append(leftPanel)
-
-    const rightPanel = el('div', { style: 'width:400px;flex-shrink:0;border-left:1px solid #e0d8f0;overflow-y:auto;background:#fff' })
-
-    if (_editingIndicator === '__new__') {
-      rightPanel.append(renderIndicatorEditForm(null))
-    } else if (editingInd) {
-      rightPanel.append(renderIndicatorEditForm(editingInd))
-    } else {
-      rightPanel.append(
-        el('div', { style: 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;color:#ccc' },
-          el('div', { style: 'font-size:48px;margin-bottom:12px' }, '📌'),
-          el('p', { style: 'margin:0;font-size:14px;color:#999' }, '지표를 선택하면 여기에 수정 화면이 표시됩니다'),
-          el('p', { style: 'margin:8px 0 0;font-size:12px;color:#ccc' }, '목록에서 지표를 클릭하세요')
-        )
-      )
-    }
-
-    mainContent.append(rightPanel)
-    c.append(mainContent)
+    return wrapper
   }
 
-  function renderIndicatorEditForm(ind) {
-    const isEdit = !!ind
+  function renderIndicatorCard(ind) {
+    const pillarColor = ind.pillar === 'POLICY' ? '#7C3AED' : ind.pillar === 'ACTION' ? '#3B82F6' : ind.pillar === 'RESULT' ? '#10B981' : ind.pillar === 'GOVERNANCE' ? '#F59E0B' : ind.pillar === 'STRATEGY' ? '#EC4899' : ind.pillar === 'RISK_MGMT' ? '#EF4444' : '#6366F1'
+    const isSelected = _selectedIndicators.has(ind.id)
+    return el('div', { style: `background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${ind.is_active === false ? '#ccc' : pillarColor};${ind.is_active === false ? 'opacity:.5' : ''}${isSelected ? ';outline:2px solid #7C3AED;outline-offset:1px' : ''};cursor:pointer`, onClick: (e) => { if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; _editingIndicator = ind.id; _showQuickForm = true; renderIndicators() } },
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px' },
+        el('div', { style: 'flex:1' },
+          el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:4px' },
+            el('input', { type: 'checkbox', checked: isSelected, onChange: (e) => { e.stopPropagation(); if (isSelected) _selectedIndicators.delete(ind.id); else _selectedIndicators.add(ind.id); renderIndicators() }, onClick: (e) => e.stopPropagation(), style: 'cursor:pointer;margin:0' }),
+            el('span', { style: 'font-family:monospace;font-size:11px;font-weight:700;color:#7C3AED;background:#f3f0ff;padding:2px 6px;border-radius:4px' }, ind.indicator_code),
+            el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:' + (ind.pillar === 'POLICY' ? '#f3e8ff;color:#7C3AED' : ind.pillar === 'ACTION' ? '#eff6ff;color:#3B82F6' : ind.pillar === 'RESULT' ? '#ecfdf5;color:#10B981' : '#fef3c7;color:#D97706') }, ind.pillar ? Indicator.getPillarName(ind.pillar) : '-')
+          ),
+          el('div', { style: 'font-size:13px;font-weight:600;color:#1a1a2e;line-height:1.4' }, Indicator.getDisplayName(ind))
+        ),
+        el('div', { style: 'display:flex;gap:4px' },
+          el('button', { className: 'btn btn-sm btn-secondary', title: '수정', onClick: (e) => { e.stopPropagation(); _editingIndicator = ind.id; _showQuickForm = true; renderIndicators() } }, '✏'),
+          el('button', { className: 'btn btn-sm', title: ind.is_active !== false ? '비활성화' : '활성화', style: ind.is_active !== false ? 'background:#f0fff4;color:#10B981' : 'background:#fff5f5;color:#e74c3c', onClick: (e) => { e.stopPropagation(); Indicator.toggleActive(ind.id); renderIndicators() } }, ind.is_active !== false ? '✓' : '✗')
+        )
+      ),
+      el('div', { style: 'display:flex;gap:6px;font-size:11px;color:#888;flex-wrap:wrap' },
+        ind.dept_code ? el('span', { style: 'background:#f0f0f0;padding:2px 6px;border-radius:4px' }, ind.dept_code) : null,
+        ind.review_cycle ? el('span', { style: 'background:#f0f0f0;padding:2px 6px;border-radius:4px' }, ind.review_cycle === 'annual' ? '매년' : ind.review_cycle === 'semi_annual' ? '반기' : ind.review_cycle === 'quarterly' ? '분기' : '매월') : null,
+        ind.scope2_split_required ? el('span', { style: 'background:#fef3c7;padding:2px 6px;border-radius:4px;color:#D97706;font-weight:600' }, '🌍 Scope2') : null
+      )
+    )
+  }
+
+  function renderQuickIndicatorForm() {
+    const isEdit = _editingIndicator != null && _editingIndicator !== '__new__'
+    const ind = isEdit ? Store.getIndicators().find(i => i.id === _editingIndicator) : null
     const groups = Indicator.getGroups(_selectedAuthority)
     const pillarOptions = Indicator.getPillarOptions(_selectedAuthority)
     const depts = Store.getDepartments().filter(d => d.is_active !== false)
 
-    const form = el('div', { style: 'padding:0' })
-
-    form.append(
-      el('div', { style: 'padding:14px 16px;background:linear-gradient(135deg,#f8f6ff,#f0f0ff);border-bottom:2px solid #e0d8f0;display:flex;justify-content:space-between;align-items:center' },
-        el('h3', { style: 'margin:0;font-size:15px;color:#2c3e50' }, isEdit ? `✏ ${ind.indicator_code}` : '+ 새 지표 추가'),
-        isEdit ? el('span', { style: 'font-size:11px;color:#888' }, Indicator.getAuthorityName(_selectedAuthority)) : null
-      )
-    )
-
-    const nameInput = el('input', { value: ind?.indicator_name ?? '', required: true, placeholder: '지표 이름을 입력하세요', style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' })
-    const pillarSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
+    const nameInput = el('input', { value: ind?.indicator_name ?? '', required: true, placeholder: '지표 이름을 입력하세요', style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' })
+    const pillarSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
       el('option', { value: '' }, '-- 필러 선택 --'),
-      ...pillarOptions.map(p => el('option', { value: p, selected: ind?.pillar === p }, Indicator.getPillarName(p) + ' (' + p + ')'))
+      ...pillarOptions.map(p => el('option', { value: p, selected: ind?.pillar === p }, Indicator.getPillarName(p)))
     )
-    const groupSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
+    const groupSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
       el('option', { value: '' }, '-- 그룹 선택 --'),
       ...groups.map(g => el('option', { value: g.id, selected: ind?.group_id === g.id }, Indicator.getGroupDisplayName(g)))
     )
-    const deptSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
+    const deptSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
       el('option', { value: '' }, '-- 담당부서 --'),
       ...depts.map(d => el('option', { value: d.dept_code, selected: ind?.dept_code === d.dept_code }, d.dept_name))
     )
-    const cycleSel = el('select', { style: 'font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:6px;width:100%;box-sizing:border-box' },
+    const cycleSel = el('select', { style: 'font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;width:100%' },
       [['annual', '매년'], ['semi_annual', '반기'], ['quarterly', '분기'], ['monthly', '매월']].map(([v, l]) => el('option', { value: v, selected: ind?.review_cycle === v }, l))
     )
     const scope2Check = el('input', { type: 'checkbox', checked: ind?.scope2_split_required === true, style: 'cursor:pointer' })
 
-    const mkField = (label, input, hint) => el('div', { style: 'margin-bottom:12px' },
-      el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px' }, label),
-      input,
-      hint ? el('div', { style: 'font-size:10px;color:#aaa;margin-top:3px' }, hint) : null
-    )
-
-    const saveData = () => {
-      if (!nameInput.value.trim()) return alert('지표명을 입력하세요')
-      const data = {
-        authority_code: _selectedAuthority,
-        indicator_name: nameInput.value.trim(),
-        pillar: pillarSel.value || null,
-        group_id: parseInt(groupSel.value) || groups[0]?.id,
-        dept_code: deptSel.value,
-        review_cycle: cycleSel.value,
-        scope2_split_required: scope2Check.checked,
-        is_active: true
-      }
-      if (isEdit) Store.updateIndicator(ind.id, data)
-      else Store.addIndicator(data)
-      _editingIndicator = null
-      renderIndicators()
-    }
-
-    form.append(
-      el('div', { style: 'padding:16px' },
-        mkField('지표명 *', nameInput, '예: 환경경영, 온실가스 배출량 관리'),
-        mkField('필러 유형', pillarSel, 'POLICY=정책, ACTION=조치·이행, RESULT=결과·보고'),
-        mkField('그룹', groupSel),
-        mkField('담당부서', deptSel),
-        mkField('검토주기', cycleSel),
-        el('div', { style: 'padding:10px 12px;background:#f8f9fa;border-radius:8px;display:flex;align-items:center;gap:10px;margin-bottom:16px' },
+    const card = el('div', { className: 'card', style: 'border-left:3px solid #7C3AED;background:#fafbff;margin-bottom:12px' },
+      el('div', { style: 'padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e0d8f0' },
+        el('h4', { style: 'margin:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, isEdit ? `✏ ${ind?.indicator_code || ''}` : '+ 새 지표 추가'),
+        el('button', { className: 'btn btn-sm', onClick: () => { _showQuickForm = false; _editingIndicator = null; renderIndicators() } }, '✕')
+      ),
+      el('div', { style: 'padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+        el('div', { style: 'grid-column:1/3' },
+          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '지표명 *'),
+          nameInput
+        ),
+        el('div', {},
+          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '필러 유형'),
+          pillarSel
+        ),
+        el('div', {},
+          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '그룹'),
+          groupSel
+        ),
+        el('div', {},
+          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '담당부서'),
+          deptSel
+        ),
+        el('div', {},
+          el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '검토주기'),
+          cycleSel
+        ),
+        el('div', { style: 'grid-column:1/3;display:flex;align-items:center;gap:8px' },
           scope2Check,
-          el('label', { style: 'font-size:12px;color:#555;cursor:pointer' }, '🌍 Scope2 이중보고 대상')
+          el('label', { style: 'font-size:12px;color:#555;cursor:pointer' }, '🌍 Scope2 이중보고 대상 (location-based / market-based)')
         )
       ),
-      el('div', { style: 'padding:12px 16px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end;background:#fafafa' },
-        el('button', { className: 'btn btn-secondary btn-sm', onClick: () => { _editingIndicator = null; renderIndicators() } }, '취소'),
-        el('button', { className: 'btn btn-sm', style: 'background:#10B981;color:#fff', onClick: saveData }, isEdit ? '💾 저장' : '+ 추가')
+      el('div', { style: 'padding:8px 16px 12px;display:flex;gap:6px;justify-content:flex-end' },
+        el('button', { className: 'btn btn-secondary btn-sm', onClick: () => { _showQuickForm = false; _editingIndicator = null; renderIndicators() } }, '취소'),
+        el('button', { className: 'btn btn-primary btn-sm', onClick: () => {
+          if (!nameInput.value.trim()) return alert('지표명을 입력하세요')
+          const data = {
+            authority_code: _selectedAuthority,
+            indicator_name: nameInput.value.trim(),
+            pillar: pillarSel.value || null,
+            group_id: parseInt(groupSel.value) || groups[0]?.id,
+            dept_code: deptSel.value,
+            review_cycle: cycleSel.value,
+            scope2_split_required: scope2Check.checked,
+            is_active: true
+          }
+          if (isEdit && ind) Store.updateIndicator(ind.id, data)
+          else Store.addIndicator(data)
+          _showQuickForm = false; _editingIndicator = null; renderIndicators()
+        } }, isEdit ? '💾 저장' : '+ 추가')
       )
     )
-
-    if (isEdit) {
-      form.append(
-        el('div', { style: 'padding:12px 16px;border-top:1px solid #eee' },
-          el('div', { style: 'font-size:11px;color:#888;margin-bottom:8px' }, '연결 정보'),
-          el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
-            el('span', { style: 'font-size:10px;padding:3px 8px;background:#f0f0f0;border-radius:4px' }, `기관: ${Indicator.getAuthorityName(_selectedAuthority)}`),
-            el('span', { style: 'font-size:10px;padding:3px 8px;background:#f0f0f0;border-radius:4px' }, `코드: ${ind.indicator_code}`),
-            ind.scope2_split_required ? el('span', { style: 'font-size:10px;padding:3px 8px;background:#fef3c7;border-radius:4px;color:#D97706' }, '🌍 Scope2') : null,
-            Store.getIndicatorMappings().filter(m => m.source_indicator_id === ind.id).length > 0 ? el('span', { style: 'font-size:10px;padding:3px 8px;background:#ecfdf5;border-radius:4px;color:#10B981' }, `매핑 ${Store.getIndicatorMappings().filter(m => m.source_indicator_id === ind.id).length}건`) : null
-          )
-        )
-      )
-    }
-
-    return form
+    return card
   }
 
   function openImportTemplate() {
@@ -985,14 +922,14 @@
     const searchQuery = _evidenceSearchQuery || ''
 
     c.append(
-      el('div', { style: 'display:flex;gap:12px;align-items:center;margin-bottom:16px' },
-        el('h3', { style: 'margin:0;font-size:16px;white-space:nowrap' }, '📎 증빙 관리'),
-        el('select', { id: 'evAssSelect', style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:12px', onChange: () => { _evidenceAssId = parseInt(document.getElementById('evAssSelect').value); renderEvidenceMgmt() } },
+      el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
+        el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '📎 증빙 관리'),
+        el('select', { id: 'evAssSelect', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _evidenceAssId = parseInt(document.getElementById('evAssSelect').value); renderEvidenceMgmt() } },
           ...assessments.map(a => el('option', { value: a.id, selected: a.id === _evidenceAssId }, a.title))
         ),
-        el('input', { id: 'evSearch', type: 'text', placeholder: '🔍 제목/유형/태그 검색...', value: searchQuery, style: 'flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px', onInput: () => { _evidenceSearchQuery = document.getElementById('evSearch').value; renderEvidenceMgmt() } }),
-        el('span', { style: 'font-size:11px;color:#888;white-space:nowrap' }, `${evidences.length}건`),
-        el('button', { className: 'btn btn-primary', onClick: openAddEvidence }, '+ 증빙 추가')
+        el('input', { id: 'evSearch', type: 'text', placeholder: '🔍 제목/유형/태그 검색...', value: searchQuery, style: 'flex:1;min-width:200px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onInput: () => { _evidenceSearchQuery = document.getElementById('evSearch').value; renderEvidenceMgmt() } }),
+        el('span', { style: 'font-size:12px;color:#888' }, `${evidences.length}건`),
+        el('button', { className: 'btn btn-primary btn-sm', onClick: openAddEvidence }, '+ 증빙 추가')
       )
     )
 
@@ -1011,10 +948,10 @@
 
     if (!filteredEvidences.length) {
       c.append(
-        el('div', { style: 'text-align:center;padding:40px 20px;color:#ccc' },
-          el('div', { style: 'font-size:48px;margin-bottom:12px' }, '📄'),
-          el('p', { style: 'margin:0;font-size:14px;color:#999' }, searchQuery ? `"${searchQuery}" 검색 결과 없음` : '등록된 증빙이 없습니다'),
-          !searchQuery ? el('button', { className: 'btn btn-primary', style: 'margin-top:12px', onClick: openAddEvidence }, '+ 첫 증빙 추가') : null
+        el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
+          el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📄'),
+          el('p', { style: 'margin:0 0 12px;color:#888' }, searchQuery ? `"${searchQuery}" 검색 결과 없음` : '등록된 증빙이 없습니다'),
+          !searchQuery ? el('button', { className: 'btn btn-primary', onClick: openAddEvidence }, '+ 첫 증빙 추가') : null
         )
       )
       return
@@ -1023,214 +960,128 @@
     const fileLabels = { pdf: 'PDF', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
     const statusLabels = { self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증' }
     const statusColors = { self: '#f59e0b', internal_reviewed: '#3b82f6', externally_verified: '#10b981' }
-    const fileIcon = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
+    const fileIcons = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
 
-    const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px' })
+    const listCard = el('div', { className: 'card', style: 'padding:0;overflow:hidden' })
 
-    filteredEvidences.forEach(ev => {
+    filteredEvidences.forEach((ev, idx) => {
       const files = Store.getEvidenceFiles(ev.id)
       const tags = Evidence.getTags(ev.id)
       const tagCodes = tags.map(t => { const ind = Store.getIndicators().find(i => i.id === t.indicator_id); return ind ? ind.indicator_code : null }).filter(Boolean)
+      const isExpanded = _evidencePreviewId === ev.id
 
-      const isEditing = _evidencePreviewId === ev.id
-
-      const card = el('div', {
-        style: `background:#fff;border:1px solid ${isEditing ? '#7C3AED' : '#f0f0f0'};border-radius:10px;padding:16px;transition:all .2s;${isEditing ? 'box-shadow:0 2px 12px rgba(124,58,237,.12)' : ''}`
-      },
-        el('div', { style: 'display:flex;align-items:flex-start;gap:10px;margin-bottom:10px' },
-          el('div', { style: `width:36px;height:36px;border-radius:8px;background:${statusColors[ev.status] || '#f0f0f0'}10;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0` }, fileIcon[ev.file_type] || '📁'),
+      const row = el('div', { style: `border-bottom:1px solid #f0f0f0;${idx === filteredEvidences.length - 1 ? 'border-bottom:none' : ''}` },
+        el('div', {
+          style: `display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;transition:background .15s;${isExpanded ? 'background:#f8f6ff' : ''}`,
+          onMouseEnter: e => { if (!isExpanded) e.currentTarget.style.background = '#f9f9f9' },
+          onMouseLeave: e => { if (!isExpanded) e.currentTarget.style.background = '' },
+          onClick: () => { _evidencePreviewId = isExpanded ? null : ev.id; renderEvidenceMgmt() }
+        },
+          el('span', { style: 'font-size:11px;color:#bbb;min-width:20px' }, `${idx + 1}`),
+          el('span', { style: 'font-size:18px;flex-shrink:0' }, fileIcons[ev.file_type] || '📁'),
           el('div', { style: 'flex:1;min-width:0' },
             el('div', { style: 'font-size:13px;font-weight:600;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, ev.title),
             el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap' },
               el('span', { style: `font-size:10px;padding:2px 6px;border-radius:4px;background:${statusColors[ev.status] || '#f0f0f0'}10;color:${statusColors[ev.status] || '#666'};font-weight:500` }, statusLabels[ev.status] || ev.status || '-'),
               el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#f0f0f0;color:#666' }, fileLabels[ev.file_type] || ev.file_type || '-'),
-              files.length > 0 ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#7C3AED10;color:#7C3AED' }, `${files.length}개 파일`) : null,
-              ev.contains_sensitive_data ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#ef444410;color:#ef4444' }, '🔒 민감') : null
+              files.length > 0 ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#7C3AED10;color:#7C3AED' }, `${files.length}파일`) : null,
+              ev.contains_sensitive_data ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#ef444410;color:#ef4444' }, '🔒') : null
             )
-          )
-        ),
-        tagCodes.length ? el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px' },
-          ...tagCodes.map(code => el('span', { style: 'font-size:9px;padding:1px 5px;border-radius:3px;background:#f0f7ff;color:#3b82f6;font-family:monospace' }, code))
-        ) : null,
-        isEditing ? renderEvidenceInlineEdit(ev, assessments) : el('div', { style: 'display:flex;gap:6px;justify-content:flex-end' },
-          el('button', { className: 'btn btn-sm', style: { background: '#f0f0f0', color: '#333', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: () => openEvidencePreview(ev.id) }, '열람'),
-          el('button', { className: 'btn btn-sm', style: { background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: () => openEvidencePreview(ev.id) }, '수정'),
-          el('button', { className: 'btn btn-sm', style: { background: '#fee2e2', color: '#e74c3c', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }, onClick: () => { if (confirm('삭제?')) { Store.deleteEvidence(ev.id); _evidencePreviewId = null; renderEvidenceMgmt() } } }, '삭제')
+          ),
+          tagCodes.length ? el('div', { style: 'display:flex;gap:3px;flex-wrap:wrap;max-width:200px' },
+            ...tagCodes.slice(0, 3).map(code => el('span', { style: 'font-size:9px;padding:1px 4px;border-radius:3px;background:#f0f7ff;color:#3b82f6;font-family:monospace' }, code)),
+            tagCodes.length > 3 ? el('span', { style: 'font-size:9px;color:#aaa' }, `+${tagCodes.length - 3}`) : null
+          ) : null,
+          el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: (e) => { e.stopPropagation(); _evidencePreviewId = ev.id; renderEvidenceMgmt() } }, '수정'),
+          el('button', { className: 'btn btn-sm', style: 'font-size:11px;color:#e74c3c', onClick: (e) => { e.stopPropagation(); if (confirm('삭제?')) { Store.deleteEvidence(ev.id); if (_evidencePreviewId === ev.id) _evidencePreviewId = null; renderEvidenceMgmt() } } }, '✕')
         )
       )
-      grid.append(card)
+
+      if (isExpanded) {
+        row.append(renderEvidenceExpand(ev, assessments))
+      }
+
+      listCard.append(row)
     })
 
-    c.append(grid)
+    c.append(listCard)
   }
 
-  function renderEvidenceInlineEdit(ev, assessments) {
+  function renderEvidenceExpand(ev, assessments) {
     const allIndicators = Store.getIndicators() || []
     const tags = Evidence.getTags(ev.id)
     const tagIndicatorIds = tags.map(t => t.indicator_id)
+    const files = Store.getEvidenceFiles(ev.id)
     const fileLabels = { pdf: 'PDF', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
     const statusLabels = { self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증' }
     const fileIcons = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
-    const files = Store.getEvidenceFiles(ev.id)
 
-    return el('div', { style: 'border-top:1px solid #eee;padding-top:10px;margin-top:6px' },
-      el('div', { style: 'display:flex;flex-direction:column;gap:8px' },
-        el('div', { style: 'display:flex;gap:6px;align-items:center' },
-          el('label', { style: 'font-size:11px;color:#666;min-width:40px' }, '제목'),
-          el('input', { id: 'evEditTitle', type: 'text', value: ev.title || '', style: 'flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px' })
+    const detail = el('div', { style: 'padding:12px 16px 16px 48px;background:#fafbff;border-top:1px solid #e8e4f0' },
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px' },
+        el('div', {},
+          el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '제목'),
+          el('input', { id: 'evEditTitle', type: 'text', value: ev.title || '', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' })
         ),
-        el('div', { style: 'display:flex;gap:6px;align-items:center' },
-          el('label', { style: 'font-size:11px;color:#666;min-width:40px' }, '유형'),
-          el('select', { id: 'evEditType', style: 'flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px' },
+        el('div', {},
+          el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '유형'),
+          el('select', { id: 'evEditType', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' },
             ...Object.entries(fileLabels).map(([k, v]) => el('option', { value: k, selected: k === ev.file_type }, v))
           )
         ),
-        el('div', { style: 'display:flex;gap:6px;align-items:center' },
-          el('label', { style: 'font-size:11px;color:#666;min-width:40px' }, '상태'),
-          el('select', { id: 'evEditStatus', style: 'flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px' },
+        el('div', {},
+          el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px' }, '검증상태'),
+          el('select', { id: 'evEditStatus', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' },
             ...Object.entries(statusLabels).map(([k, v]) => el('option', { value: k, selected: k === ev.status }, v))
           )
-        ),
-        el('div', { style: 'display:flex;gap:6px;align-items:flex-start' },
-          el('label', { style: 'font-size:11px;color:#666;min-width:40px;padding-top:4px' }, '태그'),
-          el('div', { id: 'evEditTags', style: 'flex:1;display:flex;flex-wrap:wrap;gap:4px;padding:4px;border:1px solid #ddd;border-radius:5px;min-height:28px' },
-            ...allIndicators.map(ind => {
-              const checked = tagIndicatorIds.includes(ind.id)
-              return el('label', { style: `font-size:10px;padding:2px 5px;border-radius:3px;cursor:pointer;${checked ? 'background:#7C3AED;color:#fff' : 'background:#f0f0f0;color:#666'}` },
-                el('input', { type: 'checkbox', checked, style: 'display:none', onChange: () => {
-                  const cb = document.querySelectorAll('#evEditTags input[type=checkbox]')
-                  const newIds = []
-                  cb.forEach((c, i) => { if (c.checked) newIds.push(allIndicators[i].id) })
-                  Store.db.evidence_indicator.deleteMany({ where: { evidence_id: ev.id } })
-                  newIds.forEach(indId => Store.db.evidence_indicator.insertOne({ evidence_id: ev.id, indicator_id: indId }))
-                } }),
-                ind.indicator_code
-              )
-            })
-          )
-        ),
-        el('div', { style: 'display:flex;gap:6px;align-items:flex-start' },
-          el('label', { style: 'font-size:11px;color:#666;min-width:40px;padding-top:4px' }, '파일'),
-          el('div', { style: 'flex:1;display:flex;flex-direction:column;gap:4px' },
-            ...files.map(f => el('div', { style: 'display:flex;align-items:center;gap:6px;padding:4px 6px;background:#f8f9fa;border-radius:4px;font-size:11px' },
-              el('span', {}, fileIcons[f.file_type] || '📁'),
-              el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, f.original_name || f.file_name),
-              el('button', { style: { background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 11, padding: '0 2px' }, onClick: () => { Store.deleteEvidenceFile(f.id); renderEvidenceMgmt() } }, '✕')
-            )),
-            files.length === 0 ? el('span', { style: 'font-size:11px;color:#aaa' }, '첨부 파일 없음') : null
-          )
-        ),
-        el('div', { style: 'display:flex;gap:6px;justify-content:flex-end;margin-top:4px' },
-          el('button', { className: 'btn btn-sm', style: { background: '#f0f0f0', color: '#333', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11 }, onClick: () => { _evidencePreviewId = null; renderEvidenceMgmt() } }, '취소'),
-          el('button', { className: 'btn btn-sm', style: { background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11 }, onClick: () => {
-            const title = document.getElementById('evEditTitle').value
-            const fileType = document.getElementById('evEditType').value
-            const status = document.getElementById('evEditStatus').value
-            Store.db.evidence.update({ id: ev.id }, { title, file_type: fileType, status })
-            _evidencePreviewId = null
-            renderEvidenceMgmt()
-          } }, '저장')
         )
+      ),
+      el('div', { style: 'margin-bottom:12px' },
+        el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px' }, '태그 (지표 연결)'),
+        el('div', { id: 'evEditTags', style: 'display:flex;flex-wrap:wrap;gap:4px;padding:6px;border:1px solid #ddd;border-radius:5px;max-height:60px;overflow-y:auto' },
+          ...allIndicators.map(ind => {
+            const checked = tagIndicatorIds.includes(ind.id)
+            return el('label', { style: `font-size:10px;padding:2px 5px;border-radius:3px;cursor:pointer;${checked ? 'background:#7C3AED;color:#fff' : 'background:#f0f0f0;color:#666'}` },
+              el('input', { type: 'checkbox', checked, style: 'display:none', onChange: () => {
+                const cb = document.querySelectorAll('#evEditTags input[type=checkbox]')
+                const newIds = []
+                cb.forEach((c, i) => { if (c.checked) newIds.push(allIndicators[i].id) })
+                Store.db.evidence_indicator.deleteMany({ where: { evidence_id: ev.id } })
+                newIds.forEach(indId => Store.db.evidence_indicator.insertOne({ evidence_id: ev.id, indicator_id: indId }))
+              } }),
+              ind.indicator_code
+            )
+          })
+        )
+      ),
+      el('div', { style: 'margin-bottom:12px' },
+        el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px' }, '첨부파일'),
+        files.length ? el('div', { style: 'display:flex;flex-direction:column;gap:4px' },
+          ...files.map(f => el('div', { style: 'display:flex;align-items:center;gap:6px;padding:5px 8px;background:#f8f9fa;border-radius:4px;font-size:11px' },
+            el('span', {}, fileIcons[f.file_type] || '📁'),
+            el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, f.original_name || f.file_name),
+            el('span', { style: 'color:#aaa;font-size:10px' }, f.file_size ? (f.file_size / 1024).toFixed(0) + 'KB' : ''),
+            el('button', { style: { background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 11, padding: '0 2px' }, onClick: () => { Store.deleteEvidenceFile(f.id); renderEvidenceMgmt() } }, '✕')
+          ))
+        ) : el('span', { style: 'font-size:11px;color:#aaa' }, '첨부 파일 없음')
+      ),
+      el('div', { style: 'display:flex;gap:6px;justify-content:flex-end' },
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { _evidencePreviewId = null; renderEvidenceMgmt() } }, '닫기'),
+        el('button', { className: 'btn btn-sm btn-primary', onClick: () => {
+          const title = document.getElementById('evEditTitle').value
+          const fileType = document.getElementById('evEditType').value
+          const status = document.getElementById('evEditStatus').value
+          Store.db.evidence.update({ id: ev.id }, { title, file_type: fileType, status })
+          _evidencePreviewId = null
+          renderEvidenceMgmt()
+        } }, '💾 저장')
       )
     )
+    return detail
   }
 
   function openEvidencePreview(evId) {
     _evidencePreviewId = _evidencePreviewId === evId ? null : evId
     renderEvidenceMgmt()
-  }
-
-  function renderEvidencePreviewPanel(evidences) {
-    const ev = evidences.find(e => e.id === _evidencePreviewId)
-    if (!ev) return el('div', { style: 'width:480px;min-width:480px;display:flex;align-items:center;justify-content:center;background:#f8f9fa;border-left:1px solid #e9ecef' }, '증빙을 찾을 수 없습니다')
-
-    const files = Store.getEvidenceFiles(ev.id)
-    const allFiles = []
-    if (ev.file_data) allFiles.push({ file_name: ev.file_name || '첨부파일', file_data: ev.file_data, file_size: ev.file_size || 0, mime_type: ev.file_type === 'pdf' ? 'application/pdf' : ev.file_type === 'img' ? 'image/*' : '' })
-    files.forEach(f => allFiles.push(f))
-
-    const panelWidth = _evidencePreviewFullscreen ? '100%' : (_evidencePreviewWidth + 'px')
-
-    const navInfo = el('span', { style: 'font-size:11px;color:#888' }, `${_evidencePreviewIdx + 1} / ${evidences.length}`)
-
-    const prevBtn = el('button', { className: 'btn btn-sm btn-secondary', disabled: _evidencePreviewIdx <= 0, onClick: () => { if (_evidencePreviewIdx > 0) { _evidencePreviewId = evidences[_evidencePreviewIdx - 1].id; _evidencePreviewIdx--; renderEvidenceMgmt() } } }, '◀')
-    const nextBtn = el('button', { className: 'btn btn-sm btn-secondary', disabled: _evidencePreviewIdx >= evidences.length - 1, onClick: () => { if (_evidencePreviewIdx < evidences.length - 1) { _evidencePreviewId = evidences[_evidencePreviewIdx + 1].id; _evidencePreviewIdx++; renderEvidenceMgmt() } } }, '▶')
-
-    const fileLabels = { pdf: 'PDF 문서', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
-    const statusLabels = { self: '자가입력', internal_reviewed: '내부검토완료', externally_verified: '외부검증완료' }
-
-    const searchInput = el('input', { type: 'text', placeholder: '파일명 검색...', style: 'flex:1;padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px', value: _evidencePreviewSearch, onInput: e => { _evidencePreviewSearch = e.target.value } })
-
-    const fileInfo = el('div', { style: 'padding:10px 16px;background:#f8f9fa;border-bottom:1px solid #e9ecef;font-size:11px;color:#555;line-height:1.8' },
-      el('div', { style: { fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '4px' } }, ev.title),
-      el('div', {}, `유형: ${fileLabels[ev.file_type] || ev.file_type || '-'} | 상태: ${statusLabels[ev.status] || ev.status || '-'}`),
-      el('div', {}, `유효기간: ${ev.expiry_date || '없음'}${ev.contains_sensitive_data ? ' | 🔒 민감정보 포함' : ''}`),
-      el('div', {}, `태그: ${Evidence.getTags(ev.id).map(t => { const ind = Store.getIndicators().find(i => i.id === t.indicator_id); return ind ? ind.indicator_code : '?' }).join(', ') || '없음'}`)
-    )
-
-    const previewContent = el('div', { style: 'flex:1;overflow:auto;padding:16px;background:#fff' })
-
-    if (allFiles.length === 0) {
-      previewContent.append(el('div', { style: 'text-align:center;padding:40px 20px;color:#aaa' },
-        el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '📄'),
-        el('p', { style: { margin: '0' } }, '첨부된 파일이 없습니다'),
-        el('p', { style: { margin: '4px 0 0', fontSize: '11px' } }, '수정 버튼을 클릭하여 파일을 첨부하세요')
-      ))
-    } else {
-      allFiles.forEach((f, i) => {
-        const fileName = (f.file_name || '').toLowerCase()
-        const isPDF = f.mime_type === 'application/pdf' || fileName.endsWith('.pdf')
-        const isImage = f.mime_type?.startsWith('image') || fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/)
-
-        const fileBlock = el('div', { style: 'margin-bottom:16px;border:1px solid #e9ecef;border-radius:8px;overflow:hidden' },
-          el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8f9fa;border-bottom:1px solid #e9ecef;font-size:11px' },
-            el('span', { style: { fontWeight: '600' } }, `📎 ${f.file_name || '파일 ' + (i + 1)}`),
-            el('div', { style: { display: 'flex', gap: '4px' } },
-              el('button', { className: 'btn btn-sm btn-secondary', style: { fontSize: '10px', padding: '2px 6px' }, onClick: () => { const w = window.open('', '_blank'); if (w) { w.document.write(`<html><head><title>${f.file_name || '파일'}</title></head><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5">${isPDF ? `<iframe src="${f.file_data}" style="width:100%;height:100vh;border:none"></iframe>` : isImage ? `<img src="${f.file_data}" style="max-width:100%;max-height:100vh">` : `<p>미리보기 불가</p>`}</body></html>`); w.document.close() } } }, '⛶'),
-              el('a', { href: f.file_data, download: f.file_name || 'download', style: 'display:inline-flex;align-items:center;background:#27ae60;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:10px;text-decoration:none' }, '⬇')
-            )
-          )
-        )
-
-        if (isPDF && f.file_data) {
-          const iframe = el('iframe', { src: f.file_data, style: 'width:100%;height:500px;border:none' })
-          fileBlock.append(iframe)
-        } else if (isImage && f.file_data) {
-          const img = el('img', { src: f.file_data, style: 'max-width:100%;max-height:500px;display:block;margin:0 auto;padding:8px' })
-          fileBlock.append(img)
-        } else {
-          fileBlock.append(el('div', { style: 'padding:20px;text-align:center;color:#999;font-size:12px' },
-            el('div', { style: { fontSize: '24px', marginBottom: '8px' } }, '📄'),
-            el('p', { style: { margin: '0' } }, '이 파일 형식은 브라우저에서 미리보기가 불가합니다'),
-            el('p', { style: { margin: '4px 0 0', fontSize: '11px' } }, `파일 크기: ${f.file_size ? (f.file_size / 1024).toFixed(1) + 'KB' : '알 수 없음'}`)
-          ))
-        }
-
-        if (_evidencePreviewSearch && !(f.file_name || '').toLowerCase().includes(_evidencePreviewSearch.toLowerCase())) {
-          fileBlock.style.display = 'none'
-        }
-
-        previewContent.append(fileBlock)
-      })
-    }
-
-    const resizeHandle = el('div', { style: 'width:4px;cursor:col-resize;background:#e0e0e0;transition:background 0.2s', onMouseDown: e => { e.preventDefault(); const startX = e.clientX; const startW = _evidencePreviewWidth; const onMove = ev => { _evidencePreviewWidth = Math.max(300, Math.min(800, startW - (ev.clientX - startX))); const rp = document.getElementById('evidence-preview-panel'); if (rp) rp.style.width = _evidencePreviewWidth + 'px' }; const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); document.body.style.cursor = ''; document.body.style.userSelect = '' }; document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp) }, onMouseEnter: e => { e.target.style.background = '#7C3AED' }, onMouseLeave: e => { e.target.style.background = '#e0e0e0' } })
-
-    return el('div', { id: 'evidence-preview-panel', style: { width: panelWidth, minWidth: _evidencePreviewFullscreen ? '100%' : '300px', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e9ecef', background: '#fff', transition: 'width 0.2s' } },
-      el('div', { style: 'display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8f9fa;border-bottom:1px solid #e9ecef' },
-        el('div', { style: 'display:flex;align-items:center;gap:6px' },
-          prevBtn, navInfo, nextBtn
-        ),
-        el('div', { style: 'display:flex;align-items:center;gap:4px' },
-          searchInput,
-          el('button', { className: 'btn btn-sm btn-secondary', style: { fontSize: '11px', padding: '3px 8px' }, onClick: () => { _evidencePreviewFullscreen = !_evidencePreviewFullscreen; renderEvidenceMgmt() } }, _evidencePreviewFullscreen ? '✕ 닫기' : '⛶ 전체'),
-          el('button', { className: 'btn btn-sm btn-secondary', style: { fontSize: '11px', padding: '3px 8px', background: '#e74c3c', color: '#fff', border: 'none' }, onClick: () => { _evidencePreviewId = null; _evidencePreviewIdx = -1; renderEvidenceMgmt() } }, '✕')
-        )
-      ),
-      fileInfo,
-      previewContent,
-      resizeHandle
-    )
   }
 
   function openAddEvidence() { createEvidenceModal() }
@@ -3190,45 +3041,13 @@
     const assessments = Store.getAssessments() || []
     c.innerHTML = ''
     if (!assessments.length) {
-      c.append(
-        el('div', { className: 'card', style: 'text-align:center;padding:60px 40px' },
-          el('div', { style: 'font-size:48px;margin-bottom:16px' }, '📊'),
-          el('h2', { style: 'margin:0 0 8px;color:#2c3e50' }, 'Smart ESG에 오신 것을 환영합니다'),
-          el('p', { style: 'margin:0 0 24px;color:#888;font-size:14px;line-height:1.6' }, 'ESG 평가를 시작하려면 먼저 평가를 생성하세요.\n평가 기관(EcoVadis, KSSB 등)을 선택하고 자사 데이터를 입력하면 자동으로 점수와 등급이 산정됩니다.'),
-          el('button', { className: 'btn btn-primary', style: 'font-size:16px;padding:12px 32px', onClick: () => navigate('assessment') }, '+ 첫 번째 평가 만들기'),
-          el('div', { style: 'margin-top:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;text-align:left' },
-            el('div', { style: 'padding:16px;background:#f8f6ff;border-radius:10px;border-left:3px solid #7C3AED' },
-              el('div', { style: 'font-weight:600;font-size:13px;margin-bottom:4px' }, '1단계: 평가 생성'),
-              el('div', { style: 'font-size:12px;color:#666' }, '평가 기관과 대상 연도를 선택합니다')
-            ),
-            el('div', { style: 'padding:16px;background:#f0f7ff;border-radius:10px;border-left:3px solid #3B82F6' },
-              el('div', { style: 'font-weight:600;font-size:13px;margin-bottom:4px' }, '2단계: 지표 점수 입력'),
-              el('div', { style: 'font-size:12px;color:#666' }, '각 지표별 자사 점수를 입력합니다')
-            ),
-            el('div', { style: 'padding:16px;background:#f0fff4;border-radius:10px;border-left:3px solid #10B981' },
-              el('div', { style: 'font-weight:600;font-size:13px;margin-bottom:4px' }, '3단계: 보고서 생성'),
-              el('div', { style: 'font-size:12px;color:#666' }, 'AI가 자동으로 보고서 초안을 작성합니다')
-            )
-          )
-        )
-      )
+      c.innerHTML = '<div style="text-align:center;padding:60px 40px"><div style="font-size:48px;margin-bottom:16px">📊</div><h2 style="margin:0 0 8px;color:#2c3e50">Smart ESG에 오신 것을 환영합니다</h2><p style="margin:0 0 24px;color:#888;font-size:14px;line-height:1.6">ESG 평가를 시작하려면 먼저 평가를 생성하세요.</p><button class="btn btn-primary" style="font-size:16px;padding:12px 32px" onclick="navigate(\'assessment\')">+ 첫 번째 평가 만들기</button></div>'
       return
     }
     _dashAssId = _dashAssId || assessments[0]?.id
     if (!assessments.find(a => a.id === _dashAssId)) _dashAssId = assessments[0]?.id
-    c.append(
-      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0;margin-bottom:16px' },
-        el('h3', { style: 'margin:0;font-size:16px' }, '📊 대시보드'),
-        el('div', { style: 'display:flex;gap:8px;align-items:center' },
-          el('select', { style: 'padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px', onChange: () => { _dashAssId = parseInt(document.getElementById('dashAssSelect')?.value || document.querySelector('.card-header select')?.value); renderDashboard() } },
-            ...assessments.map(a => el('option', { value: a.id, selected: a.id === _dashAssId }, `${a.title} (${a.assessment_year}년)`))
-          ),
-          el('button', { className: 'btn btn-secondary', style: 'font-size:12px', onClick: () => Report.print(_dashAssId) }, '🖨 출력'),
-          el('button', { className: 'btn btn-secondary', style: 'font-size:12px', onClick: () => Report.downloadHTML(_dashAssId) }, '⬇ HTML')
-        )
-      ),
-      el('div', { id: 'dashGrid' })
-    )
+    const selOpts = assessments.map(a => '<option value="' + a.id + '"' + (a.id === _dashAssId ? ' selected' : '') + '>' + a.title + ' (' + a.assessment_year + '년)</option>').join('')
+    c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0;margin-bottom:16px"><h3 style="margin:0;font-size:16px">📊 대시보드</h3><div style="display:flex;gap:8px;align-items:center"><select id="dashAssSelect" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px" onchange="_dashAssId=parseInt(this.value);renderDashboard()">' + selOpts + '</select></div></div><div id="dashGrid"></div>'
     Dashboard.render('dashGrid', _dashAssId)
   }
 
