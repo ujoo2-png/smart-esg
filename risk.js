@@ -6,11 +6,11 @@ const RISK_LEVELS = [
 ]
 
 const RISK_CATEGORIES = [
-  { key: 'climate', label: '기후변화', icon: '🌡️', indicators: ['EV-ENV-POL', 'EV-ENV-OPS'] },
+  { key: 'climate', label: '기후변화', icon: '🌡️', indicators: ['EV-ENV-POL', 'EV-ENV-OPS', 'EV-ENV-ANO'] },
   { key: 'resource', label: '자원고갈', icon: '⛏️', indicators: ['EV-ENV-PRD', 'EV-ENV-RES'] },
   { key: 'biodiversity', label: '생태계', icon: '🌿', indicators: ['EV-ENV-CERT'] },
-  { key: 'labor', label: '인권/노동', icon: '👥', indicators: ['EV-LHR-POL', 'EV-LHR-HRM', 'EV-LHR-HR'] },
-  { key: 'governance', label: '지배구조', icon: '⚖️', indicators: ['EV-ETH-POL', 'EV-ETH-COR', 'EV-ETH-COMP', 'EV-ETH-INFO'] },
+  { key: 'labor', label: '인권/노동', icon: '👥', indicators: ['EV-LHR-POL', 'EV-LHR-HRM', 'EV-LHR-HR', 'EV-LHR-SD', 'EV-LHR-CS', 'EV-LHR-CLL', 'EV-LHR-RES'] },
+  { key: 'governance', label: '지배구조', icon: '⚖️', indicators: ['EV-ETH-POL', 'EV-ETH-COR', 'EV-ETH-COMP', 'EV-ETH-INFO', 'EV-ETH-ANT'] },
   { key: 'supply_chain', label: '공급망', icon: '🔗', indicators: ['EV-SP-POL', 'EV-SP-ENV', 'EV-SP-SOC', 'EV-SP-RES', 'EV-360'] }
 ]
 

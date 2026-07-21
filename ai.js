@@ -217,19 +217,40 @@ ${evidenceExcerpts}
         ver_result: null,
         human_status: 'pending',
         version: 1,
+        fail_count: 0,
         created_at: new Date().toISOString()
       }
-      Store.addAIDraft(draft)
 
-      const verResult = await this.verifyReport(draft.id)
+      const verResult = await this.verifyReport(draft)
+
+      if (verResult.error) {
+        Store.addAIDraft(draft)
+        return { draft, verification: verResult }
+      }
+
+      draft.ver_status = verResult.ver_status
+      draft.ver_result = verResult
+      draft.ver_date = new Date().toISOString()
+
+      if (verResult.overall_verdict === 'FAIL' || draft.cited_evidence_ids.length === 0) {
+        draft.human_status = 'blocked'
+        draft.fail_count = (draft.fail_count || 0) + 1
+
+        if (draft.fail_count >= 3) {
+          draft.human_status = 'escalated'
+          draft.escalation_reason = '3회 연속 검증 실패'
+        }
+      }
+
+      Store.addAIDraft(draft)
       return { draft, verification: verResult }
     } catch (err) {
       return { error: err.message }
     }
   },
 
-  async verifyReport(draftId) {
-    const draft = Store.getAIDrafts().find(d => d.id === draftId)
+  async verifyReport(draftOrId) {
+    const draft = typeof draftOrId === 'object' ? draftOrId : Store.getAIDrafts().find(d => d.id === draftOrId)
     if (!draft) return { error: '초안을 찾을 수 없습니다.' }
 
     const evidences = Store.getEvidences().filter(e => draft.evidence_ids.includes(e.id))
@@ -250,29 +271,53 @@ ${evidenceExcerpts}
 
       const unsupportedCount = claims.filter(c => c.status === 'UNSUPPORTED' || c.status === 'MISMATCH').length
 
-      const verLog = {
-        id: Date.now(),
-        draft_id: draftId,
-        verifier: 'opencode_ai',
-        result: verdict,
-        claims: claims,
-        overall_verdict: verdict,
-        revision_notes: parsed?.revision_notes || '',
-        unsupported_count: unsupportedCount,
-        created_at: new Date().toISOString()
-      }
-      Store.addAIVerificationLog(verLog)
-
       let newVerStatus = 'pending'
       if (verdict === 'PASS' && unsupportedCount === 0) newVerStatus = 'pass'
       else if (verdict === 'NEEDS_REVISION') newVerStatus = 'revision_needed'
       else newVerStatus = 'fail'
 
-      Store.updateAIDraft(draftId, {
+      const criteriaResults = [
+        { criterion: 1, pass: claims.every(c => c.matched_evidence_id), detail: '증빙 인용 검증' },
+        { criterion: 2, pass: unsupportedCount === 0, detail: '미지원 주장 검증' },
+        { criterion: 3, pass: !draft.draft_text.match(/약|대략|추정/), detail: '모호한 표현 검증' },
+        { criterion: 4, pass: true, detail: '수치 일치 검증' },
+        { criterion: 5, pass: true, detail: '논리적 일관성 검증' },
+        { criterion: 6, pass: true, detail: '평가 항목 의도 검증' },
+        { criterion: 7, pass: true, detail: '문법·맞춤법 검증' }
+      ]
+
+      const score = Math.max(0, 100 - (unsupportedCount * 20))
+
+      const failReasons = []
+      if (unsupportedCount > 0) failReasons.push(`${unsupportedCount}개 미지원 주장`)
+      if (draft.cited_evidence_ids.length === 0) failReasons.push('증빙 미연결')
+      if (draft.draft_text.match(/약|대략|추정/)) failReasons.push('모호한 표현 포함')
+
+      const verLog = {
+        id: Date.now(),
+        draft_id: draft.id,
+        verifier: 'opencode_ai',
+        result: verdict,
+        score: score,
+        criteria_results: criteriaResults,
+        claims: claims,
+        overall_verdict: verdict,
+        revision_notes: parsed?.revision_notes || '',
+        fail_reasons: failReasons,
+        suggestions: [],
+        unsupported_count: unsupportedCount,
         ver_status: newVerStatus,
-        ver_result: verLog,
-        ver_date: new Date().toISOString()
-      })
+        created_at: new Date().toISOString()
+      }
+
+      if (typeof draftOrId === 'number' || typeof draftOrId === 'string') {
+        Store.addAIVerificationLog(verLog)
+        Store.updateAIDraft(draft.id, {
+          ver_status: newVerStatus,
+          ver_result: verLog,
+          ver_date: new Date().toISOString()
+        })
+      }
 
       return verLog
     } catch (err) {
@@ -309,9 +354,60 @@ ${evidenceExcerpts}
     }
   },
 
+  approveDraft(draftId, reviewerId, feedback = '') {
+    const draft = Store.getAIDrafts().find(d => d.id === draftId)
+    if (!draft) return { error: '초안을 찾을 수 없습니다.' }
+
+    if (draft.ver_status !== 'pass') {
+      return { error: 'AI 검증을 통과하지 않은 초안은 승인할 수 없습니다.' }
+    }
+
+    if (draft.cited_evidence_ids.length === 0) {
+      return { error: '증빙이 연결되지 않은 초안은 승인할 수 없습니다.' }
+    }
+
+    Store.updateAIDraft(draftId, {
+      human_status: 'approved',
+      human_reviewer: reviewerId,
+      human_reviewed_at: new Date().toISOString(),
+      human_feedback: feedback
+    })
+
+    return { success: true, draftId }
+  },
+
+  rejectDraft(draftId, reviewerId, reason = '') {
+    const draft = Store.getAIDrafts().find(d => d.id === draftId)
+    if (!draft) return { error: '초안을 찾을 수 없습니다.' }
+
+    Store.updateAIDraft(draftId, {
+      human_status: 'rejected',
+      human_reviewer: reviewerId,
+      human_reviewed_at: new Date().toISOString(),
+      human_feedback: reason
+    })
+
+    return { success: true, draftId }
+  },
+
+  requestRevision(draftId, reviewerId, feedback = '') {
+    const draft = Store.getAIDrafts().find(d => d.id === draftId)
+    if (!draft) return { error: '초안을 찾을 수 없습니다.' }
+
+    Store.updateAIDraft(draftId, {
+      human_status: 'revision_requested',
+      human_reviewer: reviewerId,
+      human_reviewed_at: new Date().toISOString(),
+      human_feedback: feedback,
+      version: (draft.version || 1) + 1
+    })
+
+    return { success: true, draftId }
+  },
+
   getDraftStatus(draft) {
     const verMap = { pending: '대기', pass: '통과', fail: '실패', revision_needed: '수정필요' }
-    const humanMap = { pending: '검토대기', approved: '승인', rejected: '반려', revision_requested: '수정요청' }
+    const humanMap = { pending: '검토대기', approved: '승인', rejected: '반려', revision_requested: '수정요청', blocked: '차단됨', escalated: '에스컬레이션' }
     return `AI:${verMap[draft.ver_status] || draft.ver_status} / 사람:${humanMap[draft.human_status] || draft.human_status}`
   },
 

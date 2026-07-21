@@ -52,6 +52,61 @@
     if (_loadingCount === 0) { const ov = document.getElementById('loading-overlay'); if (ov) ov.style.display = 'none' }
   }
 
+  function toggleNotifPanel() {
+    const panel = document.getElementById('notif-panel')
+    if (!panel) return
+    panel.classList.toggle('hidden')
+    if (!panel.classList.contains('hidden')) renderNotifList()
+  }
+  function renderNotifList() {
+    const list = document.getElementById('notif-list')
+    if (!list) return
+    const notifs = Store.getNotifications().slice().reverse().slice(0, 30)
+    if (!notifs.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:#999;font-size:13px">알림이 없습니다</div>'; return }
+    list.innerHTML = notifs.map(n => {
+      const icon = n.type === 'error' ? '🔴' : n.type === 'warning' ? '🟡' : n.type === 'success' ? '🟢' : '🔵'
+      const bg = n.read ? '#fff' : '#f8f6ff'
+      return `<div class="notif-item" data-id="${n.id}" data-page="${n.related_page || ''}" data-rid="${n.related_id || ''}" style="padding:10px 16px;border-bottom:1px solid #f5f5f5;background:${bg};cursor:pointer;font-size:12px;display:flex;gap:8px;align-items:flex-start" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='${bg}'">
+        <span style="flex-shrink:0;margin-top:1px">${icon}</span>
+        <div style="flex:1;line-height:1.5">${n.message}</div>
+        <span style="color:#bbb;font-size:10px;white-space:nowrap">${_timeAgo(n.created_at)}</span>
+      </div>`
+    }).join('')
+    list.querySelectorAll('.notif-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = parseInt(el.dataset.id)
+        const page = el.dataset.page
+        const rid = el.dataset.rid ? parseInt(el.dataset.rid) : null
+        Store.markNotificationRead(id)
+        document.getElementById('notif-panel').classList.add('hidden')
+        if (page) { navigate(page); if (rid && page === 'assessment') { setTimeout(() => showAssessmentDetail(rid), 100) } }
+        refreshNotifBadge()
+      })
+    })
+  }
+  function _timeAgo(iso) {
+    if (!iso) return ''
+    const diff = Date.now() - new Date(iso).getTime()
+    if (diff < 60000) return '방금'
+    if (diff < 3600000) return Math.floor(diff / 60000) + '분 전'
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '시간 전'
+    return Math.floor(diff / 86400000) + '일 전'
+  }
+  function refreshNotifBadge() {
+    const badge = document.getElementById('notif-badge')
+    const wrapper = document.getElementById('notif-wrapper')
+    if (!badge || !wrapper) return
+    const count = Store.getUnreadNotifications(currentUser?.id).length
+    if (currentUser) { wrapper.style.display = ''; badge.textContent = count; badge.style.display = count > 0 ? '' : 'none' }
+    else { wrapper.style.display = 'none' }
+  }
+  window.toggleNotifPanel = toggleNotifPanel
+  window.markAllRead = function() { Store.markAllNotificationsRead(currentUser?.id); refreshNotifBadge(); renderNotifList() }
+
+  function _jumpBtn(page, label, id) {
+    return el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px;padding:3px 8px', onClick: () => { navigate(page); if (id) setTimeout(() => { if (page === 'assessment') showAssessmentDetail(id) }, 50) } }, '↗ ' + label)
+  }
+
   function sortableTable(id, columns, rows, opts = {}) {
     if (!_tableState[id]) _tableState[id] = { sortCol: -1, sortAsc: true, selected: new Set(), page: 0 }
     const st = _tableState[id]
@@ -438,28 +493,34 @@
       ),
       ...groups.map(g => {
         const inds = allIndicators.filter(i => i.group_id === g.id)
-        const weight = Store.getWeightParams().find(w => w.authority_code === a.authority_code && w.group_code === g.group_code && w.year === (a.assessment_year || 2026))
-        const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.group_code === '_PILLAR' && w.year === (a.assessment_year || 2026))
+        const weight = Store.getWeightParams().find(w => w.authority_code === a.authority_code && w.theme_code === g.group_code && w.year === (a.assessment_year || 2026))
+        const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.theme_code === '_PILLAR' && w.year === (a.assessment_year || 2026))
         const pillarNote = a.authority_code === 'ECOVADIS' && pillarParams.length
-          ? pillarParams.map(p => `${Indicator.getPillarName(p.pillar)} ${p.weight_pct}%`).join(' / ')
-          : (weight ? `가중치 ${weight.weight_pct}%` : '')
+          ? pillarParams.map(p => `${Indicator.getPillarName(p.pillar)} ${p.weight}%`).join(' / ')
+          : (weight ? `가중치 ${weight.weight}%` : '')
         return el('div', { className: 'card' },
           el('div', { className: 'card-header' },
             el('h3', { style: 'font-size:14px' }, `${Indicator.getGroupDisplayName(g)} ${pillarNote ? `- ${pillarNote}` : ''}`)
           ),
           el('table', { style: 'font-size:13px' },
-            el('thead', {}, el('tr', {}, el('th', { style: 'width:80px' }, '코드'), el('th', {}, '지표'), el('th', {}, '필러'), el('th', { style: 'width:80px;text-align:center' }, '점수(0-100)'), el('th', { style: 'width:60px;text-align:center' }, '완료'))),
+            el('thead', {}, el('tr', {}, el('th', { style: 'width:80px' }, '코드'), el('th', {}, '지표'), el('th', {}, '필러'), el('th', { style: 'width:80px;text-align:center' }, '점수(0-100)'), el('th', { style: 'width:60px;text-align:center' }, '완료'), el('th', { style: 'width:80px;text-align:center' }, '증빙'))),
             el('tbody', {}, ...inds.map(ind => {
               const item = items.find(i => i.indicator_id === ind.id)
+              const evCount = item?.evidence_ids?.length || 0
               return el('tr', {},
                 el('td', { style: 'font-weight:500' }, ind.indicator_code),
                 el('td', {}, Indicator.getDisplayName(ind)),
                 el('td', {}, Indicator.getPillarName(ind.pillar)),
                 el('td', { style: 'text-align:center' },
-                  el('input', { type: 'number', min: 0, max: 100, step: 1, value: item?.score ?? '', style: 'width:70px;padding:4px 6px;border:1px solid #ddd;border-radius:6px;text-align:center;font-size:13px', onInput: () => saveItemScore(id, ind.id, weight?.id, weight?.weight_pct || 25) })
+                  el('input', { type: 'number', min: 0, max: 100, step: 1, value: item?.score ?? '', style: 'width:70px;padding:4px 6px;border:1px solid #ddd;border-radius:6px;text-align:center;font-size:13px', onInput: () => saveItemScore(id, ind.id, weight?.id, weight?.weight || 25) })
                 ),
                 el('td', { style: 'text-align:center' },
                   item ? el('span', { style: 'color:#27ae60;font-size:16px' }, '✓') : el('span', { style: 'color:#ccc;font-size:16px' }, '—')
+                ),
+                el('td', { style: 'text-align:center' },
+                  evCount > 0
+                    ? el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:10px;padding:2px 6px', onClick: () => navigate('evidence') }, evCount + '건 ↗')
+                    : el('span', { style: 'color:#e74c3c;font-size:11px' }, '미연결')
                 )
               )
             }))
@@ -475,9 +536,9 @@
     const items = Store.getAssessmentItems()
     const existing = items.find(i => i.assessment_id === assessmentId && i.indicator_id === indicatorId)
     if (existing) {
-      Store.updateAssessmentItem(existing.id, { score, weight_id: weightId, weight_pct: weightPct, updated_at: new Date().toISOString() })
+      Store.updateAssessmentItem(existing.id, { score, weight_id: weightId, weight: weightPct, updated_at: new Date().toISOString() })
     } else {
-      Store.addAssessmentItem({ assessment_id: assessmentId, indicator_id: indicatorId, score, weight_id: weightId, weight_pct: weightPct, status: 'completed' })
+      Store.addAssessmentItem({ assessment_id: assessmentId, indicator_id: indicatorId, score, weight_id: weightId, weight: weightPct, status: 'completed' })
     }
     calcAssessmentScore(assessmentId)
   }
@@ -492,7 +553,7 @@
     let totalWeighted = 0
     let totalWeight = 0
     if (usePillarWeight) {
-      const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.group_code === '_PILLAR' && w.year === year)
+      const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.theme_code === '_PILLAR' && w.year === year)
       const pillars = ['POLICY', 'ACTION', 'RESULT']
       pillars.forEach(p => {
         const pillarItems = items.filter(i => {
@@ -501,7 +562,7 @@
         })
         if (!pillarItems.length) return
         const pw = pillarParams.find(pp => pp.pillar === p)
-        const w = pw ? pw.weight_pct / 100 : (1 / pillars.length)
+        const w = pw ? pw.weight / 100 : (1 / pillars.length)
         const avg = pillarItems.reduce((s, i) => s + (i.score || 0), 0) / pillarItems.length
         totalWeighted += avg * w
         totalWeight += w
@@ -514,8 +575,8 @@
           return ind && ind.group_id === g.id
         })
         if (!groupItems.length) return
-        const weight = Store.getWeightParams().find(w => w.authority_code === a.authority_code && w.group_code === g.group_code && w.year === year)
-        const w = weight ? weight.weight_pct / 100 : (1 / groups.length)
+        const weight = Store.getWeightParams().find(w => w.authority_code === a.authority_code && w.theme_code === g.group_code && w.year === year)
+        const w = weight ? weight.weight / 100 : (1 / groups.length)
         const avg = groupItems.reduce((s, i) => s + (i.score || 0), 0) / groupItems.length
         totalWeighted += avg * w
         totalWeight += w
@@ -567,10 +628,11 @@
         const activeIndicators = Store.getIndicators().filter(i => i.authority_code === authority.value && i.is_active !== false)
         const weightParams = Store.getWeightParams().filter(w => w.authority_code === authority.value && w.year === (parseInt(year.value) || 2026))
         activeIndicators.forEach(ind => {
-          const w = weightParams.find(p => p.group_code === Store.getIndicatorGroups().find(g => g.id === ind.group_id)?.group_code)
-          Store.addAssessmentItem({ assessment_id: created.id, indicator_id: ind.id, weight_id: w?.id, weight_pct: w?.weight_pct || 0, status: 'pending' })
+          const w = weightParams.find(p => p.theme_code === Store.getIndicatorGroups().find(g => g.id === ind.group_id)?.group_code)
+          Store.addAssessmentItem({ assessment_id: created.id, indicator_id: ind.id, weight_id: w?.id, weight: w?.weight || 0, status: 'pending' })
         })
-        showToast('평가가 생성되었습니다. (' + activeIndicators.length + '개 지표)', 'success')
+        const linked = Store.autoLinkAllEvidence(created.id)
+        showToast('평가가 생성되었습니다. (' + activeIndicators.length + '개 지표' + (linked > 0 ? ', 증빙 ' + linked + '건 자동 연결' : '') + ')', 'success')
       }
       closeModal()
       renderAssessments()
@@ -1102,14 +1164,28 @@
           ))
         ) : el('span', { style: 'font-size:11px;color:#aaa' }, '첨부 파일 없음')
       ),
-      el('div', { style: 'display:flex;gap:6px;justify-content:flex-end' },
+      el('div', { style: 'display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap' },
+        tags.length ? el('div', { style: 'flex:1;display:flex;gap:4px;flex-wrap:wrap;align-items:center' },
+          el('span', { style: 'font-size:10px;color:#888' }, '바로가기:'),
+          ...tags.slice(0, 5).map(t => {
+            const ind = allIndicators.find(i => i.id === t.indicator_id)
+            return ind ? _jumpBtn('indicator', ind.indicator_code) : null
+          }).filter(Boolean),
+          ev.assessment_id ? _jumpBtn('assessment', '평가 상세', ev.assessment_id) : null
+        ) : null,
         el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { _evidencePreviewId = null; renderEvidenceMgmt() } }, '닫기'),
         el('button', { className: 'btn btn-sm btn-primary', onClick: () => {
           const title = document.getElementById('evEditTitle').value
           const fileType = document.getElementById('evEditType').value
           const status = document.getElementById('evEditStatus').value
-          Store.db.evidence.update({ id: ev.id }, { title, file_type: fileType, status })
+          Store.updateEvidence(ev.id, { title, file_type: fileType, status })
+          const newTagIds = []
+          document.querySelectorAll('#evEditTags input[type=checkbox]').forEach((cb, i) => { if (cb.checked) newTagIds.push(allIndicators[i].id) })
+          const existing = Evidence.getTags(ev.id)
+          existing.forEach(t => { if (!newTagIds.includes(t.indicator_id)) Evidence.untag(ev.id, t.indicator_id) })
+          newTagIds.forEach(indId => { if (!existing.find(t => t.indicator_id === indId)) Evidence.tag(ev.id, indId) })
           _evidencePreviewId = null
+          showToast('증빙이 저장되었습니다.', 'success')
           renderEvidenceMgmt()
         } }, '💾 저장')
       )
@@ -1172,6 +1248,7 @@
     }
 
     const tagContainer = el('div', { style: 'margin-top:8px' })
+    const autoTagBox = el('div', { id: 'auto-tag-box', style: 'margin:8px 0;padding:10px;background:#f0f6ff;border-radius:8px;display:none;font-size:12px' })
 
     window._tagValues = existingTags.slice()
 
@@ -1197,7 +1274,33 @@
     addBtn.onclick = () => addTagRow(null)
     tagContainer.append(addBtn)
 
-    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'font-size:12px' }, sensitiveCheck, ' 민감정보 포함'), el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, fileListContainer), el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
+    function _checkAutoTag() {
+      const txt = (title.value || '')
+      const suggestions = Store.suggestAutoTags(txt, txt)
+      const existing = new Set(_tagValues)
+      const newOnes = suggestions.filter(s => !existing.has(s.indicator_id))
+      if (!newOnes.length) { autoTagBox.style.display = 'none'; return }
+      autoTagBox.style.display = 'block'
+      autoTagBox.innerHTML = '<div style="font-weight:600;color:#7C3AED;margin-bottom:6px">🤖 자동 태그 제안</div>' +
+        newOnes.map(s => `<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><input type="checkbox" class="auto-tag-cb" data-id="${s.indicator_id}" data-code="${s.indicator_code}" checked style="accent-color:#7C3AED"><span>${s.indicator_code} — ${s.indicator_name}</span><span style="color:#999;font-size:10px">(${s.confidence})</span></div>`).join('') +
+        '<div style="margin-top:6px"><button type="button" class="btn btn-sm btn-primary" id="apply-auto-tags">적용</button></div>'
+      const applyBtn = autoTagBox.querySelector('#apply-auto-tags')
+      if (applyBtn) applyBtn.onclick = () => {
+        autoTagBox.querySelectorAll('.auto-tag-cb').forEach(cb => {
+          if (cb.checked && !existing.has(parseInt(cb.dataset.id))) {
+            _tagValues.push(parseInt(cb.dataset.id))
+            addTagRow(parseInt(cb.dataset.id))
+            existing.add(parseInt(cb.dataset.id))
+          }
+        })
+        autoTagBox.style.display = 'none'
+        showToast('자동 태그가 적용되었습니다.', 'success')
+      }
+    }
+    title.addEventListener('input', _checkAutoTag)
+    if (!isEdit) setTimeout(_checkAutoTag, 100)
+
+    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'font-size:12px' }, sensitiveCheck, ' 민감정보 포함'), autoTagBox, el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, fileListContainer), el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
     modal(isEdit ? '증빙 수정' : '증빙 추가', form)
     document.getElementById('modal-save').onclick = function save() {
       const pendingFiles = window._pendingFiles || []
@@ -1241,6 +1344,10 @@
       newFiles.forEach(f => {
         Store.addEvidenceFile({ evidence_id: evidenceId, file_name: f.file_name, file_path: f.file_data, file_size: f.file_size, mime_type: f.mime_type })
       })
+      if (_evidenceAssId) {
+        const linked = Store.autoLinkEvidenceToAssessment(evidenceId, _evidenceAssId)
+        if (linked > 0) showToast(linked + '개 평가항목에 자동 연결되었습니다.', 'success')
+      }
       closeModal(); renderEvidenceMgmt()
     }
   }
@@ -2084,7 +2191,7 @@
       latest ? el('div', { style: 'background:#f8f9fa;border-radius:6px;padding:12px;margin:8px 0;font-size:12px;line-height:1.6;white-space:pre-wrap;max-height:300px;overflow-y:auto' }, latest.draft_text) : null,
       latest ? el('div', { style: 'font-size:11px;margin-bottom:8px' },
         el('span', { style: `color:${latest.ver_status === 'pass' ? '#27ae60' : latest.ver_status === 'fail' ? '#e74c3c' : '#f39c12'}` }, `AI 검증: ${latest.ver_status === 'pass' ? '✅ PASS' : latest.ver_status === 'fail' ? '❌ FAIL' : latest.ver_status === 'revision_needed' ? '⚠️ 수정필요' : '⏳ 대기'}`),
-        el('span', { style: 'margin-left:8px' }, `사람: ${latest.human_status === 'approved' ? '✅ 승인' : latest.human_status === 'rejected' ? '❌ 반려' : '⏳ 검토대기'}`)
+        el('span', { style: 'margin-left:8px' }, `사람: ${latest.human_status === 'approved' ? '✅ 승인' : latest.human_status === 'rejected' ? '❌ 반려' : latest.human_status === 'blocked' ? '🚫 차단됨' : latest.human_status === 'escalated' ? '🚨 에스컬레이션' : '⏳ 검토대기'}`)
       ) : null,
       claims.length ? el('div', { style: 'margin:8px 0;border:1px solid #eee;border-radius:6px;overflow:hidden' },
         el('div', { style: 'padding:8px 12px;background:#f8f9fa;font-size:12px;font-weight:600;border-bottom:1px solid #eee' }, `검증 결과 (${claims.length}개 주장)`),
@@ -2112,11 +2219,13 @@
           showAIDetail(indicatorId)
           if (r.error) alert(r.error)
         }}, 'AI 초안 생성'),
-        latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && latest.cited_evidence_ids?.length > 0 ? el('button', { className: 'btn btn-sm btn-success', onClick: () => { Store.updateAIDraft(latest.id, { human_status: 'approved', human_reviewed_at: new Date().toISOString() }); showAIDetail(indicatorId) }}, '✅ 승인') : null,
+        latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && latest.cited_evidence_ids?.length > 0 ? el('button', { className: 'btn btn-sm btn-success', onClick: () => { const r = AI.approveDraft(latest.id, 'current_user'); if (r.error) { showToast(r.error, 'error'); return; } showAIDetail(indicatorId); showToast('승인되었습니다.', 'success') }}, '✅ 승인') : null,
         latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && (!latest.cited_evidence_ids || latest.cited_evidence_ids.length === 0) ? el('span', { style: 'color:#e74c3c;font-size:11px;font-weight:600;padding:5px 8px;background:#fff5f5;border-radius:6px' }, '⚠ 증빙 미연결 - 승인 불가') : null,
         latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && (() => { const ind = Store.getIndicators().find(i => i.id === indicatorId); return ind && ind.scope2_split_required && Object.keys(GHG.getSummary(_aiAssId)).length === 0 })() ? el('span', { style: 'color:#cf1322;font-size:11px;font-weight:600;padding:5px 8px;background:#fff2f0;border-radius:6px' }, '⚠ GHG 미등록 - Scope2 분할 필요 지표 승인 불가') : null,
-        latest && latest.human_status === 'pending' ? el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.updateAIDraft(latest.id, { human_status: 'rejected' }); showAIDetail(indicatorId) }}, '반려') : null,
-        latest && latest.human_status === 'pending' ? el('button', { className: 'btn btn-sm', onClick: () => { const fb = prompt('수정 요청 사항:'); if (fb) { Store.updateAIDraft(latest.id, { human_status: 'revision_requested', human_feedback: fb }); showAIDetail(indicatorId) } }}, '수정 요청') : null
+        latest && latest.human_status === 'pending' ? el('button', { className: 'btn btn-sm btn-danger', onClick: () => { const r = AI.rejectDraft(latest.id, 'current_user', '검토 필요'); if (r.error) { showToast(r.error, 'error'); return; } showAIDetail(indicatorId); showToast('반려되었습니다.', 'info') }}, '반려') : null,
+        latest && latest.human_status === 'pending' ? el('button', { className: 'btn btn-sm', onClick: () => { const fb = prompt('수정 요청 사항:'); if (fb) { AI.requestRevision(latest.id, 'current_user', fb); showAIDetail(indicatorId); showToast('수정이 요청되었습니다.', 'info') } }}, '수정 요청') : null,
+        latest && latest.human_status === 'blocked' ? el('span', { style: 'color:#e74c3c;font-size:11px;font-weight:600;padding:5px 8px;background:#fff5f5;border-radius:6px' }, '🚫 검증 실패 - 증빙 연결 필요') : null,
+        latest && latest.human_status === 'escalated' ? el('span', { style: 'color:#cf1322;font-size:11px;font-weight:600;padding:5px 8px;background:#fff2f0;border-radius:6px' }, '🚨 에스컬레이션 - 관리자 확인 필요') : null
       ),
       evidences.length ? el('div', { style: 'margin-top:8px;font-size:11px;color:#666' }, el('strong', {}, '증빙: '), ...evidences.map(e => el('span', { style: 'margin-right:4px' }, `[${e.title}]`))) : null
     )
@@ -2898,8 +3007,8 @@
               el('td', {}, unsupported.length ? el('span', { style: 'color:#e74c3c;font-weight:600' }, `⚠ ${unsupported.length}건`) : el('span', { style: 'color:#27ae60' }, '✅')),
               el('td', { style: 'text-align:center' }, d.masked_before_send ? el('span', { style: 'color:#27ae60;font-size:10px' }, '🔒') : el('span', { style: 'color:#999;font-size:10px' }, '-')),
               el('td', { style: 'white-space:nowrap' },
-                hasEvidence && d.ver_status === 'pass' ? el('button', { className: 'btn btn-sm btn-success', style: { marginRight: 4 }, onClick: () => { Store.updateAIDraft(d.id, { human_status: 'approved', human_reviewed_at: new Date().toISOString() }); showToast('AI 초안이 승인되었습니다.', 'success'); renderAIHistory() } }, '승인') : el('span', { style: 'color:#e74c3c;font-size:10px;font-weight:600;padding:4px 8px;background:#fff5f5;border-radius:4px;display:inline-block' }, !hasEvidence ? '증빙미연결' : '검증미통과'),
-                el('button', { className: 'btn btn-sm btn-danger', onClick: () => { Store.updateAIDraft(d.id, { human_status: 'rejected' }); showToast('AI 초안이 반려되었습니다.', 'warning'); renderAIHistory() } }, '반려')
+                hasEvidence && d.ver_status === 'pass' ? el('button', { className: 'btn btn-sm btn-success', style: { marginRight: 4 }, onClick: () => { const r = AI.approveDraft(d.id, 'current_user'); if (r.error) { showToast(r.error, 'error'); return; } showToast('AI 초안이 승인되었습니다.', 'success'); renderAIHistory() } }, '승인') : el('span', { style: 'color:#e74c3c;font-size:10px;font-weight:600;padding:4px 8px;background:#fff5f5;border-radius:4px;display:inline-block' }, !hasEvidence ? '증빙미연결' : '검증미통과'),
+                el('button', { className: 'btn btn-sm btn-danger', onClick: () => { AI.rejectDraft(d.id, 'current_user', '반려'); showToast('AI 초안이 반려되었습니다.', 'warning'); renderAIHistory() } }, '반려')
               )
             )
           }))
@@ -3233,13 +3342,13 @@
         el('table', { className: 'table-dense' },
           el('thead', {}, el('tr', {}, el('th', {}, '기관'), el('th', {}, '그룹'), el('th', {}, '가중치(%)'))),
           el('tbody', {}, ...['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(auth => {
-            const authParams = params.filter(p => p.authority_code === auth && p.year === year && p.group_code !== '_PILLAR')
+            const authParams = params.filter(p => p.authority_code === auth && p.year === year && p.theme_code !== '_PILLAR')
             if (!authParams.length) return el('tr', {}, el('td', { colspan: 3, style: 'color:#999;text-align:center' }, `${Indicator.getAuthorityName(auth)}: 설정된 가중치 없음`))
             return authParams.map(p => el('tr', {},
               el('td', {}, Indicator.getAuthorityName(auth)),
-              el('td', {}, p.group_code),
+              el('td', {}, p.theme_code),
               el('td', {},
-                el('input', { type: 'number', min: 0, max: 100, value: p.weight_pct, style: 'width:60px;padding:4px;border:1px solid #ddd;border-radius:4px;text-align:center', onBlur: e => { Store.updateWeightParam(p.id, { weight_pct: parseInt(e.target.value) || 0 }) } })
+                el('input', { type: 'number', min: 0, max: 100, value: p.weight, style: 'width:60px;padding:4px;border:1px solid #ddd;border-radius:4px;text-align:center', onBlur: e => { Store.updateWeightParam(p.id, { weight: parseInt(e.target.value) || 0 }) } })
               )
             ))
           }).flat())
@@ -3253,12 +3362,12 @@
         el('table', { className: 'table-dense' },
           el('thead', {}, el('tr', {}, el('th', {}, '필러'), el('th', {}, '가중치(%)'), el('th', {}, '해석'))),
           el('tbody', {}, ...['POLICY', 'ACTION', 'RESULT'].map(p => {
-            const pw = params.find(pp => pp.authority_code === 'ECOVADIS' && pp.group_code === '_PILLAR' && pp.pillar === p && pp.year === year)
+            const pw = params.find(pp => pp.authority_code === 'ECOVADIS' && pp.theme_code === '_PILLAR' && pp.pillar === p && pp.year === year)
             const interp = { POLICY: '정책 수립 여부 및 범위', ACTION: '조치·이행 (측정·인증·전개도)', RESULT: '결과·보고 (KPI·360° Watch)' }
             return el('tr', {},
               el('td', { style: 'font-weight:500' }, `${Indicator.getPillarName(p)} (${p})`),
-              el('td', {}, el('input', { type: 'number', min: 0, max: 100, value: pw?.weight_pct ?? 0, style: 'width:60px;padding:4px;border:1px solid #ddd;border-radius:4px;text-align:center', onBlur: e => {
-                if (pw) Store.updateWeightParam(pw.id, { weight_pct: parseInt(e.target.value) || 0 })
+              el('td', {}, el('input', { type: 'number', min: 0, max: 100, value: pw?.weight ?? 0, style: 'width:60px;padding:4px;border:1px solid #ddd;border-radius:4px;text-align:center', onBlur: e => {
+                if (pw) Store.updateWeightParam(pw.id, { weight: parseInt(e.target.value) || 0 })
               } })),
               el('td', { style: 'font-size:12px;color:#888' }, interp[p] || '')
             )

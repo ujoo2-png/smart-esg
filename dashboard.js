@@ -21,6 +21,7 @@ const Dashboard = {
     container.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
         ${this._scoreCard(assessment)}
+        ${this._workflowCard(assessmentId)}
         ${this._themeRadar(items, groups, assessment.authority_code)}
         ${this._evidenceCard(evidenceCount)}
         ${this._draftStatusCard(drafts)}
@@ -65,7 +66,7 @@ const Dashboard = {
           : '-'
         const pw = pillarParams.find(pp => pp.pillar === p)
         const label = Indicator.getPillarName(p)
-        return `<div style="margin:4px 0;display:flex;justify-content:space-between"><span style="font-weight:500">${label}</span><span>${avg} <span style="color:#999;font-size:11px">(${pw ? pw.weight_pct + '%' : '-'})</span></span></div>`
+        return `<div style="margin:4px 0;display:flex;justify-content:space-between"><span style="font-weight:500">${label}</span><span>${avg} <span style="color:#999;font-size:11px">(${pw ? pw.weight + '%' : '-'})</span></span></div>`
       }).join('')
     } else {
       scoresHtml = groups.map(g => {
@@ -267,6 +268,39 @@ const Dashboard = {
     </div>
   `).join('') : '<div style="color:#999;font-size:12px">데이터 없음</div>'}
   <div style="font-size:11px;color:#999;margin-top:8px">단위: tCO2eq</div>
+</div>`
+  },
+
+  _workflowCard(assessmentId) {
+    const stats = Store.getWorkflowStats(assessmentId)
+    const notifs = Store.getUnreadNotifications()
+    const notifCount = notifs.length
+    const overdueItems = notifs.filter(n => n.type === 'error')
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <div style="font-weight:600;font-size:14px;margin-bottom:12px">⚡ 자동 워크플로우 현황</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="background:#f0f6ff;padding:10px;border-radius:8px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#7C3AED">${stats.completionPct}%</div>
+      <div style="font-size:11px;color:#888">평가 완료율</div>
+    </div>
+    <div style="background:#f0fff4;padding:10px;border-radius:8px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#27ae60">${stats.evidencePct}%</div>
+      <div style="font-size:11px;color:#888">증빙 연결률</div>
+    </div>
+  </div>
+  <div style="font-size:12px;line-height:2">
+    <div>📋 총 항목: <strong>${stats.total}</strong>건 / 완료: <strong>${stats.completed}</strong>건</div>
+    <div>📎 증빙 연결: <strong>${stats.withEvidence}</strong>건 / 미연결: <strong>${stats.total - stats.withEvidence}</strong>건</div>
+    ${stats.overdue > 0 ? '<div style="color:#e74c3c">🔴 마감 초과: <strong>' + stats.overdue + '</strong>건</div>' : ''}
+    ${stats.dueSoon > 0 ? '<div style="color:#f39c12">🟡 마감 임박: <strong>' + stats.dueSoon + '</strong>건</div>' : ''}
+    ${notifCount > 0 ? '<div style="color:#7C3AED">🔔 읽지 않은 알림: <strong>' + notifCount + '</strong>건</div>' : ''}
+  </div>
+  <div style="display:flex;gap:6px;margin-top:12px">
+    <button onclick="navigate('assessment')" class="btn btn-sm btn-secondary" style="font-size:11px">📋 평가 관리 ↗</button>
+    <button onclick="navigate('evidence')" class="btn btn-sm btn-secondary" style="font-size:11px">📎 증빙 관리 ↗</button>
+    <button onclick="navigate('indicator')" class="btn btn-sm btn-secondary" style="font-size:11px">📌 지표 관리 ↗</button>
+  </div>
 </div>`
   }
 }

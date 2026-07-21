@@ -74,7 +74,7 @@ CREATE TABLE tb_indicator (
     authority_code TEXT NOT NULL,
     indicator_code TEXT NOT NULL,
     indicator_name TEXT NOT NULL,
-    pillar TEXT CHECK (pillar IN ('POLICY','ACTION','RESULT','GOVERNANCE','STRATEGY','RISK_MGMT','METRICS',NULL)),
+    pillar TEXT CHECK (pillar IN ('POLICY','ACTION','RESULT','GOVERNANCE','STRATEGY','RISK_MGMT','METRICS') OR pillar IS NULL),
     description TEXT,
     weight_default DECIMAL DEFAULT 1.0,
     is_active BOOLEAN DEFAULT true,
@@ -203,7 +203,7 @@ CREATE TABLE tb_ghg_emission_factor (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     energy_type TEXT NOT NULL,
     scope INT NOT NULL CHECK (scope IN (1,2,3)),
-    scope2_method TEXT CHECK (scope2_method IN ('location-based','market-based',NULL)),
+    scope2_method TEXT CHECK (scope2_method IN ('location-based','market-based') OR scope2_method IS NULL),
     factor DECIMAL NOT NULL,
     unit TEXT NOT NULL,
     source TEXT,
@@ -222,24 +222,29 @@ CREATE TABLE tb_ghg_activity_data (
     value DECIMAL NOT NULL,
     unit TEXT NOT NULL,
     emission_factor_id UUID REFERENCES tb_ghg_emission_factor(id),
-    co2eq DECIMAL GENERATED ALWAYS AS (
-        CASE
-            WHEN emission_factor_id IS NOT NULL
-            THEN value * (SELECT factor FROM tb_ghg_emission_factor WHERE id = emission_factor_id)
-            ELSE NULL
-        END
-    ) STORED,
+    co2eq DECIMAL,
     period_start DATE NOT NULL,
     period_end DATE NOT NULL,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4.2b 활동자료 FK (별도 ALTER)
-ALTER TABLE tb_ghg_activity_data
-    ADD CONSTRAINT fk_ghg_activity_factor
-    FOREIGN KEY (emission_factor_id)
-    REFERENCES tb_ghg_emission_factor(id);
+CREATE OR REPLACE FUNCTION calculate_co2eq()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.emission_factor_id IS NOT NULL THEN
+        NEW.co2eq := NEW.value * (SELECT factor FROM tb_ghg_emission_factor WHERE id = NEW.emission_factor_id);
+    ELSE
+        NEW.co2eq := NULL;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_calculate_co2eq
+    BEFORE INSERT OR UPDATE ON tb_ghg_activity_data
+    FOR EACH ROW
+    EXECUTE FUNCTION calculate_co2eq();
 
 -- 4.3 GHG 집계 (뷰)
 CREATE VIEW vw_ghg_summary AS
@@ -252,6 +257,25 @@ SELECT
 FROM tb_ghg_activity_data
 WHERE co2eq IS NOT NULL
 GROUP BY assessment_id, scope, scope2_method;
+
+-- 4.4 배출계수 시드 데이터
+INSERT INTO tb_ghg_emission_factor (energy_type, scope, scope2_method, factor, unit, source) VALUES
+    ('electricity', 2, 'location-based', 0.4781, 'tCO2eq/MWh', 'KEPCO 2024'),
+    ('electricity', 2, 'market-based', 0.3542, 'tCO2eq/MWh', 'KEPCO 2024 (REC)'),
+    ('natural_gas', 1, NULL, 0.202, 'tCO2eq/MWh', 'IPCC'),
+    ('diesel', 1, NULL, 2.68, 'tCO2eq/kL', 'IPCC'),
+    ('gasoline', 1, NULL, 2.31, 'tCO2eq/kL', 'IPCC'),
+    ('water', 3, NULL, 0.00034, 'tCO2eq/ton', 'K-Water 2024'),
+    ('waste', 3, NULL, 0.42, 'tCO2eq/ton', 'ME 2024'),
+    ('business_travel', 3, NULL, 0.255, 'tCO2eq/km', 'DEFRA 2024 (항공)'),
+    ('commuting', 3, NULL, 0.15, 'tCO2eq/km', 'ME 2024 (자동차)'),
+    ('transportation', 3, NULL, 0.062, 'tCO2eq/tkm', 'GLEC 2024'),
+    ('purchased_goods', 3, NULL, 1.2, 'tCO2eq/ton', 'ECOFYS 2024'),
+    ('capital_goods', 3, NULL, 0.8, 'tCO2eq/ton', 'ECOFYS 2024'),
+    ('fuel_related', 3, NULL, 0.89, 'tCO2eq/MWh', 'IPCC'),
+    ('upstream_transport', 3, NULL, 0.048, 'tCO2eq/tkm', 'GLEC 2024'),
+    ('waste_generated', 3, NULL, 0.58, 'tCO2eq/ton', 'ME 2024')
+ON CONFLICT DO NOTHING;
 
 -- ============================================================
 -- 5. AI 보고서 테이블
@@ -267,7 +291,7 @@ CREATE TABLE tb_ai_report_draft (
     ver_status TEXT NOT NULL DEFAULT 'pending' CHECK (ver_status IN ('pending','pass','fail')),
     ver_result JSONB,
     ver_date TIMESTAMPTZ,
-    human_status TEXT NOT NULL DEFAULT 'pending' CHECK (human_status IN ('pending','approved','rejected','revision_requested')),
+    human_status TEXT NOT NULL DEFAULT 'pending' CHECK (human_status IN ('pending','approved','rejected','revision_requested','blocked','escalated')),
     human_reviewer UUID REFERENCES tb_user(id),
     human_reviewed_at TIMESTAMPTZ,
     human_feedback TEXT,
@@ -381,7 +405,7 @@ CREATE TRIGGER trg_validate_verification
 -- 10. 시드 데이터: EcoVadis 등급 기준 (2025~2026)
 -- ============================================================
 
-INSERT INTO tb_rating_threshold (authority_code, year, grade, min_score, max_score) VALUES
+INSERT INTO tb_rating_threshold (authority_code, year, rating, min_score, max_score) VALUES
     ('ECOVADIS', 2025, 'Platinum', 78, 100),
     ('ECOVADIS', 2025, 'Gold', 68, 77.99),
     ('ECOVADIS', 2025, 'Silver', 59, 67.99),
@@ -446,14 +470,18 @@ INSERT INTO tb_indicator_master (indicator_code, agency_code, theme_code, indica
     ('EV-ENV-OPS', 'ECOVADIS', 'Environment', '사업장 운영 환경영향(에너지·GHG·용수·생물다양성·오염)', 'ACTION', true, true),
     ('EV-ENV-PRD', 'ECOVADIS', 'Environment', '제품 사용·폐기 영향', 'ACTION', false, true),
     ('EV-ENV-CERT', 'ECOVADIS', 'Environment', '환경 인증(ISO14001 등)', 'ACTION', false, false),
-    ('EV-ENV-RES', 'ECOVADIS', 'Environment', '환경성과 보고', 'RESULT', true, false)
+    ('EV-ENV-RES', 'ECOVADIS', 'Environment', '환경성과 보고', 'RESULT', true, false),
+    ('EV-ENV-ANO', 'ECOVADIS', 'Environment', '대기·소음·악취', 'RESULT', false, false)
 ON CONFLICT (indicator_code) DO NOTHING;
 
 -- LHR (노동·인권)
 INSERT INTO tb_indicator_master (indicator_code, agency_code, theme_code, indicator_name, pillar_type, scope2_split_required, materiality_optional) VALUES
     ('EV-LHR-POL', 'ECOVADIS', 'Labor & Human Rights', '인권·노동 정책', 'POLICY', false, false),
     ('EV-LHR-HRM', 'ECOVADIS', 'Labor & Human Rights', '인적자원관리(재해예방/교육/근로조건)', 'ACTION', false, false),
+    ('EV-LHR-SD', 'ECOVADIS', 'Labor & Human Rights', '사회적 대화(노사협의/직원참여)', 'ACTION', false, false),
     ('EV-LHR-HR', 'ECOVADIS', 'Labor & Human Rights', '인권(노동법준수/다양성/차별금지)', 'ACTION', false, false),
+    ('EV-LHR-CS', 'ECOVADIS', 'Labor & Human Rights', '경력·숙련도(직업훈련/역량개발)', 'ACTION', false, false),
+    ('EV-LHR-CLL', 'ECOVADIS', 'Labor & Human Rights', '아동·강제노동 방지', 'ACTION', false, false),
     ('EV-LHR-RES', 'ECOVADIS', 'Labor & Human Rights', '노동·인권 성과 보고', 'RESULT', false, false)
 ON CONFLICT (indicator_code) DO NOTHING;
 
@@ -462,7 +490,8 @@ INSERT INTO tb_indicator_master (indicator_code, agency_code, theme_code, indica
     ('EV-ETH-POL', 'ECOVADIS', 'Ethics', '윤리·반부패 정책', 'POLICY', false, false),
     ('EV-ETH-COR', 'ECOVADIS', 'Ethics', '부패방지 조치', 'ACTION', false, false),
     ('EV-ETH-COMP', 'ECOVADIS', 'Ethics', '공정경쟁(반경쟁행위 방지)', 'ACTION', false, false),
-    ('EV-ETH-INFO', 'ECOVADIS', 'Ethics', '정보관리 책임(정보보안)', 'ACTION', false, false)
+    ('EV-ETH-INFO', 'ECOVADIS', 'Ethics', '정보관리 책임(정보보안)', 'ACTION', false, false),
+    ('EV-ETH-ANT', 'ECOVADIS', 'Ethics', '독점금지(공정거래)', 'ACTION', false, false)
 ON CONFLICT (indicator_code) DO NOTHING;
 
 -- SP (지속가능한 조달)
@@ -533,6 +562,8 @@ FROM (VALUES
     ('EV-ENV-OPS', 'KSSB1-MET', 'indirect', 'medium'),
     ('EV-ETH-INFO', 'KSSB1-GOV', 'indirect', 'medium'),
     ('EV-LHR-HR', 'KSSB1-RISK', 'direct', 'high'),
+    ('EV-LHR-SD', 'KSSB1-MET', 'expanded', 'medium'),
+    ('EV-LHR-CS', 'KSSB1-STRAT', 'expanded', 'medium'),
     ('EV-SP-POL', 'KSSB1-RISK', 'indirect', 'medium')
 ) AS m(src_code, tgt_code, type, conf)
 JOIN tb_indicator_master s ON s.agency_code='ECOVADIS' AND s.indicator_code=m.src_code
@@ -758,6 +789,11 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_no_ai_emission
+    BEFORE INSERT OR UPDATE ON tb_ghg_activity_data
+    FOR EACH ROW
+    EXECUTE FUNCTION check_no_ai_generated_emission();
 
 -- ============================================================
 -- 완료 (v1.1 스키마)

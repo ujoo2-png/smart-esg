@@ -108,7 +108,7 @@ async function login(username, password) {
   const user = Store.getUsers().find(u => u.username === username)
   if (!user) return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
   const pwHash = await Store.hashPassword(password)
-  const pwMatch = user.password === pwHash || user.password === btoa(password)
+  const pwMatch = user.password === pwHash
   if (!pwMatch) return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
   if (user.status !== 'active') return { error: '관리자 승인 대기 중입니다. 관리자에게 문의하세요.' }
 
@@ -424,5 +424,5 @@ function applyAuthUI() {
   document.getElementById('login-btn-top').style.display = user ? 'none' : 'inline-block'
   document.getElementById('logout-btn-top').style.display = user ? 'inline-block' : 'none'
   document.body.classList.toggle('viewer-mode', user && user.role === 'viewer')
-  if (user) applyNavRoles()
+  if (user) { applyNavRoles(); if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); if (typeof Store !== 'undefined') Store.checkDeadlines() }
 }

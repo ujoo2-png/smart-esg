@@ -76,10 +76,17 @@ const Evidence = {
 
     return evidences.map(ev => {
       const masked = { ...ev }
-      if (userRole !== 'admin' && SENSITIVE_FIELDS[ev.category]) {
-        SENSITIVE_FIELDS[ev.category].forEach(field => {
-          if (masked[field]) masked[field] = '***'
-        })
+      if (userRole !== 'admin') {
+        const cat = ev.category || (ev.contains_sensitive_data ? 'default' : null)
+        if (cat && SENSITIVE_FIELDS[cat]) {
+          SENSITIVE_FIELDS[cat].forEach(field => {
+            if (masked[field]) masked[field] = '***'
+          })
+        }
+        if (ev.contains_sensitive_data && !cat) {
+          if (masked.summary) masked.summary = masked.summary.substring(0, 20) + '***'
+          if (masked.title) masked.title = masked.title.substring(0, 10) + '***'
+        }
       }
       return masked
     })

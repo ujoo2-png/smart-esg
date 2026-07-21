@@ -90,7 +90,7 @@ const Report = {
         html += `<div class="section">
 <h3>${ind.indicator_code} - ${ind.indicator_name}</h3>
 <table>
-  <tr><th style="width:80px">점수</th><td style="width:80px">${item.score ?? '-'}</td><th style="width:80px">가중치</th><td>${item.weight_pct ?? item.weight ?? '-'}</td></tr>
+  <tr><th style="width:80px">점수</th><td style="width:80px">${item.score ?? '-'}</td><th style="width:80px">가중치</th><td>${item.weight ?? '-'}</td></tr>
 </table>`
         if (ind.scope2_split_required && hasGHGData) {
           html += `<div class="scope-box"><strong>Scope2 분할:</strong> `

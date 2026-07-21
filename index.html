@@ -52,6 +52,16 @@
         <span id="user-info">로그인 필요</span>
         <button id="login-btn-top" onclick="showAuthModal('login')" style="display:none">로그인</button>
         <button id="logout-btn-top" onclick="doLogoutUI()" style="display:none">로그아웃</button>
+        <div id="notif-wrapper" style="position:relative;display:none">
+          <button id="notif-btn" title="알림" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px;position:relative" onclick="toggleNotifPanel()">🔔<span id="notif-badge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 5px;display:none;min-width:16px;text-align:center"></span></button>
+          <div id="notif-panel" class="hidden" style="position:absolute;top:100%;right:0;width:360px;max-height:400px;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:1000;overflow-y:auto;margin-top:8px">
+            <div style="padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:600;font-size:13px">알림</span>
+              <button onclick="markAllRead()" style="background:none;border:none;color:#7C3AED;font-size:11px;cursor:pointer">전체 읽음</button>
+            </div>
+            <div id="notif-list"></div>
+          </div>
+        </div>
         <button id="help-btn" title="도움말" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px" onclick="toggleHelp()">❓</button>
         <button id="export-btn" title="데이터 내보내기" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px" onclick="showExportModal()">📥</button>
       </div>

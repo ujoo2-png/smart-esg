@@ -8,6 +8,14 @@ const ENERGY_LABELS = {
   gasoline: '휘발유',
   water: '용수',
   waste: '폐기물',
+  business_travel: '업무출장',
+  commuting: '출퇴근',
+  transportation: '운송·물류',
+  purchased_goods: '구매재화',
+  capital_goods: '자본재',
+  fuel_related: '연료관련활동',
+  upstream_transport: '상향운송',
+  waste_generated: '생성폐기물',
   other: '기타'
 }
 
@@ -27,7 +35,15 @@ const GHG = {
       { energy_type: 'diesel', scope: 1, scope2_method: null, factor: 2.68, unit: 'tCO2eq/kL', source: 'IPCC' },
       { energy_type: 'gasoline', scope: 1, scope2_method: null, factor: 2.31, unit: 'tCO2eq/kL', source: 'IPCC' },
       { energy_type: 'water', scope: 3, scope2_method: null, factor: 0.00034, unit: 'tCO2eq/ton', source: 'K-Water 2024' },
-      { energy_type: 'waste', scope: 3, scope2_method: null, factor: 0.42, unit: 'tCO2eq/ton', source: 'ME 2024' }
+      { energy_type: 'waste', scope: 3, scope2_method: null, factor: 0.42, unit: 'tCO2eq/ton', source: 'ME 2024' },
+      { energy_type: 'business_travel', scope: 3, scope2_method: null, factor: 0.255, unit: 'tCO2eq/km', source: 'DEFRA 2024 (항공)' },
+      { energy_type: 'commuting', scope: 3, scope2_method: null, factor: 0.15, unit: 'tCO2eq/km', source: 'ME 2024 (자동차)' },
+      { energy_type: 'transportation', scope: 3, scope2_method: null, factor: 0.062, unit: 'tCO2eq/tkm', source: 'GLEC 2024' },
+      { energy_type: 'purchased_goods', scope: 3, scope2_method: null, factor: 1.2, unit: 'tCO2eq/ton', source: 'ECOFYS 2024' },
+      { energy_type: 'capital_goods', scope: 3, scope2_method: null, factor: 0.8, unit: 'tCO2eq/ton', source: 'ECOFYS 2024' },
+      { energy_type: 'fuel_related', scope: 3, scope2_method: null, factor: 0.89, unit: 'tCO2eq/MWh', source: 'IPCC' },
+      { energy_type: 'upstream_transport', scope: 3, scope2_method: null, factor: 0.048, unit: 'tCO2eq/tkm', source: 'GLEC 2024' },
+      { energy_type: 'waste_generated', scope: 3, scope2_method: null, factor: 0.58, unit: 'tCO2eq/ton', source: 'ME 2024' }
     ]
     defaults.forEach(f => Store.addGHGFactor(f))
     this.factors = Store.getGHGFactors()
@@ -52,6 +68,9 @@ const GHG = {
     const entry = {
       id: Date.now(),
       ...data,
+      period_start: data.period_start || null,
+      period_end: data.period_end || null,
+      notes: data.notes || '',
       emission_factor_id: factor?.id ?? null,
       co2eq: factor ? data.value * factor.factor : null,
       created_at: new Date().toISOString()

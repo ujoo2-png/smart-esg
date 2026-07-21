@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.5.9'
+const APP_VERSION = 'v1.7.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -107,14 +107,14 @@ const Store = {
     if (!d.indicatorGroups?.length) this._seedIndicatorsOnly()
     if (!d.weightParams?.length) {
       d.weightParams = [
-        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'ENV', weight_pct: 25, year: 2026 },
-        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'LHR', weight_pct: 25, year: 2026 },
-        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'ETH', weight_pct: 25, year: 2026 },
-        { id: _ts(), authority_code: 'ECOVADIS', group_code: 'SP', weight_pct: 25, year: 2026 },
-        { id: _ts(), authority_code: 'KSSB', group_code: 'KSSB', weight_pct: 100, year: 2026 },
-        { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'POLICY', weight_pct: 25, year: 2026 },
-        { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'ACTION', weight_pct: 40, year: 2026 },
-        { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'RESULT', weight_pct: 35, year: 2026 }
+        { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'ENV', weight: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'LHR', weight: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'ETH', weight: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'SP', weight: 25, year: 2026 },
+        { id: _ts(), authority_code: 'KSSB', theme_code: 'KSSB', weight: 100, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', theme_code: '_PILLAR', pillar: 'POLICY', weight: 25, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', theme_code: '_PILLAR', pillar: 'ACTION', weight: 40, year: 2026 },
+        { id: _ts(), authority_code: 'ECOVADIS', theme_code: '_PILLAR', pillar: 'RESULT', weight: 35, year: 2026 }
       ]
     }
     if (!d.ratingThresholds?.length) {
@@ -154,16 +154,15 @@ const Store = {
     const _ts = () => Date.now() + Math.random()
     const findInd = (auth, code) => d.indicators.find(i => i.authority_code === auth && i.indicator_code === code)
     const mappingData = [
-      ['ECOVADIS', 'EV-ENV-POL', 'KSSB', 'KSSB1-STRAT', 'direct', 'high'],
-      ['ECOVADIS', 'EV-ENV-OPS', 'KSSB', 'KSSB2-MET', 'direct', 'high'],
-      ['ECOVADIS', 'EV-ENV-OPS', 'KSSB', 'KSSB2-RISK', 'expanded', 'medium'],
-      ['ECOVADIS', 'EV-ENV-RES', 'KSSB', 'KSSB2-MET', 'direct', 'high'],
-      ['ECOVADIS', 'EV-LHR-POL', 'KSSB', 'KSSB1-STRAT', 'direct', 'medium'],
-      ['ECOVADIS', 'EV-LHR-HR', 'KSSB', 'KSSB1-MET', 'expanded', 'medium'],
+      ['ECOVADIS', 'EV-ENV-OPS', 'KSSB', 'KSSB2-MET', 'expanded', 'high'],
+      ['ECOVADIS', 'EV-ENV-POL', 'KSSB', 'KSSB1-GOV', 'expanded', 'high'],
+      ['ECOVADIS', 'EV-ENV-POL', 'KSSB', 'KSSB1-STRAT', 'expanded', 'high'],
+      ['ECOVADIS', 'EV-ENV-OPS', 'KSSB', 'KSSB1-MET', 'indirect', 'medium'],
+      ['ECOVADIS', 'EV-ETH-INFO', 'KSSB', 'KSSB1-GOV', 'indirect', 'medium'],
+      ['ECOVADIS', 'EV-LHR-HR', 'KSSB', 'KSSB1-RISK', 'direct', 'high'],
       ['ECOVADIS', 'EV-LHR-SD', 'KSSB', 'KSSB1-MET', 'expanded', 'medium'],
       ['ECOVADIS', 'EV-LHR-CS', 'KSSB', 'KSSB1-STRAT', 'expanded', 'medium'],
-      ['ECOVADIS', 'EV-ETH-POL', 'KSSB', 'KSSB1-GOV', 'direct', 'high'],
-      ['ECOVADIS', 'EV-SP-POL', 'KSSB', 'KSSB1-STRAT', 'indirect', 'low'],
+      ['ECOVADIS', 'EV-SP-POL', 'KSSB', 'KSSB1-RISK', 'indirect', 'medium'],
       ['ECOVADIS', 'EV-ENV-POL', 'KCGS', 'KCGS-ENV', 'direct', 'high'],
       ['ECOVADIS', 'EV-LHR-POL', 'KCGS', 'KCGS-SOC', 'direct', 'high'],
       ['ECOVADIS', 'EV-LHR-SD', 'KCGS', 'KCGS-SOC', 'direct', 'medium'],
@@ -207,13 +206,13 @@ const Store = {
     const addGroup = (auth, code, name) => { const id = _ts(); d.indicatorGroups.push({ id, authority_code: auth, group_code: code, group_name: name, sort_order: d.indicatorGroups.length + 1 }); return id }
     const addInd = (gid, auth, code, name, pillar, opts = {}) => { d.indicators.push({ id: _ts(), group_id: gid, authority_code: auth, indicator_code: code, indicator_name: name, pillar, is_active: true, sort_order: d.indicators.length + 1, dept_code: '', review_cycle: 'annual', scope2_split_required: false, materiality_optional: false, ...opts }) }
 
-    const evEnv = addGroup('ECOVADIS', 'ENV', '환경')
-    const evLhr = addGroup('ECOVADIS', 'LHR', '노동·인권')
-    const evEth = addGroup('ECOVADIS', 'ETH', '윤리')
-    const evSp = addGroup('ECOVADIS', 'SP', '지속가능한 조달')
+    const evEnv = addGroup('ECOVADIS', 'ENV', '환경 (Environment)')
+    const evLhr = addGroup('ECOVADIS', 'LHR', '노동·인권 (Labor & Human Rights)')
+    const evEth = addGroup('ECOVADIS', 'ETH', '윤리 (Ethics)')
+    const evSp = addGroup('ECOVADIS', 'SP', '지속가능한 조달 (Sustainable Procurement)')
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-POL', '환경방침', 'POLICY')
-    addInd(evEnv, 'ECOVADIS', 'EV-ENV-OPS', '사업장 운영 환경영향', 'ACTION', { scope2_split_required: true })
-    addInd(evEnv, 'ECOVADIS', 'EV-ENV-PRD', '제품 사용·폐기 영향', 'ACTION')
+    addInd(evEnv, 'ECOVADIS', 'EV-ENV-OPS', '사업장 운영 환경영향', 'ACTION', { scope2_split_required: true, materiality_optional: true })
+    addInd(evEnv, 'ECOVADIS', 'EV-ENV-PRD', '제품 사용·폐기 영향', 'ACTION', { materiality_optional: true })
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-CERT', '환경 인증(ISO14001 등)', 'ACTION')
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-RES', '환경성과 보고', 'RESULT', { scope2_split_required: true })
     addInd(evEnv, 'ECOVADIS', 'EV-ENV-ANO', '대기·소음·악취', 'RESULT')
@@ -222,11 +221,13 @@ const Store = {
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-SD', '사회적 대화', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-HR', '인권(노동법준수/다양성)', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-CS', '경력·숙련도', 'ACTION')
+    addInd(evLhr, 'ECOVADIS', 'EV-LHR-CLL', '아동·강제노동 방지', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-RES', '노동·인권 성과 보고', 'RESULT')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-POL', '윤리·반부패 정책', 'POLICY')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-COR', '부패방지 조치', 'ACTION')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-COMP', '공정경쟁', 'ACTION')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-INFO', '정보관리 책임', 'ACTION')
+    addInd(evEth, 'ECOVADIS', 'EV-ETH-ANT', '독점금지(공정거래)', 'ACTION')
     addInd(evSp, 'ECOVADIS', 'EV-SP-POL', '지속가능조달 정책', 'POLICY')
     addInd(evSp, 'ECOVADIS', 'EV-SP-ENV', '공급사 환경실사', 'ACTION')
     addInd(evSp, 'ECOVADIS', 'EV-SP-SOC', '공급사 사회실사', 'ACTION')
@@ -296,7 +297,9 @@ const Store = {
       riskRegister: [],
       agencyMaster: [],
       issa_assurance: null,
-      submissions: []
+      submissions: [],
+      notifications: [],
+      autoTagRules: []
     }
   },
 
@@ -322,12 +325,14 @@ const Store = {
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-SD',   '사회적 대화(노사협의/직원참여)', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-HR',   '인권(노동법준수/다양성/차별금지)', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-CS',   '경력·숙련도(직업훈련/역량개발)', 'ACTION')
+    addInd(evLhr, 'ECOVADIS', 'EV-LHR-CLL',  '아동·강제노동 방지', 'ACTION')
     addInd(evLhr, 'ECOVADIS', 'EV-LHR-RES',  '노동·인권 성과 보고', 'RESULT')
 
     addInd(evEth, 'ECOVADIS', 'EV-ETH-POL',  '윤리·반부패 정책', 'POLICY')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-COR',  '부패방지 조치', 'ACTION')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-COMP', '공정경쟁(반경쟁행위 방지)', 'ACTION')
     addInd(evEth, 'ECOVADIS', 'EV-ETH-INFO', '정보관리 책임(정보보안)', 'ACTION')
+    addInd(evEth, 'ECOVADIS', 'EV-ETH-ANT',  '독점금지(공정거래)', 'ACTION')
 
     addInd(evSp, 'ECOVADIS', 'EV-SP-POL',   '지속가능조달 정책', 'POLICY')
     addInd(evSp, 'ECOVADIS', 'EV-SP-ENV',   '공급사 환경실사', 'ACTION')
@@ -363,11 +368,11 @@ const Store = {
     )
 
     this._data.maskingRules.push(
-      { id: 1, field_name: '급여', masking_type: '전체마스킹', applies_to_ai_api: true },
-      { id: 2, field_name: '징계이력', masking_type: '전체마스킹', applies_to_ai_api: true },
-      { id: 3, field_name: '내부고발자명', masking_type: '전체마스킹', applies_to_ai_api: true },
-      { id: 4, field_name: '직원명', masking_type: '부분마스킹', applies_to_ai_api: true },
-      { id: 5, field_name: '계약금액', masking_type: '집계치만허용', applies_to_ai_api: false }
+      { id: 1, field_name: 'salary', masking_type: 'FULL', applies_to_ai_api: true },
+      { id: 2, field_name: 'discipline_history', masking_type: 'FULL', applies_to_ai_api: true },
+      { id: 3, field_name: 'whistleblower_name', masking_type: 'FULL', applies_to_ai_api: true },
+      { id: 4, field_name: 'employee_name', masking_type: 'PARTIAL', applies_to_ai_api: true },
+      { id: 5, field_name: 'contract_amount', masking_type: 'AGGREGATE_ONLY', applies_to_ai_api: false }
     )
 
     const kssb1Id = addGroup('KSSB', 'KSSB1', '일반사항 (제1호)')
@@ -408,20 +413,20 @@ const Store = {
     addInd(kesgGId, 'K-ESG', 'KESG-G2', '정보공개', 'RESULT')
 
     this._data.weightParams.push(
-      { id: _ts(), authority_code: 'ECOVADIS', group_code: 'ENV', weight_pct: 25, year: 2026 },
-      { id: _ts(), authority_code: 'ECOVADIS', group_code: 'LHR', weight_pct: 25, year: 2026 },
-      { id: _ts(), authority_code: 'ECOVADIS', group_code: 'ETH', weight_pct: 25, year: 2026 },
-      { id: _ts(), authority_code: 'ECOVADIS', group_code: 'SP',  weight_pct: 25, year: 2026 },
-      { id: _ts(), authority_code: 'KSSB',     group_code: 'KSSB', weight_pct: 100, year: 2026 },
-      { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'POLICY', weight_pct: 25, year: 2026 },
-      { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'ACTION', weight_pct: 40, year: 2026 },
-      { id: _ts(), authority_code: 'ECOVADIS', group_code: '_PILLAR', pillar: 'RESULT', weight_pct: 35, year: 2026 }
+      { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'ENV', weight: 25, year: 2026 },
+      { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'LHR', weight: 25, year: 2026 },
+      { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'ETH', weight: 25, year: 2026 },
+      { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'SP',  weight: 25, year: 2026 },
+      { id: _ts(), authority_code: 'KSSB',     theme_code: 'KSSB', weight: 100, year: 2026 },
+      { id: _ts(), authority_code: 'ECOVADIS', theme_code: '_PILLAR', pillar: 'POLICY', weight: 25, year: 2026 },
+      { id: _ts(), authority_code: 'ECOVADIS', theme_code: '_PILLAR', pillar: 'ACTION', weight: 40, year: 2026 },
+      { id: _ts(), authority_code: 'ECOVADIS', theme_code: '_PILLAR', pillar: 'RESULT', weight: 35, year: 2026 }
     )
     this._data.ratingThresholds.push(
-      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Platinum', min_score: 78, max_score: 100, year: 2026, effective_from: '2026-01-01' },
-      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Gold', min_score: 68, max_score: 77, year: 2026, effective_from: '2026-01-01' },
-      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Silver', min_score: 54, max_score: 67, year: 2026, effective_from: '2026-01-01' },
-      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Bronze', min_score: 37, max_score: 53, year: 2026, effective_from: '2026-01-01' },
+      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Platinum', min_score: 82, max_score: 100, year: 2026, effective_from: '2026-01-01' },
+      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Gold', min_score: 72, max_score: 81.99, year: 2026, effective_from: '2026-01-01' },
+      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Silver', min_score: 63, max_score: 71.99, year: 2026, effective_from: '2026-01-01' },
+      { id: _ts(), authority_code: 'ECOVADIS', rating: 'Bronze', min_score: 54, max_score: 62.99, year: 2026, effective_from: '2026-01-01' },
       { id: _ts(), authority_code: 'KSSB', rating: '우수', min_score: 80, max_score: 100, year: 2026, effective_from: '2026-02-26' },
       { id: _ts(), authority_code: 'KSSB', rating: '양호', min_score: 60, max_score: 79, year: 2026, effective_from: '2026-02-26' },
       { id: _ts(), authority_code: 'KSSB', rating: '보통', min_score: 40, max_score: 59, year: 2026, effective_from: '2026-02-26' },
@@ -503,9 +508,9 @@ const Store = {
     })
 
     this._data.projectBudget.push(
-      { id: _ts(), project_name: 'Smart ESG 시스템 구축', category: '시스템', planned_amount: 50000000, actual_amount: 35000000, status: 'in_progress', period: '1단계', start_date: '2026-01-01', end_date: '2026-12-31', notes: '' },
-      { id: _ts(), project_name: 'ESG 교육 컨설팅', category: '외부컨설팅', planned_amount: 15000000, actual_amount: 8000000, status: 'in_progress', period: '2단계', start_date: '2026-03-01', end_date: '2026-09-30', notes: '' },
-      { id: _ts(), project_name: 'GHG 측정 시스템 도입', category: '인프라', planned_amount: 20000000, actual_amount: 0, status: 'planned', period: '3단계', start_date: '2026-06-01', end_date: '2026-12-31', notes: '' }
+      { id: _ts(), project_name: 'Smart ESG 시스템 구축', category: 'system', planned_amount: 50000000, actual_amount: 35000000, status: 'in_progress', start_date: '2026-01-01', end_date: '2026-12-31', notes: '' },
+      { id: _ts(), project_name: 'ESG 교육 컨설팅', category: 'consulting', planned_amount: 15000000, actual_amount: 8000000, status: 'in_progress', start_date: '2026-03-01', end_date: '2026-09-30', notes: '' },
+      { id: _ts(), project_name: 'GHG 측정 시스템 도입', category: 'system', planned_amount: 20000000, actual_amount: 0, status: 'planned', start_date: '2026-06-01', end_date: '2026-12-31', notes: '' }
     )
 
     this._data.riskRegister.push(
@@ -520,12 +525,43 @@ const Store = {
       { id: _ts(), name: '스마트물산', industry: '도매업', ceo: '박지민', employee_count: 200, revenue: 12000, phone: '051-555-1234', email: 'smart@smartmul.kr', last_vsme_grade: 'C', last_vsme_score: 48, last_vsme_date: '2026-02-10', created_at: new Date().toISOString() }
     )
 
+    this._seedAutoTagRules()
+
     this._save()
   },
 
   _save() {
     localStorage.setItem(STORE_KEY, JSON.stringify(this._data))
     this._notify()
+    this._sbSync()
+  },
+
+  async _sbSync() {
+    const sb = getSupabase ? getSupabase() : null
+    if (!sb) return
+    const now = Date.now()
+    if (this._lastSync && now - this._lastSync < 3000) return
+    this._lastSync = now
+    const deleted = this._getDeletedIds()
+    const tbMap = { assessments:'tb_assessment', assessmentItems:'tb_assessment_item', evidences:'tb_evidence', evidenceTags:'tb_evidence_tag', aiDrafts:'tb_ai_report_draft', aiVerificationLogs:'tb_ai_verification_log', users:'tb_user', companies:'tb_company', departments:'tb_department', indicators:'tb_indicator', indicatorGroups:'tb_indicator_group', indicatorMappings:'tb_indicator_mapping', ghgFactors:'tb_ghg_emission_factor', ghgActivities:'tb_ghg_activity_data', ghgSummary:'tb_ghg_summary', weightParams:'tb_weight_param', ratingThresholds:'tb_rating_threshold', maskingRules:'tb_data_masking_rule', projectBudget:'tb_project_budget', riskRegister:'tb_risk_register', agencyMaster:'tb_agency_master' }
+    const tables = Object.keys(tbMap)
+    for (const table of tables) {
+      try {
+        const tb = tbMap[table]
+        if (deleted[table]?.length) {
+          await sb.from(tb).delete().in('id', deleted[table])
+          deleted[table] = []
+        }
+        const rows = this._data[table]
+        if (rows?.length) {
+          const chunk = rows.slice(-50)
+          await sb.from(tb).upsert(chunk, { onConflict: 'id' })
+        }
+      } catch (e) { console.warn(`_sbSync ${table} 실패:`, e.message) }
+    }
+    if (Object.keys(deleted).some(k => deleted[k]?.length)) {
+      localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(deleted))
+    }
   },
 
   _notify() {
@@ -564,7 +600,7 @@ const Store = {
 
   // ==== Assessment Items ====
   getAssessmentItems() { return this.data.assessmentItems },
-  addAssessmentItem(item) { this.data.assessmentItems.push({ id: Date.now(), ...item }); this._save(); return item },
+  addAssessmentItem(item) { this.data.assessmentItems.push({ id: Date.now(), evidence_ids: [], due_date: item.due_date || null, assignee_id: item.assignee_id || null, ...item }); this._save(); return item },
   updateAssessmentItem(id, updates) { const i = this.data.assessmentItems.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.assessmentItems[i], updates); this._save() } },
   deleteAssessmentItem(id) { this.data.assessmentItems = this.data.assessmentItems.filter(x => x.id !== id); this._save() },
 
@@ -572,7 +608,7 @@ const Store = {
   getIndicatorGroups() { return this.data.indicatorGroups },
   addIndicatorGroup(g) { this.data.indicatorGroups.push({ id: Date.now(), ...g }); this._save(); return g },
   updateIndicatorGroup(id, updates) { const i = this.data.indicatorGroups.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.indicatorGroups[i], updates); this._save() } },
-  deleteIndicatorGroup(id) { this.data.indicatorGroups = this.data.indicatorGroups.filter(x => x.id !== id); this._save() },
+  deleteIndicatorGroup(id) { this.data.indicatorGroups = this.data.indicatorGroups.filter(x => x.id !== id); this._addDeletedId('indicatorGroups', id); this._save() },
 
   // ==== Indicators ====
   getIndicators() { return this.data.indicators },
@@ -587,7 +623,7 @@ const Store = {
     return ind
   },
   updateIndicator(id, updates) { const i = this.data.indicators.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.indicators[i], updates); this._save() } },
-  deleteIndicator(id) { this.data.indicators = this.data.indicators.filter(x => x.id !== id); this._save() },
+  deleteIndicator(id) { this.data.indicators = this.data.indicators.filter(x => x.id !== id); this._addDeletedId('indicators', id); this._save() },
 
   // ==== Indicator Mappings ====
   getIndicatorMappings() { return this.data.indicatorMappings },
@@ -721,10 +757,181 @@ const Store = {
     if (!this.data[table]) this.data[table] = []
     const existingIds = new Set(this.data[table].map(r => r.id))
     rows.forEach(row => {
-      if (!existingIds.has(row.id) && !this._isDeleted(table, row.id)) {
+      if (this._isDeleted(table, row.id)) return
+      const idx = this.data[table].findIndex(r => r.id === row.id)
+      if (idx > -1) {
+        this.data[table][idx] = { ...row, ...this.data[table][idx] }
+      } else {
         this.data[table].push(row)
         existingIds.add(row.id)
       }
+    })
+    this._save()
+  },
+
+  // ==== Notifications ====
+  getNotifications() { return this.data.notifications || [] },
+  getUnreadNotifications(userId) { return (this.data.notifications || []).filter(n => !n.read && (!userId || n.user_id === userId)) },
+  addNotification(n) { const notif = { id: Date.now(), read: false, created_at: new Date().toISOString(), ...n }; this.data.notifications.push(notif); this._save(); return notif },
+  markNotificationRead(id) { const n = (this.data.notifications || []).find(x => x.id === id); if (n) { n.read = true; this._save() } },
+  markAllNotificationsRead(userId) { (this.data.notifications || []).forEach(n => { if (!userId || n.user_id === userId) n.read = true }); this._save() },
+  clearOldNotifications(days) { const cutoff = Date.now() - (days || 30) * 86400000; this.data.notifications = (this.data.notifications || []).filter(n => new Date(n.created_at).getTime() > cutoff); this._save() },
+
+  // ==== Auto-Tag Rules ====
+  getAutoTagRules() { return this.data.autoTagRules || [] },
+  addAutoTagRule(r) { const rule = { id: Date.now(), enabled: true, ...r }; this.data.autoTagRules.push(rule); this._save(); return rule },
+  deleteAutoTagRule(id) { this.data.autoTagRules = (this.data.autoTagRules || []).filter(r => r.id !== id); this._save() },
+
+  // ==== Auto-Tag Engine ====
+  suggestAutoTags(title, description) {
+    const text = ((title || '') + ' ' + (description || '')).toLowerCase()
+    const rules = (this.data.autoTagRules || []).filter(r => r.enabled !== false)
+    const indicators = this.data.indicators || []
+    const matches = []
+    rules.forEach(rule => {
+      const keywords = (rule.keywords || '').toLowerCase().split(',').map(k => k.trim()).filter(Boolean)
+      if (keywords.some(kw => text.includes(kw))) {
+        const ind = indicators.find(i => i.id === rule.indicator_id)
+        if (ind) matches.push({ indicator_id: ind.id, indicator_code: ind.indicator_code, indicator_name: ind.indicator_name, confidence: rule.confidence || 'medium' })
+      }
+    })
+    const seen = new Set()
+    return matches.filter(m => { if (seen.has(m.indicator_id)) return false; seen.add(m.indicator_id); return true })
+  },
+
+  autoTagEvidence(evidenceId, title, description) {
+    const suggestions = this.suggestAutoTags(title, description)
+    const existing = (this.data.evidenceTags || []).filter(t => t.evidence_id === evidenceId)
+    const existingIds = new Set(existing.map(t => t.indicator_id))
+    let count = 0
+    suggestions.forEach(s => {
+      if (!existingIds.has(s.indicator_id)) {
+        this.data.evidenceTags.push({ id: Date.now() + count, evidence_id: evidenceId, indicator_id: s.indicator_id, is_primary: false, auto_tagged: true })
+        count++
+      }
+    })
+    if (count > 0) this._save()
+    return suggestions
+  },
+
+  // ==== Auto-Link Evidence to Assessment Items ====
+  autoLinkEvidenceToAssessment(evidenceId, assessmentId) {
+    const tags = (this.data.evidenceTags || []).filter(t => t.evidence_id === evidenceId)
+    const items = (this.data.assessmentItems || []).filter(i => i.assessment_id === assessmentId)
+    let linked = 0
+    tags.forEach(tag => {
+      const item = items.find(i => i.indicator_id === tag.indicator_id)
+      if (item) {
+        if (!item.evidence_ids) item.evidence_ids = []
+        if (!item.evidence_ids.includes(evidenceId)) {
+          item.evidence_ids.push(evidenceId)
+          linked++
+        }
+      }
+    })
+    if (linked > 0) this._save()
+    return linked
+  },
+
+  autoLinkAllEvidence(assessmentId) {
+    const evidences = (this.data.evidences || []).filter(e => !assessmentId || e.assessment_id === assessmentId)
+    let total = 0
+    evidences.forEach(ev => {
+      total += this.autoLinkEvidenceToAssessment(ev.id, ev.assessment_id || assessmentId)
+    })
+    return total
+  },
+
+  // ==== Deadline Check ====
+  checkDeadlines() {
+    const now = new Date()
+    const items = this.data.assessmentItems || []
+    const notifications = this.data.notifications || []
+    const existingMsgs = new Set(notifications.filter(n => !n.read).map(n => n.key))
+    let alerts = []
+
+    items.forEach(item => {
+      if (!item.due_date || item.status === 'completed') return
+      const due = new Date(item.due_date)
+      const diffDays = Math.ceil((due - now) / 86400000)
+      const ind = (this.data.indicators || []).find(i => i.id === item.indicator_id)
+      const code = ind ? ind.indicator_code : item.indicator_id
+      const assignee = item.assignee_id ? (this.data.users || []).find(u => u.id === item.assignee_id) : null
+      const assigneeName = assignee ? assignee.name : ''
+
+      if (diffDays < 0) {
+        const key = 'overdue_' + item.id
+        if (!existingMsgs.has(key)) {
+          alerts.push({ type: 'error', key, message: `${code} 마감 초과 (${Math.abs(diffDays)}일 지연)${assigneeName ? ' - ' + assigneeName : ''}`, related_page: 'assessment', related_id: item.assessment_id, user_id: item.assignee_id })
+        }
+      } else if (diffDays <= 3) {
+        const key = 'urgent_' + item.id
+        if (!existingMsgs.has(key)) {
+          alerts.push({ type: 'warning', key, message: `${code} 마감 임박 (D-${diffDays})${assigneeName ? ' - ' + assigneeName : ''}`, related_page: 'assessment', related_id: item.assessment_id, user_id: item.assignee_id })
+        }
+      } else if (diffDays <= 7) {
+        const key = 'soon_' + item.id
+        if (!existingMsgs.has(key)) {
+          alerts.push({ type: 'info', key, message: `${code} 마감 D-${diffDays}${assigneeName ? ' - ' + assigneeName : ''}`, related_page: 'assessment', related_id: item.assessment_id, user_id: item.assignee_id })
+        }
+      }
+
+      if (!item.evidence_ids || item.evidence_ids.length === 0) {
+        const key = 'noev_' + item.id
+        if (!existingMsgs.has(key) && diffDays <= 14) {
+          alerts.push({ type: 'warning', key, message: `${code} 증빙 미연결${assigneeName ? ' - ' + assigneeName : ''}`, related_page: 'assessment', related_id: item.assessment_id, user_id: item.assignee_id })
+        }
+      }
+    })
+
+    alerts.forEach(a => this.addNotification({ type: a.type, key: a.key, message: a.message, related_page: a.related_page, related_id: a.related_id, user_id: a.user_id || null }))
+    return alerts
+  },
+
+  // ==== Workflow Stats ====
+  getWorkflowStats(assessmentId) {
+    const items = (this.data.assessmentItems || []).filter(i => !assessmentId || i.assessment_id === assessmentId)
+    const total = items.length
+    const completed = items.filter(i => i.status === 'completed').length
+    const withEvidence = items.filter(i => i.evidence_ids && i.evidence_ids.length > 0).length
+    const now = new Date()
+    const overdue = items.filter(i => i.due_date && new Date(i.due_date) < now && i.status !== 'completed').length
+    const dueSoon = items.filter(i => { if (!i.due_date || i.status === 'completed') return false; const d = Math.ceil((new Date(i.due_date) - now) / 86400000); return d >= 0 && d <= 7 }).length
+    return { total, completed, withEvidence, overdue, dueSoon, completionPct: total ? Math.round(completed / total * 100) : 0, evidencePct: total ? Math.round(withEvidence / total * 100) : 0 }
+  },
+
+  // ==== Seed Auto-Tag Rules ====
+  _seedAutoTagRules() {
+    if ((this.data.autoTagRules || []).length > 0) return
+    const indicators = this.data.indicators || []
+    const findInd = (code) => indicators.find(i => i.indicator_code === code)
+    const rules = [
+      { keywords: '에너지,전력,가스,연료,난방,냉방', indicator_code: 'EV-ENV-OPS', confidence: 'high' },
+      { keywords: '온실가스,탄소,CO2,GHG,배출량', indicator_code: 'EV-ENV-OPS', confidence: 'high' },
+      { keywords: '용수,물,수자원,폐수', indicator_code: 'EV-ENV-OPS', confidence: 'medium' },
+      { keywords: '폐기,재활용,매립,소각', indicator_code: 'EV-ENV-PRD', confidence: 'medium' },
+      { keywords: 'ISO14001,환경인증,환경경영시스템', indicator_code: 'EV-ENV-CERT', confidence: 'high' },
+      { keywords: '대기,배출,오염,소음,악취', indicator_code: 'EV-ENV-ANO', confidence: 'high' },
+      { keywords: '환경성과,환경보고,환경목표', indicator_code: 'EV-ENV-RES', confidence: 'medium' },
+      { keywords: '환경방침,환경정책', indicator_code: 'EV-ENV-POL', confidence: 'high' },
+      { keywords: '인권,노동,근로,임금,근로시간', indicator_code: 'EV-LHR-HR', confidence: 'high' },
+      { keywords: '인적자원,교육,훈련,역량개발', indicator_code: 'EV-LHR-HRM', confidence: 'medium' },
+      { keywords: '노사,단체교섭,직원참여,협의', indicator_code: 'EV-LHR-SD', confidence: 'high' },
+      { keywords: '승진,경력,성과평가,보상', indicator_code: 'EV-LHR-CS', confidence: 'medium' },
+      { keywords: '인권정책,노동정책', indicator_code: 'EV-LHR-POL', confidence: 'high' },
+      { keywords: '윤리,반부패,청렴,부패', indicator_code: 'EV-ETH-POL', confidence: 'high' },
+      { keywords: '공정경쟁,독점,카르텔', indicator_code: 'EV-ETH-COMP', confidence: 'high' },
+      { keywords: '정보보안,개인정보,보호', indicator_code: 'EV-ETH-INFO', confidence: 'high' },
+      { keywords: '조달,구매,공급사', indicator_code: 'EV-SP-POL', confidence: 'medium' },
+      { keywords: '공급사실사,공급사평가', indicator_code: 'EV-SP-ENV', confidence: 'high' },
+      { keywords: ' Scope', indicator_code: 'KSSB2-MET', confidence: 'high' },
+      { keywords: '기후,기후변화,적응,완화', indicator_code: 'KSSB2-STRAT', confidence: 'medium' },
+      { keywords: '거버넌스,이사회,위원회', indicator_code: 'KSSB1-GOV', confidence: 'medium' },
+      { keywords: '위험관리,리스크관리', indicator_code: 'KSSB1-RISK', confidence: 'medium' }
+    ]
+    rules.forEach(r => {
+      const ind = findInd(r.indicator_code)
+      if (ind) this.data.autoTagRules.push({ id: Date.now() + Math.random(), indicator_id: ind.id, keywords: r.keywords, confidence: r.confidence, enabled: true })
     })
     this._save()
   }
