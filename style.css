@@ -125,6 +125,26 @@ form input:focus,form select:focus { border-color:#7C3AED }
 
 .spinner { width:36px; height:36px; border:3px solid #e8e8ec; border-top-color:#7C3AED; border-radius:50%; animation:spin .7s linear infinite; margin:0 auto }
 @keyframes spin { to { transform:rotate(360deg) } }
+
+.dash-bar { transition: width .8s cubic-bezier(.4,0,.2,1); }
+.dash-bar-init { width: 0 !important; }
+@keyframes fadeSlideUp { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
+.dash-card { animation: fadeSlideUp .4s ease-out both; }
+.dash-card:nth-child(2) { animation-delay:.05s }
+.dash-card:nth-child(3) { animation-delay:.1s }
+.dash-card:nth-child(4) { animation-delay:.15s }
+.dash-card:nth-child(5) { animation-delay:.2s }
+.dash-card:nth-child(6) { animation-delay:.25s }
+.dash-card:nth-child(7) { animation-delay:.3s }
+.dash-card:nth-child(8) { animation-delay:.35s }
+.dash-card:nth-child(9) { animation-delay:.4s }
+.dash-card:nth-child(10) { animation-delay:.45s }
+.dash-card:nth-child(11) { animation-delay:.5s }
+.dash-card:nth-child(12) { animation-delay:.55s }
+@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.05)} }
+.dash-pulse { animation: pulse 2s ease-in-out infinite }
+@keyframes radarIn { from { opacity:0; transform:scale(.8) } to { opacity:1; transform:scale(1) } }
+.radar-svg { animation: radarIn .6s ease-out both; animation-delay:.3s }
 #loading-overlay { display:none }
 
 /* Scrollbar styling */

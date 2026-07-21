@@ -20,71 +20,125 @@ const Dashboard = {
 
     container.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
-        ${this._scoreCard(assessment)}
-        ${this._workflowCard(assessmentId)}
-        ${this._themeRadar(items, groups, assessment.authority_code)}
-        ${this._evidenceCard(evidenceCount)}
-        ${this._draftStatusCard(drafts)}
-        ${this._ghgCard(ghgSummary)}
-        ${this._supplierRiskCard()}
-        ${this._completionCard(items)}
-        ${this._kssbSubmissionCard()}
-        ${this._aiUnapprovedCard(assessmentId)}
-        ${this._budgetProgressCard()}
-        ${this._ghgTrendCard(assessmentId)}
+        <div class="dash-card">${this._scoreCard(assessment)}</div>
+        <div class="dash-card">${this._workflowCard(assessmentId)}</div>
+        <div class="dash-card">${this._themeRadar(items, groups, assessment.authority_code)}</div>
+        <div class="dash-card">${this._evidenceCard(evidenceCount)}</div>
+        <div class="dash-card">${this._draftStatusCard(drafts)}</div>
+        <div class="dash-card">${this._ghgCard(ghgSummary)}</div>
+        <div class="dash-card">${this._supplierRiskCard()}</div>
+        <div class="dash-card">${this._completionCard(items)}</div>
+        <div class="dash-card">${this._kssbSubmissionCard()}</div>
+        <div class="dash-card">${this._aiUnapprovedCard(assessmentId)}</div>
+        <div class="dash-card">${this._budgetProgressCard()}</div>
+        <div class="dash-card">${this._ghgTrendCard(assessmentId)}</div>
       </div>
     `
+    requestAnimationFrame(() => {
+      container.querySelectorAll('.dash-bar-init').forEach(bar => {
+        const w = bar.getAttribute('data-width')
+        bar.style.width = w + '%'
+        bar.classList.remove('dash-bar-init')
+      })
+      container.querySelectorAll('[data-countup]').forEach(el => {
+        const target = parseFloat(el.getAttribute('data-countup'))
+        const suffix = el.getAttribute('data-suffix') || ''
+        const decimals = (el.getAttribute('data-decimals') || '0') | 0
+        const duration = 800
+        const start = performance.now()
+        const animate = (now) => {
+          const progress = Math.min((now - start) / duration, 1)
+          const eased = 1 - Math.pow(1 - progress, 3)
+          const val = (target * eased).toFixed(decimals)
+          el.textContent = val + suffix
+          if (progress < 1) requestAnimationFrame(animate)
+        }
+        requestAnimationFrame(animate)
+      })
+    })
   },
 
   _scoreCard(assessment) {
     const gradeColor = rating => {
-      const colors = { Platinum: '#8e44ad', Gold: '#f1c40f', Silver: '#95a5a6', Bronze: '#d35400' }
+      const colors = { Platinum: '#8e44ad', Gold: '#f1c40f', Silver: '#95a5a6', Bronze: '#d35400', 우수: '#8e44ad', 양호: '#f1c40f', 보통: '#95a5a6', 미흡: '#d35400' }
       return colors[rating] || '#333'
     }
+    const score = assessment.total_score
     return `
 <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
   <h3 style="margin:0 0 12px;font-size:14px;color:#666">총점</h3>
-  <div style="font-size:48px;font-weight:700;color:${gradeColor(assessment.rating)}">${assessment.total_score ?? '-'}</div>
-  <div style="margin-top:8px;color:#666">등급: <strong>${assessment.rating ?? '미평가'}</strong></div>
+  <div style="font-size:48px;font-weight:700;color:${gradeColor(assessment.rating)}" data-countup="${score || 0}" data-decimals="1">0</div>
+  <div style="margin-top:8px;color:#666">등급: <strong style="color:${gradeColor(assessment.rating)}">${assessment.rating ?? '미평가'}</strong></div>
   <div style="margin-top:4px;color:#999;font-size:12px">${assessment.authority_code}</div>
 </div>`
   },
 
   _themeRadar(items, groups, authorityCode) {
     const usePillar = authorityCode === 'ECOVADIS'
-    let scoresHtml = ''
+    let labels = [], values = []
     if (usePillar) {
-      const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.group_code === '_PILLAR')
+      const pillarParams = Store.getWeightParams().filter(w => w.authority_code === 'ECOVADIS' && w.theme_code === '_PILLAR')
       const pillars = ['POLICY', 'ACTION', 'RESULT']
-      scoresHtml = pillars.map(p => {
+      pillars.forEach(p => {
         const pillarItems = items.filter(i => {
           const ind = Store.getIndicators().find(x => x.id === i.indicator_id)
           return ind && ind.pillar === p
         })
         const avg = pillarItems.length
-          ? (pillarItems.reduce((sum, i) => sum + (i.score || 0), 0) / pillarItems.length).toFixed(1)
-          : '-'
-        const pw = pillarParams.find(pp => pp.pillar === p)
-        const label = Indicator.getPillarName(p)
-        return `<div style="margin:4px 0;display:flex;justify-content:space-between"><span style="font-weight:500">${label}</span><span>${avg} <span style="color:#999;font-size:11px">(${pw ? pw.weight + '%' : '-'})</span></span></div>`
-      }).join('')
+          ? pillarItems.reduce((sum, i) => sum + (i.score || 0), 0) / pillarItems.length
+          : 0
+        labels.push(Indicator.getPillarName(p))
+        values.push(avg)
+      })
     } else {
-      scoresHtml = groups.map(g => {
+      groups.forEach(g => {
         const groupItems = items.filter(i => {
           const indicators = Indicator.getIndicators(g.id)
           return indicators.some(ind => ind.id === i.indicator_id)
         })
         const avg = groupItems.length
-          ? (groupItems.reduce((sum, i) => sum + (i.score || 0), 0) / groupItems.length).toFixed(1)
-          : '-'
-        return `<div style="margin:4px 0;display:flex;justify-content:space-between"><span style="font-weight:500">${g.group_name}</span><span>${avg}</span></div>`
-      }).join('')
+          ? groupItems.reduce((sum, i) => sum + (i.score || 0), 0) / groupItems.length
+          : 0
+        labels.push(g.group_name)
+        values.push(avg)
+      })
     }
-
+    const n = labels.length
+    const cx = 130, cy = 110, r = 80
+    const angleStep = (2 * Math.PI) / n
+    const toXY = (i, val) => {
+      const a = angleStep * i - Math.PI / 2
+      const pct = val / 100
+      return [cx + r * pct * Math.cos(a), cy + r * pct * Math.sin(a)]
+    }
+    const gridLevels = [25, 50, 75, 100]
+    let svg = `<svg class="radar-svg" viewBox="0 0 260 230" style="width:100%;max-width:260px;display:block;margin:0 auto">`
+    gridLevels.forEach(lv => {
+      const pts = Array.from({ length: n }, (_, i) => toXY(i, lv).join(',')).join(' ')
+      svg += `<polygon points="${pts}" fill="none" stroke="#e8e8ec" stroke-width="1"/>`
+    })
+    for (let i = 0; i < n; i++) {
+      const [x, y] = toXY(i, 100)
+      svg += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="#e8e8ec" stroke-width="1"/>`
+    }
+    const dataPts = values.map((v, i) => toXY(i, v).join(',')).join(' ')
+    svg += `<polygon points="${dataPts}" fill="rgba(124,58,237,.15)" stroke="#7C3AED" stroke-width="2"/>`
+    values.forEach((v, i) => {
+      const [x, y] = toXY(i, v)
+      svg += `<circle cx="${x}" cy="${y}" r="4" fill="#7C3AED"/>`
+    })
+    labels.forEach((l, i) => {
+      const [x, y] = toXY(i, 115)
+      const anchor = x < cx - 10 ? 'end' : x > cx + 10 ? 'start' : 'middle'
+      svg += `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="11" fill="#666" font-weight="500">${l}</text>`
+      const [vx, vy] = toXY(i, values[i])
+      svg += `<text x="${vx}" y="${vy - 8}" text-anchor="middle" font-size="10" fill="#7C3AED" font-weight="600">${values[i].toFixed(1)}</text>`
+    })
+    svg += `</svg>`
     return `
 <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
-  <h3 style="margin:0 0 12px;font-size:14px;color:#666">${usePillar ? '필러별 점수 (Policy-Action-Result)' : '테마별 점수'}</h3>
-  ${scoresHtml || '<p style="color:#999">데이터 없음</p>'}
+  <h3 style="margin:0 0 12px;font-size:14px;color:#666">${usePillar ? '필러별 점수' : '테마별 점수'}</h3>
+  ${n ? svg : '<p style="color:#999">데이터 없음</p>'}
 </div>`
   },
 
@@ -98,7 +152,7 @@ const Dashboard = {
     <span>외부검증 ${pct}%</span>
   </div>
   <div style="background:#eee;height:8px;border-radius:4px;overflow:hidden">
-    <div style="background:#27ae60;height:100%;width:${pct}%;border-radius:4px"></div>
+    <div class="dash-bar dash-bar-init" data-width="${pct}" style="background:#27ae60;height:100%;width:0%;border-radius:4px"></div>
   </div>
   <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:#666">
     <span>🟡 ${count.self}건 자가</span>
@@ -163,7 +217,7 @@ const Dashboard = {
       return `<div style="margin:4px 0;display:flex;align-items:center;gap:8px;font-size:12px">
         <span style="width:48px;text-align:right;color:#666">${label}</span>
         <div style="flex:1;background:#eee;height:14px;border-radius:7px;overflow:hidden">
-          <div style="background:${color};height:100%;width:${pct}%;border-radius:7px"></div>
+          <div class="dash-bar dash-bar-init" data-width="${pct}" style="background:${color};height:100%;width:0%;border-radius:7px"></div>
         </div>
         <span style="width:28px;font-weight:600;color:${color}">${count}</span>
       </div>`
@@ -187,9 +241,9 @@ const Dashboard = {
     return `
 <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
   <h3 style="margin:0 0 12px;font-size:14px;color:#666">항목 완료율</h3>
-  <div style="font-size:36px;font-weight:700">${pct}%</div>
+  <div style="font-size:36px;font-weight:700" data-countup="${pct}" data-suffix="%">0%</div>
   <div style="background:#eee;height:8px;border-radius:4px;margin:8px 0;overflow:hidden">
-    <div style="background:#27ae60;height:100%;width:${pct}%;border-radius:4px"></div>
+    <div class="dash-bar dash-bar-init" data-width="${pct}" style="background:#27ae60;height:100%;width:0%;border-radius:4px"></div>
   </div>
   <div style="display:flex;justify-content:space-between;font-size:12px;color:#666">
     <span>⬜ ${pending} 대기</span>
@@ -231,12 +285,14 @@ const Dashboard = {
     const totalPlanned = budget.reduce((s, b) => s + (b.planned_amount || 0), 0)
     const totalActual = budget.reduce((s, b) => s + (b.actual_amount || 0), 0)
     const rate = totalPlanned ? Math.round(totalActual / totalPlanned * 100) : 0
+    const barColor = rate > 100 ? '#e74c3c' : rate > 80 ? '#f39c12' : '#27ae60'
+    const cappedRate = Math.min(rate, 100)
     return `
 <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
   <h3 style="margin:0 0 12px;font-size:14px;color:#666">💰 예산 집행률</h3>
-  <div style="font-size:36px;font-weight:700;color:${rate > 100 ? '#e74c3c' : rate > 80 ? '#f39c12' : '#27ae60'}">${totalPlanned ? rate + '%' : '-'}</div>
+  <div style="font-size:36px;font-weight:700;color:${barColor}" data-countup="${totalPlanned ? rate : 0}" data-suffix="%">0%</div>
   <div style="background:#eee;height:8px;border-radius:4px;margin:8px 0;overflow:hidden">
-    <div style="background:${rate > 100 ? '#e74c3c' : rate > 80 ? '#f39c12' : '#27ae60'};height:100%;width:${Math.min(rate, 100)}%;border-radius:4px"></div>
+    <div class="dash-bar dash-bar-init" data-width="${cappedRate}" style="background:${barColor};height:100%;width:0%;border-radius:4px"></div>
   </div>
   <div style="font-size:12px;color:#666">계획: ₩${(totalPlanned/10000).toFixed(0)}만 | 집행: ₩${(totalActual/10000).toFixed(0)}만</div>
 </div>`
@@ -262,7 +318,7 @@ const Dashboard = {
     <div style="margin:6px 0;display:flex;align-items:center;gap:8px;font-size:12px">
       <span style="width:80px;color:#666">${s.label}</span>
       <div style="flex:1;background:#eee;height:16px;border-radius:8px;overflow:hidden">
-        <div style="background:${s.color};height:100%;width:${(s.value/maxVal*100).toFixed(0)}%;border-radius:8px"></div>
+        <div class="dash-bar dash-bar-init" data-width="${(s.value/maxVal*100).toFixed(0)}" style="background:${s.color};height:100%;width:0%;border-radius:8px"></div>
       </div>
       <span style="width:70px;text-align:right;font-weight:500">${s.value.toFixed(1)}</span>
     </div>

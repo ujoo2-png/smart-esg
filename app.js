@@ -3186,6 +3186,7 @@
 
   // ==================== 대시보드 ====================
   let _dashAssId = null
+  function setDashAssessment(id) { _dashAssId = id; renderDashboard() }
   function renderDashboard() {
     const c = document.getElementById('page-dashboard')
     if (!c) return
@@ -3198,7 +3199,7 @@
     _dashAssId = _dashAssId || assessments[0]?.id
     if (!assessments.find(a => a.id === _dashAssId)) _dashAssId = assessments[0]?.id
     const selOpts = assessments.map(a => '<option value="' + a.id + '"' + (a.id === _dashAssId ? ' selected' : '') + '>' + a.title + ' (' + a.assessment_year + '년)</option>').join('')
-    c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0;margin-bottom:16px"><h3 style="margin:0;font-size:16px">📊 대시보드</h3><div style="display:flex;gap:8px;align-items:center"><select id="dashAssSelect" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px" onchange="_dashAssId=parseInt(this.value);renderDashboard()">' + selOpts + '</select></div></div><div id="dashGrid"></div>'
+    c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0;margin-bottom:16px"><h3 style="margin:0;font-size:16px">📊 대시보드</h3><div style="display:flex;gap:8px;align-items:center"><select id="dashAssSelect" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px" onchange="setDashAssessment(Number(this.value))">' + selOpts + '</select></div></div><div id="dashGrid"></div>'
     Dashboard.render('dashGrid', _dashAssId)
   }
 
@@ -3673,6 +3674,7 @@
   window.renderAssessments = renderAssessments
   window.renderIndicators = renderIndicators
   window.renderDashboard = renderDashboard
+  window.setDashAssessment = setDashAssessment
   window.showAssessmentDetail = showAssessmentDetail
   window.renderCompanies = renderCompanies
   window.renderDepartments = renderDepartments
