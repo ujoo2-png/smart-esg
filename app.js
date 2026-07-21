@@ -610,7 +610,7 @@
     const title = el('input', { value: a?.title ?? '' })
     const year = el('input', { type: 'number', value: a?.assessment_year ?? new Date().getFullYear() - 1 })
     const authority = el('select', {},
-      ['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(c => el('option', { value: c, selected: a?.authority_code === c }, Indicator.getAuthorityName(c)))
+      Store.getAgencyMaster().map(ag => el('option', { value: ag.code, selected: a?.authority_code === ag.code }, ag.name))
     )
     form.append(
       el('label', {}, '평가 제목', title),
@@ -682,7 +682,7 @@
     wrapper.append(
       el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
         el('select', { id: 'authSelect', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _selectedAuthority = document.getElementById('authSelect').value; _materialityFilter = 'all'; _indicatorSearch = ''; _selectedIndicators.clear(); renderIndicators() } },
-          ['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(code => el('option', { value: code, selected: code === _selectedAuthority }, Indicator.getAuthorityName(code)))
+          Store.getAgencyMaster().map(ag => el('option', { value: ag.code, selected: ag.code === _selectedAuthority }, ag.name))
         ),
         el('input', { id: 'indSearch', type: 'text', placeholder: '🔍 지표명 또는 코드 검색...', value: _indicatorSearch, style: 'flex:1;min-width:200px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onInput: () => { _indicatorSearch = document.getElementById('indSearch').value; renderIndicators() } }),
         el('select', { id: 'materialityFilter', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _materialityFilter = document.getElementById('materialityFilter').value; renderIndicators() } },
@@ -945,11 +945,11 @@
     const form = el('form', { onSubmit: e => e.preventDefault() })
     const allIndicators = Store.getIndicators().filter(i => i.is_active !== false)
     const srcAuth = el('select', { onChange: () => updateMappingIndicators() },
-      ['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(code => el('option', { value: code }, Indicator.getAuthorityName(code)))
+      Store.getAgencyMaster().map(ag => el('option', { value: ag.code }, ag.name))
     )
     const srcInd = el('select', { id: 'mapping-src-ind' })
     const tgtAuth = el('select', { onChange: () => updateMappingIndicators() },
-      ['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(code => el('option', { value: code }, Indicator.getAuthorityName(code)))
+      Store.getAgencyMaster().map(ag => el('option', { value: ag.code }, ag.name))
     )
     const tgtInd = el('select', { id: 'mapping-tgt-ind' })
     const mapType = el('select', {},
@@ -3341,9 +3341,10 @@
         el('div', { className: 'card-header' }, el('h3', {}, `테마별 가중치 (${year}년)`)),
         el('table', { className: 'table-dense' },
           el('thead', {}, el('tr', {}, el('th', {}, '기관'), el('th', {}, '그룹'), el('th', {}, '가중치(%)'))),
-          el('tbody', {}, ...['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(auth => {
+          el('tbody', {}, ...Store.getAgencyMaster().map(ag => {
+            const auth = ag.code
             const authParams = params.filter(p => p.authority_code === auth && p.year === year && p.theme_code !== '_PILLAR')
-            if (!authParams.length) return el('tr', {}, el('td', { colspan: 3, style: 'color:#999;text-align:center' }, `${Indicator.getAuthorityName(auth)}: 설정된 가중치 없음`))
+            if (!authParams.length) return el('tr', {}, el('td', { colspan: 3, style: 'color:#999;text-align:center' }, `${ag.name}: 설정된 가중치 없음`))
             return authParams.map(p => el('tr', {},
               el('td', {}, Indicator.getAuthorityName(auth)),
               el('td', {}, p.theme_code),
@@ -3378,11 +3379,12 @@
         el('div', { className: 'card-header' }, el('h3', {}, `등급 기준 (${year}년)`)),
         el('table', { className: 'table-dense' },
           el('thead', {}, el('tr', {}, el('th', {}, '기관'), el('th', {}, '등급'), el('th', {}, '최소'), el('th', {}, '최대'))),
-          el('tbody', {}, ...['ECOVADIS', 'KSSB', 'KCGS', 'NICE', 'K-ESG'].map(auth => {
+          el('tbody', {}, ...Store.getAgencyMaster().map(ag => {
+            const auth = ag.code
             const authThresholds = thresholds.filter(t => t.authority_code === auth && t.year === year).sort((a, b) => b.min_score - a.min_score)
-            if (!authThresholds.length) return el('tr', {}, el('td', { colspan: 4, style: 'color:#999;text-align:center' }, `${Indicator.getAuthorityName(auth)}: 설정된 등급 기준 없음`))
+            if (!authThresholds.length) return el('tr', {}, el('td', { colspan: 4, style: 'color:#999;text-align:center' }, `${ag.name}: 설정된 등급 기준 없음`))
             return authThresholds.map(t => el('tr', {},
-              el('td', {}, Indicator.getAuthorityName(auth)),
+              el('td', {}, ag.name),
               el('td', { style: 'font-weight:600' }, t.rating),
               el('td', {}, el('input', { type: 'number', value: t.min_score, style: 'width:50px;padding:4px;border:1px solid #ddd;border-radius:4px;text-align:center', onBlur: e => { Store.updateRatingThreshold(t.id, { min_score: parseInt(e.target.value) || 0 }) } })),
               el('td', {}, el('input', { type: 'number', value: t.max_score, style: 'width:50px;padding:4px;border:1px solid #ddd;border-radius:4px;text-align:center', onBlur: e => { Store.updateRatingThreshold(t.id, { max_score: parseInt(e.target.value) || 100 }) } }))

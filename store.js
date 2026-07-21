@@ -94,6 +94,7 @@ const Store = {
         { code: 'KCGS', name: 'KCGS', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '한국기업지배구조원 ESG평가' },
         { code: 'NICE', name: 'NICE', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: 'NICE 평가정보 ESG' },
         { code: 'KSSB', name: 'KSSB', country: '한국', track_type: 'MANDATORY', disclosure_std_no: '제1호,제2호', effective_date: '2026-02-26', note: '한국지속가능성기준원 - 법정 공시' },
+        { code: 'K-ESG', name: 'K-ESG', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2026-01-01', note: 'K-ESG 가이드라인' },
         { code: 'ISSB', name: 'ISSB', country: '글로벌', track_type: 'MANDATORY', disclosure_std_no: 'IFRS S1,S2', effective_date: '2024-01-01', note: '국제지속가능성기준위원회' }
       ]
     }
