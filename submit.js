@@ -6,7 +6,14 @@ const SUBMISSION_AGENCIES = [
   { code: 'sbti', name: 'SBTi', country: '글로벌', url: 'https://www.sciencebasedtargets.org', format: 'sbti_excel', status: 'available', description: '과학기반 감축목표' },
   { code: 'unsdg', name: 'UN SDGs', country: '글로벌', url: 'https://sdgs.un.org', format: 'sdg_json', status: 'available', description: '유엔 지속가능개발목표' },
   { code: 'kcgf', name: 'KCGF', country: '한국', url: 'https://www.kcgf.or.kr', format: 'kcgf_pdf', status: 'pending', description: '한국기업지배구조원 ESG평가' },
-  { code: 'kess', name: 'KESS', country: '한국', url: 'https://www.kess.or.kr', format: 'kess_pdf', status: 'pending', description: '한국ESG기준원' }
+  { code: 'kess', name: 'KESS', country: '한국', url: 'https://www.kess.or.kr', format: 'kess_pdf', status: 'pending', description: '한국ESG기준원' },
+  { code: 'ungc', name: 'UN Global Compact - CoP', country: '글로벌', url: 'https://www.unglobalcompact.org', format: 'ungc_web', status: 'available', description: 'CEO성명 + CoP설문, 제출기간 4/1~7/31' },
+  { code: 'spglobal', name: 'S&P Global CSA (DJSI)', country: '글로벌', url: 'https://www.spglobal.com', format: 'sp_web', status: 'available', description: '업종별 최대 62개 설문, 0~100점' },
+  { code: 'msci', name: 'MSCI ESG Ratings', country: '글로벌', url: 'https://www.msci.com', format: 'public_data', status: 'not_available', description: '공개자료 기반 — 증빙 제출 불필요' },
+  { code: 'sustainalytics', name: 'Sustainalytics', country: '글로벌', url: 'https://www.sustainalytics.com', format: 'public_data', status: 'not_available', description: '공개자료 기반 — 증빙 제출 불필요' },
+  { code: 'eu_vsme', name: 'EU VSME', country: 'EU', url: 'https://efrag.org', format: 'vsme_xlsx', status: 'available', description: '중소기업 자율공시기준' },
+  { code: 'ca_sb253', name: 'California SB253', country: '미국', url: 'https://ww2.arb.ca.gov', format: 'regulatory', status: 'pending', description: 'Scope1/2 공시, 2026-11-10 첫 마감' },
+  { code: 'ca_sb261', name: 'California SB261', country: '미국', url: 'https://ww2.arb.ca.gov', format: 'regulatory', status: 'pending', description: '기후재무리스크 보고' }
 ]
 
 const SUBMISSION_STATUS = [

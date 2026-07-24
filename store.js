@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.7.0'
+const APP_VERSION = 'v1.9.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -88,14 +88,38 @@ const Store = {
   _ensureSeeds() {
     const d = this._data
     const _ts = () => Date.now() + Math.random()
+    if (d.agencyMaster?.length) {
+      const typeMap = { ECOVADIS: 'QUESTIONNAIRE', KCGS: 'QUESTIONNAIRE', NICE: 'QUESTIONNAIRE', KSSB: 'REGULATORY', 'K-ESG': 'QUESTIONNAIRE', ISSB: 'REGULATORY' }
+      d.agencyMaster.forEach(a => { if (!a.assessment_type) a.assessment_type = typeMap[a.code] || 'QUESTIONNAIRE'; if (!('submission_window' in a)) a.submission_window = null })
+      const newAgencies = [
+        { code: 'UNGC', name: 'UN Global Compact - CoP', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: '04-01~07-31', disclosure_std_no: null, effective_date: '2024-01-01', note: 'CEO성명 + CoP설문, 미제출시 12/31 제명' },
+        { code: 'CDP', name: 'CDP (Climate/Water/Forest)', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '환경 공시 특화, A~D- 등급' },
+        { code: 'SPGLOBAL', name: 'S&P Global CSA (DJSI)', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '업종별 최대 62개 설문, 0~100점' },
+        { code: 'MSCI', name: 'MSCI ESG Ratings', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'PUBLIC_DATA', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '공개자료 기반, 업종 상대평가 AAA~CCC — 증빙 제출 불필요' },
+        { code: 'SUSTAINALYTICS', name: 'Sustainalytics ESG Risk Rating', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'PUBLIC_DATA', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '공개자료 기반, 절대 리스크 점수(낮을수록 우수) — 증빙 제출 불필요' },
+        { code: 'EU_VSME', name: 'EU VSME (중소기업 자율공시기준)', country: 'EU', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2026-01-01', note: 'EU 대형고객사의 트리클다운 요청 상한 — Omnibus 이후 이 범위 초과 요청 불가' },
+        { code: 'CA_SB253', name: 'California SB253 (Scope1/2 공시)', country: '미국', track_type: 'MANDATORY', assessment_type: 'REGULATORY', submission_window: null, disclosure_std_no: null, effective_date: '2026-11-10', note: '매출 10억달러 이상 대상, 2026-11-10 첫 마감(연기됨)' },
+        { code: 'CA_SB261', name: 'California SB261 (기후재무리스크)', country: '미국', track_type: 'MANDATORY', assessment_type: 'REGULATORY', submission_window: null, disclosure_std_no: null, effective_date: '2026-01-01', note: '매출 5억달러 이상 대상, TCFD/ISSB 정합 필요' }
+      ]
+      const existingCodes = new Set(d.agencyMaster.map(a => a.code))
+      newAgencies.forEach(a => { if (!existingCodes.has(a.code)) d.agencyMaster.push(a) })
+    }
     if (!d.agencyMaster?.length) {
       d.agencyMaster = [
-        { code: 'ECOVADIS', name: 'EcoVadis', country: '프랑스', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '글로벌 공급망 ESG 평가' },
-        { code: 'KCGS', name: 'KCGS', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: '한국기업지배구조원 ESG평가' },
-        { code: 'NICE', name: 'NICE', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2024-01-01', note: 'NICE 평가정보 ESG' },
-        { code: 'KSSB', name: 'KSSB', country: '한국', track_type: 'MANDATORY', disclosure_std_no: '제1호,제2호', effective_date: '2026-02-26', note: '한국지속가능성기준원 - 법정 공시' },
-        { code: 'K-ESG', name: 'K-ESG', country: '한국', track_type: 'VOLUNTARY', disclosure_std_no: null, effective_date: '2026-01-01', note: 'K-ESG 가이드라인' },
-        { code: 'ISSB', name: 'ISSB', country: '글로벌', track_type: 'MANDATORY', disclosure_std_no: 'IFRS S1,S2', effective_date: '2024-01-01', note: '국제지속가능성기준위원회' }
+        { code: 'ECOVADIS', name: 'EcoVadis', country: '프랑스', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '글로벌 공급망 ESG 평가' },
+        { code: 'KCGS', name: 'KCGS', country: '한국', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '한국기업지배구조원 ESG평가' },
+        { code: 'NICE', name: 'NICE', country: '한국', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: 'NICE 평가정보 ESG' },
+        { code: 'KSSB', name: 'KSSB', country: '한국', track_type: 'MANDATORY', assessment_type: 'REGULATORY', submission_window: null, disclosure_std_no: '제1호,제2호', effective_date: '2026-02-26', note: '한국지속가능성기준원 - 법정 공시' },
+        { code: 'K-ESG', name: 'K-ESG', country: '한국', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2026-01-01', note: 'K-ESG 가이드라인' },
+        { code: 'ISSB', name: 'ISSB', country: '글로벌', track_type: 'MANDATORY', assessment_type: 'REGULATORY', submission_window: null, disclosure_std_no: 'IFRS S1,S2', effective_date: '2024-01-01', note: '국제지속가능성기준위원회' },
+        { code: 'UNGC', name: 'UN Global Compact - CoP', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: '04-01~07-31', disclosure_std_no: null, effective_date: '2024-01-01', note: 'CEO성명 + CoP설문, 미제출시 12/31 제명' },
+        { code: 'CDP', name: 'CDP (Climate/Water/Forest)', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '환경 공시 특화, A~D- 등급' },
+        { code: 'SPGLOBAL', name: 'S&P Global CSA (DJSI)', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '업종별 최대 62개 설문, 0~100점' },
+        { code: 'MSCI', name: 'MSCI ESG Ratings', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'PUBLIC_DATA', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '공개자료 기반, 업종 상대평가 AAA~CCC — 증빙 제출 불필요' },
+        { code: 'SUSTAINALYTICS', name: 'Sustainalytics ESG Risk Rating', country: '글로벌', track_type: 'VOLUNTARY', assessment_type: 'PUBLIC_DATA', submission_window: null, disclosure_std_no: null, effective_date: '2024-01-01', note: '공개자료 기반, 절대 리스크 점수(낮을수록 우수) — 증빙 제출 불필요' },
+        { code: 'EU_VSME', name: 'EU VSME (중소기업 자율공시기준)', country: 'EU', track_type: 'VOLUNTARY', assessment_type: 'QUESTIONNAIRE', submission_window: null, disclosure_std_no: null, effective_date: '2026-01-01', note: 'EU 대형고객사의 트리클다운 요청 상한 — Omnibus 이후 이 범위 초과 요청 불가' },
+        { code: 'CA_SB253', name: 'California SB253 (Scope1/2 공시)', country: '미국', track_type: 'MANDATORY', assessment_type: 'REGULATORY', submission_window: null, disclosure_std_no: null, effective_date: '2026-11-10', note: '매출 10억달러 이상 대상, 2026-11-10 첫 마감(연기됨)' },
+        { code: 'CA_SB261', name: 'California SB261 (기후재무리스크)', country: '미국', track_type: 'MANDATORY', assessment_type: 'REGULATORY', submission_window: null, disclosure_std_no: null, effective_date: '2026-01-01', note: '매출 5억달러 이상 대상, TCFD/ISSB 정합 필요' }
       ]
     }
     if (!d.departments?.length) {
@@ -106,6 +130,19 @@ const Store = {
       ]
     }
     if (!d.indicatorGroups?.length) this._seedIndicatorsOnly()
+    else if (!d.indicatorGroups.some(g => g.authority_code === 'EU_VSME')) {
+      const addGroup = (auth, code, name) => { const id = _ts(); d.indicatorGroups.push({ id, authority_code: auth, group_code: code, group_name: name, sort_order: d.indicatorGroups.length + 1 }); return id }
+      const addInd = (gid, auth, code, name, pillar, opts = {}) => { d.indicators.push({ id: _ts(), group_id: gid, authority_code: auth, indicator_code: code, indicator_name: name, pillar, is_active: true, sort_order: d.indicators.length + 1, dept_code: '', review_cycle: 'annual', scope2_split_required: false, materiality_optional: false, ...opts }) }
+      const vsmeGen = addGroup('EU_VSME', 'General', '일반정보')
+      const vsmeEnv = addGroup('EU_VSME', 'Environment', '환경')
+      const vsmeSoc = addGroup('EU_VSME', 'Social', '사회')
+      const vsmeGov = addGroup('EU_VSME', 'Governance', '거버넌스')
+      addInd(vsmeGen, 'EU_VSME', 'VSME-B1', '기업개요·사업장', 'POLICY')
+      addInd(vsmeEnv, 'EU_VSME', 'VSME-B2', '에너지·GHG 배출(기본모듈)', 'RESULT')
+      addInd(vsmeSoc, 'EU_VSME', 'VSME-B3', '인력현황·안전보건(기본모듈)', 'RESULT')
+      addInd(vsmeEnv, 'EU_VSME', 'VSME-C1', '전환계획·타겟(종합모듈, 선택)', 'STRATEGY')
+      addInd(vsmeGov, 'EU_VSME', 'VSME-C2', '이해관계자 참여(종합모듈, 선택)', 'GOVERNANCE')
+    }
     if (!d.weightParams?.length) {
       d.weightParams = [
         { id: _ts(), authority_code: 'ECOVADIS', theme_code: 'ENV', weight: 25, year: 2026 },
@@ -269,6 +306,16 @@ const Store = {
     addInd(kesgS, 'K-ESG', 'KESG-S2', '안전보건', 'RESULT')
     addInd(kesgG, 'K-ESG', 'KESG-G1', '윤리경영', 'RESULT')
     addInd(kesgG, 'K-ESG', 'KESG-G2', '정보공개', 'RESULT')
+
+    const vsmeGen = addGroup('EU_VSME', 'General', '일반정보')
+    const vsmeEnv = addGroup('EU_VSME', 'Environment', '환경')
+    const vsmeSoc = addGroup('EU_VSME', 'Social', '사회')
+    const vsmeGov = addGroup('EU_VSME', 'Governance', '거버넌스')
+    addInd(vsmeGen, 'EU_VSME', 'VSME-B1', '기업개요·사업장', 'POLICY')
+    addInd(vsmeEnv, 'EU_VSME', 'VSME-B2', '에너지·GHG 배출(기본모듈)', 'RESULT')
+    addInd(vsmeSoc, 'EU_VSME', 'VSME-B3', '인력현황·안전보건(기본모듈)', 'RESULT')
+    addInd(vsmeEnv, 'EU_VSME', 'VSME-C1', '전환계획·타겟(종합모듈, 선택)', 'STRATEGY')
+    addInd(vsmeGov, 'EU_VSME', 'VSME-C2', '이해관계자 참여(종합모듈, 선택)', 'GOVERNANCE')
   },
 
   _emptyData() {
@@ -284,6 +331,7 @@ const Store = {
       evidences: [],
       evidenceFiles: [],
       evidenceTags: [],
+      evidenceExtractions: [],
       ghgFactors: [],
       ghgActivities: [],
       ghgSummary: [],
@@ -300,7 +348,11 @@ const Store = {
       issa_assurance: null,
       submissions: [],
       notifications: [],
-      autoTagRules: []
+      autoTagRules: [],
+      changeLogs: [],
+      shareLinks: [],
+      shareAccessLogs: [],
+      capaItems: []
     }
   },
 
@@ -643,6 +695,93 @@ const Store = {
   removeEvidenceTag(evidenceId, indicatorId) {
     this.data.evidenceTags = this.data.evidenceTags.filter(x => !(x.evidence_id === evidenceId && x.indicator_id === indicatorId))
     this._save()
+  },
+
+  // ==== Evidence Extractions (자동 추출) ====
+  getExtraction(evidenceId) { return (this.data.evidenceExtractions || []).find(e => e.evidence_id === evidenceId) },
+  getExtractionsByHash(hash) { return (this.data.evidenceExtractions || []).filter(e => e.file_hash === hash) },
+  addExtraction(data) {
+    const ext = { id: Date.now(), extraction_status: 'PENDING', confidence_score: 0, created_at: new Date().toISOString(), ...data }
+    if (!this.data.evidenceExtractions) this.data.evidenceExtractions = []
+    this.data.evidenceExtractions.push(ext)
+    this._save()
+    return ext
+  },
+  updateExtraction(evidenceId, updates) {
+    const i = (this.data.evidenceExtractions || []).findIndex(e => e.evidence_id === evidenceId)
+    if (i > -1) { Object.assign(this.data.evidenceExtractions[i], updates); this._save() }
+  },
+  getDuplicateHash(hash, excludeEvidenceId) {
+    return (this.data.evidenceExtractions || []).find(e => e.file_hash === hash && e.evidence_id !== excludeEvidenceId)
+  },
+  deleteExtraction(id) {
+    if (!id) return
+    this.data.evidenceExtractions = (this.data.evidenceExtractions || []).filter(e => e.id !== id)
+    this._save()
+  },
+
+  addChangeLog(tableName, recordId, fieldName, oldValue, newValue, actionType, changedBy) {
+    const log = { id: Date.now() + Math.random(), table_name: tableName, record_id: String(recordId), field_name: fieldName || null, old_value: oldValue != null ? String(oldValue) : null, new_value: newValue != null ? String(newValue) : null, action_type: actionType, changed_by: changedBy || 'system', changed_at: new Date().toISOString() }
+    if (!this.data.changeLogs) this.data.changeLogs = []
+    this.data.changeLogs.push(log)
+    this._save()
+    return log
+  },
+  getChangeLogs(tableName, recordId) {
+    return (this.data.changeLogs || []).filter(l => l.table_name === tableName && l.record_id === String(recordId)).sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at))
+  },
+
+  addShareLink(resourceType, resourceId, sharedWith, permission, expiresAt, createdBy) {
+    const token = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('')
+    const link = { id: Date.now() + Math.random(), resource_type: resourceType, resource_id: String(resourceId), share_token: token, shared_with: sharedWith || '', permission: permission || 'VIEW_ONLY', expires_at: expiresAt || null, created_by: createdBy || 'user', created_at: new Date().toISOString(), revoked_at: null }
+    if (!this.data.shareLinks) this.data.shareLinks = []
+    this.data.shareLinks.push(link)
+    this._save()
+    return link
+  },
+  getShareLinks(resourceType, resourceId) {
+    return (this.data.shareLinks || []).filter(l => l.resource_type === resourceType && (!resourceId || l.resource_id === String(resourceId)))
+  },
+  revokeShareLink(id) {
+    const link = (this.data.shareLinks || []).find(l => l.id === id)
+    if (link) { link.revoked_at = new Date().toISOString(); this._save() }
+  },
+  getShareLinkByToken(token) {
+    return (this.data.shareLinks || []).find(l => l.share_token === token && !l.revoked_at)
+  },
+  logShareAccess(shareId, ipHint) {
+    if (!this.data.shareAccessLogs) this.data.shareAccessLogs = []
+    this.data.shareAccessLogs.push({ id: Date.now() + Math.random(), share_id: shareId, accessed_at: new Date().toISOString(), ip_hint: ipHint || '' })
+    this._save()
+  },
+  getShareAccessLogs(shareId) {
+    return (this.data.shareAccessLogs || []).filter(l => l.share_id === shareId)
+  },
+
+  addCapaItem(data) {
+    const item = { id: Date.now(), status: 'open', created_at: new Date().toISOString(), ...data }
+    if (!this.data.capaItems) this.data.capaItems = []
+    this.data.capaItems.push(item)
+    this._save()
+    return item
+  },
+  getCapaItems(assessmentId) {
+    return (this.data.capaItems || []).filter(c => !assessmentId || c.assessment_id === assessmentId)
+  },
+  updateCapaItem(id, updates) {
+    const item = (this.data.capaItems || []).find(c => c.id === id)
+    if (item) { Object.assign(item, updates, { updated_at: new Date().toISOString() }); this._save() }
+  },
+  completeCapaWithEvidence(capaId, evidenceData) {
+    const capa = (this.data.capaItems || []).find(c => c.id === capaId)
+    if (!capa) return null
+    this.updateCapaItem(capaId, { status: 'completed', completed_at: new Date().toISOString() })
+    const evidence = { id: Date.now(), assessment_id: capa.assessment_id, title: `[CAPA] ${capa.title || '개선조치 완료'}`, file_type: evidenceData?.file_type || 'etc', status: 'self', contains_sensitive_data: false, uploaded_at: new Date().toISOString(), ...evidenceData }
+    this.addEvidence(evidence)
+    if (capa.indicator_id) {
+      this.addEvidenceTag({ evidence_id: evidence.id, indicator_id: capa.indicator_id, is_primary: false })
+    }
+    return evidence
   },
 
   // ==== Evidence Files (다중파일) ====

@@ -384,11 +384,13 @@
     else if (page === 'monitor') _safe(renderMonitor)
     else if (page === 'issa') _safe(renderISSA)
     else if (page === 'submit') _safe(renderSubmit)
+    else if (page === 'publicdata') _safe(renderPublicData)
     else if (page === 'kssb') _safe(renderKSSB)
     else if (page === 'aihistory') _safe(renderAIHistory)
     else if (page === 'budget') _safe(renderBudget)
     else if (page === 'masking') _safe(renderMasking)
     else if (page === 'api') _safe(renderAPI)
+    else if (page === 'share') _safe(renderShareManagement)
     else if (page === 'settings') _safe(() => switchSettingsTab('tab-users'))
   }
 
@@ -466,8 +468,11 @@
     const items = Store.getAssessmentItems().filter(i => i.assessment_id === id)
     const groups = Indicator.getGroups(a.authority_code)
     const allIndicators = Store.getIndicators().filter(i => i.authority_code === a.authority_code && i.is_active !== false)
-    const nextStatus = { draft: 'in_review', in_review: 'verified', verified: 'approved', approved: null }
-    const statusLabels = { draft: '검토 요청', in_review: '검증 완료', verified: '승인', approved: null }
+    const agencies = Store.getAgencyMaster ? Store.getAgencyMaster() : []
+    const ag = agencies.find(x => x.code === a.authority_code)
+    const isPublicData = ag?.assessment_type === 'PUBLIC_DATA'
+    const nextStatus = isPublicData ? { draft: 'in_review', in_review: 'verified', verified: 'approved', approved: null } : { draft: 'in_review', in_review: 'verified', verified: 'approved', approved: null }
+    const statusLabels = isPublicData ? { draft: '검토 요청', in_review: '검증 완료', verified: '승인', approved: null } : { draft: '검토 요청', in_review: '검증 완료', verified: '승인', approved: null }
 
     c.innerHTML = ''
     c.append(
@@ -475,7 +480,7 @@
         el('div', { className: 'card-header' },
           el('div', {},
             el('h3', { style: 'margin:0' }, a.title || '평가 상세'),
-            el('div', { style: 'font-size:12px;color:#888;margin-top:4px' }, `${Indicator.getAuthorityName(a.authority_code)} · ${a.assessment_year}년${(() => { const agencies = Store.getAgencyMaster ? Store.getAgencyMaster() : []; const ag = agencies.find(x => x.code === a.authority_code); return ag ? (ag.track_type === 'MANDATORY' ? ' <span style="background:#e74c3c;color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px">법정 의무</span>' : ' <span style="background:#95a5a6;color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px">자율 공시</span>') : '' })()}`)
+            el('div', { style: 'font-size:12px;color:#888;margin-top:4px' }, `${Indicator.getAuthorityName(a.authority_code)} · ${a.assessment_year}년${ag ? (ag.track_type === 'MANDATORY' ? ' <span style="background:#e74c3c;color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px">법정 의무</span>' : ' <span style="background:#95a5a6;color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px">자율 공시</span>') : ''}${isPublicData ? ' <span style="background:#3b82f6;color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:4px">공개자료</span>' : ''}`)
           ),
           el('div', { style: 'display:flex;gap:6px;align-items:center' },
             el('span', {}, statusBadge(a.status)),
@@ -714,7 +719,8 @@
       el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px' },
         el('h3', { style: 'margin:0;font-size:15px' }, `지표 관리 · ${Indicator.getAuthorityName(_selectedAuthority)}`),
         el('div', { style: 'display:flex;gap:6px' },
-          el('button', { className: 'btn btn-sm', style: 'background:#f0f7ff;color:#3B82F6', onClick: () => openImportTemplate() }, '📥 템플릿에서 가져오기'),
+          el('button', { className: 'btn btn-sm', style: 'background:#f0f7ff;color:#3B82F6', onClick: () => openImportTemplate() }, '📥 템플릿 가져오기'),
+          el('button', { className: 'btn btn-sm', style: 'background:#f0fff0;color:#22c55e', onClick: () => openCSVIndicatorImport() }, '📋 CSV 붙여넣기'),
           el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _showQuickForm = !_showQuickForm; _editingIndicator = null; renderIndicators() } }, _showQuickForm ? '✕ 닫기' : '+ 새 지표 추가')
         )
       )
@@ -755,7 +761,7 @@
   function renderIndicatorCard(ind) {
     const pillarColor = ind.pillar === 'POLICY' ? '#7C3AED' : ind.pillar === 'ACTION' ? '#3B82F6' : ind.pillar === 'RESULT' ? '#10B981' : ind.pillar === 'GOVERNANCE' ? '#F59E0B' : ind.pillar === 'STRATEGY' ? '#EC4899' : ind.pillar === 'RISK_MGMT' ? '#EF4444' : '#6366F1'
     const isSelected = _selectedIndicators.has(ind.id)
-    return el('div', { style: `background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${ind.is_active === false ? '#ccc' : pillarColor};${ind.is_active === false ? 'opacity:.5' : ''}${isSelected ? ';outline:2px solid #7C3AED;outline-offset:1px' : ''};cursor:pointer`, onClick: (e) => { if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; _editingIndicator = ind.id; _showQuickForm = true; renderIndicators() } },
+    return el('div', { style: `background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${ind.is_active === false ? '#ccc' : pillarColor};${ind.is_active === false ? 'opacity:.5' : ''}${isSelected ? ';outline:2px solid #7C3AED;outline-offset:1px' : ''};cursor:pointer`, onClick: (e) => { if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; openIndicatorSlidePanel(ind) } },
       el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px' },
         el('div', { style: 'flex:1' },
           el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:4px' },
@@ -776,6 +782,42 @@
         ind.scope2_split_required ? el('span', { style: 'background:#fef3c7;padding:2px 6px;border-radius:4px;color:#D97706;font-weight:600' }, '🌍 Scope2') : null
       )
     )
+  }
+
+  function openIndicatorSlidePanel(ind) {
+    const evidences = Store.getEvidences().filter(ev => {
+      const tags = Store.getEvidenceTags().filter(t => t.indicator_id === ind.id)
+      return tags.some(t => t.evidence_id === ev.id)
+    })
+    const groups = Indicator.getGroups(ind.authority_code)
+    const group = groups.find(g => g.id === ind.group_id)
+    const tabs = [
+      { id: 'detail', label: '상세정보', content: `
+        <div style="padding:16px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <span style="font-family:monospace;font-size:13px;font-weight:700;color:#7C3AED;background:#f3f0ff;padding:3px 8px;border-radius:4px">${ind.indicator_code}</span>
+            <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3e8ff;color:#7C3AED">${ind.pillar || '-'}</span>
+          </div>
+          <h4 style="margin:0 0 12px;font-size:15px">${Indicator.getDisplayName(ind)}</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+            <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">기관</span><br><strong>${Indicator.getAuthorityName(ind.authority_code)}</strong></div>
+            <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">그룹</span><br><strong>${group ? Indicator.getGroupDisplayName(group) : '-'}</strong></div>
+            <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">담당부서</span><br><strong>${ind.dept_code || '-'}</strong></div>
+            <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">검토주기</span><br><strong>${ind.review_cycle || '-'}</strong></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:6px">
+            <button class="btn btn-sm btn-primary" onclick="ESGComponents.closeSlidePanel();_editingIndicator=${ind.id};_showQuickForm=true;renderIndicators()">수정</button>
+            <button class="btn btn-sm ${ind.is_active !== false ? 'btn-danger' : 'btn-success'}" onclick="Indicator.toggleActive(${ind.id});ESGComponents.closeSlidePanel();renderIndicators()">${ind.is_active !== false ? '비활성화' : '활성화'}</button>
+          </div>
+          <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px">📎 연결 증빙 (${evidences.length}건)</div>
+            ${evidences.length ? evidences.map(ev => `<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#f8f9fa;border-radius:4px;margin-bottom:4px;font-size:12px"><span>📄</span><span style="flex:1">${ev.title || '제목 없음'}</span><span style="color:#888;font-size:10px">${ev.status || '-'}</span></div>`).join('') : '<div style="color:#888;font-size:12px">연결된 증빙이 없습니다.</div>'}
+          </div>
+        </div>` },
+      { id: 'history', label: '변경이력', content: ESGComponents.changeLogTimeline('indicators', ind.id) },
+      { id: 'share', label: '공유', content: ESGComponents.shareLinkPanel('INDICATOR', ind.id, ind.indicator_code) }
+    ]
+    ESGComponents.openSlidePanel(`지표 · ${ind.indicator_code}`, tabs, 'detail')
   }
 
   function renderQuickIndicatorForm() {
@@ -884,6 +926,35 @@
     )
     modal('📥 템플릿에서 지표 가져오기', form)
     document.getElementById('modal-save').style.display = 'none'
+  }
+
+  function openCSVIndicatorImport() {
+    const form = el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
+      el('p', { style: 'margin:0;font-size:12px;color:#666' }, '엑셀/CSV에서 복사한 테이블을 붙여넣으세요. 헤더: 지표코드 | 지표명 | 필러 | 담당부서 | 검토주기'),
+      el('textarea', { id: 'csvIndInput', rows: 8, placeholder: '지표코드\t지표명\t필러\t담당부서\t검토주기\nMY-ENV-01\t온실가스 배출량 관리\tRESULT\t환경팀\tannual\nMY-SOC-01\t인재육성체계\tACTION\t인사팀\tannual', style: 'width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:monospace;font-size:11px;box-sizing:border-box' }),
+      el('div', { id: 'csvIndPreview', style: 'font-size:11px;color:#888' })
+    )
+    modal('📥 CSV 붙여넣기 일괄등록', form)
+    document.getElementById('modal-save').onclick = () => {
+      const raw = document.getElementById('csvIndInput').value
+      if (!raw.trim()) return alert('데이터를 입력하세요.')
+      const lines = raw.trim().split('\n').filter(l => l.trim())
+      const pillarMap = { 'POLICY': 'POLICY', 'policy': 'POLICY', 'ACTION': 'ACTION', 'action': 'ACTION', 'RESULT': 'RESULT', 'result': 'RESULT', '정책': 'POLICY', '실행': 'ACTION', '성과': 'RESULT', '거버넌스': 'GOVERNANCE', '전략': 'STRATEGY', '리스크': 'RISK_MGMT', '측정': 'METRICS' }
+      const cycleMap = { 'annual': 'annual', '분기': 'quarterly', 'quarterly': 'quarterly', '반기': 'semi_annual', 'semi_annual': 'semi_annual', '월간': 'monthly', 'monthly': 'monthly' }
+      let added = 0
+      lines.forEach((line, idx) => {
+        if (idx === 0 && (line.includes('지표코드') || line.includes('code') || line.includes('Code'))) return
+        const cols = line.split('\t').map(c => c.trim()).filter(Boolean)
+        if (cols.length < 2) return
+        const [code, name, pillarRaw, dept, cycleRaw] = cols
+        const pillar = pillarMap[pillarRaw] || 'RESULT'
+        const cycle = cycleMap[cycleRaw] || 'annual'
+        Store.addIndicator({ authority_code: _selectedAuthority, indicator_code: code, indicator_name: name, pillar, dept_code: dept || '', review_cycle: cycle, is_active: true, scope2_split_required: false, materiality_optional: false })
+        added++
+      })
+      if (added > 0) { showToast(`${added}개 지표가 등록되었습니다.`, 'success'); closeModal(); renderIndicators() }
+      else alert('유효한 데이터가 없습니다. 탭으로 구분된 형식인지 확인하세요.')
+    }
   }
 
   // ==================== 증빙 관리 ====================
@@ -1021,6 +1092,51 @@
     const evidences = Evidence.getAll(_evidenceAssId)
     const searchQuery = _evidenceSearchQuery || ''
 
+    const today = new Date()
+    const thirtyDaysLater = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const expiringSoon = evidences.filter(ev => {
+      if (!ev.expiry_date) return false
+      const exp = new Date(ev.expiry_date)
+      return exp >= today && exp <= thirtyDaysLater
+    })
+    const expired = evidences.filter(ev => {
+      if (!ev.expiry_date) return false
+      return new Date(ev.expiry_date) < today
+    })
+    const pendingReview = evidences.filter(ev => ev.status === 'pending' || ev.status === 'self')
+
+    const todoCard = el('div', { className: 'card', style: 'padding:12px 16px;margin-bottom:12px;background:linear-gradient(135deg,#fef3c7 0%,#fef9c3 100%)' },
+      el('div', { style: 'display:flex;gap:16px;align-items:center;flex-wrap:wrap' },
+        el('span', { style: 'font-size:13px;font-weight:600;color:#92400e' }, '📋 오늘 할 일'),
+        expiringSoon.length ? el('span', { style: 'font-size:11px;padding:3px 8px;border-radius:12px;background:#f59e0b;color:#fff' }, `만료임박 ${expiringSoon.length}건`) : null,
+        expired.length ? el('span', { style: 'font-size:11px;padding:3px 8px;border-radius:12px;background:#ef4444;color:#fff' }, `만료됨 ${expired.length}건`) : null,
+        pendingReview.length ? el('span', { style: 'font-size:11px;padding:3px 8px;border-radius:12px;background:#3b82f6;color:#fff' }, `검토대기 ${pendingReview.length}건`) : null,
+        !expiringSoon.length && !expired.length && !pendingReview.length ? el('span', { style: 'font-size:11px;color:#92400e' }, '✅ 특이사항 없음') : null
+      )
+    )
+    c.append(todoCard)
+
+    const statusCounts = Evidence.countByStatus(_evidenceAssId)
+    const total = statusCounts.total || 1
+    const confirmedRate = Math.round(((statusCounts.confirmed || 0) + (statusCounts.externally_verified || 0)) / total * 100)
+    const confidenceColor = confirmedRate >= 80 ? '#10b981' : confirmedRate >= 50 ? '#f59e0b' : '#ef4444'
+
+    const gaugeCard = el('div', { className: 'card', style: 'padding:12px 16px;margin-bottom:12px;display:flex;gap:16px;align-items:center;flex-wrap:wrap' },
+      el('span', { style: 'font-size:13px;font-weight:600;color:#333' }, '📊 신뢰도'),
+      el('div', { style: 'flex:1;min-width:120px;max-width:200px;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden' },
+        el('div', { style: `width:${confirmedRate}%;height:100%;background:${confidenceColor};border-radius:4px;transition:width .3s` })
+      ),
+      el('span', { style: `font-size:13px;font-weight:700;color:${confidenceColor}` }, `${confirmedRate}%`),
+      el('span', { style: 'font-size:11px;color:#888' }, `(${statusCounts.confirmed || 0}건 확정 / ${statusCounts.total || 0}건 전체)`),
+      statusCounts.pending > 0 ? el('button', { className: 'btn btn-sm', style: 'font-size:11px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d', onClick: () => {
+        if (!confirm(`${statusCounts.pending}건의 미확인 증빙을 일괄 확정하시겠습니까?\n(상태: 자가입력 → 확정)')) return
+        evidences.forEach(ev => { if (ev.status === 'self' || ev.status === 'pending') Store.updateEvidence(ev.id, { status: 'confirmed' }) })
+        showToast('일괄 확정이 완료되었습니다.', 'success')
+        renderEvidenceMgmt()
+      } }, '✅ 일괄확정') : null
+    )
+    c.append(gaugeCard)
+
     c.append(
       el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
         el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '📎 증빙 관리'),
@@ -1029,7 +1145,16 @@
         ),
         el('input', { id: 'evSearch', type: 'text', placeholder: '🔍 제목/유형/태그 검색...', value: searchQuery, style: 'flex:1;min-width:200px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onInput: () => { _evidenceSearchQuery = document.getElementById('evSearch').value; renderEvidenceMgmt() } }),
         el('span', { style: 'font-size:12px;color:#888' }, `${evidences.length}건`),
-        el('button', { className: 'btn btn-primary btn-sm', onClick: openAddEvidence }, '+ 증빙 추가')
+        el('button', { className: 'btn btn-primary btn-sm', onClick: openAddEvidence }, '+ 증빙 추가'),
+        el('button', { className: 'btn btn-sm', style: 'font-size:11px;background:#f0f7ff;color:#3b82f6;border:1px solid #bfdbfe', onClick: () => {
+          if (!confirm('이전 평가의 증빙을 현재 평가로 복제하시겠습니까?\n(이미 동일 제목의 증빙은 건너뜁니다)')) return
+          const otherAssessments = assessments.filter(a => a.id !== _evidenceAssId)
+          if (!otherAssessments.length) { alert('복제할 이전 평가가 없습니다.'); return }
+          const sourceId = otherAssessments[otherAssessments.length - 1].id
+          const count = Evidence.cloneLastYearEvidences(sourceId, _evidenceAssId)
+          showToast(`${count}건의 증빙이 복제되었습니다.`, 'success')
+          renderEvidenceMgmt()
+        } }, '📋 이전 평가에서 복제')
       )
     )
 
@@ -1058,8 +1183,8 @@
     }
 
     const fileLabels = { pdf: 'PDF', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
-    const statusLabels = { self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증' }
-    const statusColors = { self: '#f59e0b', internal_reviewed: '#3b82f6', externally_verified: '#10b981' }
+    const statusLabels = { pending: '미확인', self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증', confirmed: '확정' }
+    const statusColors = { pending: '#f59e0b', self: '#3b82f6', internal_reviewed: '#8b5cf6', externally_verified: '#10b981', confirmed: '#10b981', expired: '#ef4444', missing: '#9ca3af' }
     const fileIcons = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
 
     const listCard = el('div', { className: 'card', style: 'padding:0;overflow:hidden' })
@@ -1082,7 +1207,7 @@
           el('div', { style: 'flex:1;min-width:0' },
             el('div', { style: 'font-size:13px;font-weight:600;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis' }, ev.title),
             el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap' },
-              el('span', { style: `font-size:10px;padding:2px 6px;border-radius:4px;background:${statusColors[ev.status] || '#f0f0f0'}10;color:${statusColors[ev.status] || '#666'};font-weight:500` }, statusLabels[ev.status] || ev.status || '-'),
+              el('span', { style: `font-size:10px;padding:2px 6px;border-radius:4px;background:${statusColors[ev.status] || '#9ca3af'}15;color:${statusColors[ev.status] || '#9ca3af'};font-weight:500` }, statusLabels[ev.status] || ev.status || '미확인'),
               el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#f0f0f0;color:#666' }, fileLabels[ev.file_type] || ev.file_type || '-'),
               files.length > 0 ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#7C3AED10;color:#7C3AED' }, `${files.length}파일`) : null,
               ev.contains_sensitive_data ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#ef444410;color:#ef4444' }, '🔒') : null
@@ -1137,20 +1262,34 @@
       ),
       el('div', { style: 'margin-bottom:12px' },
         el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px' }, '태그 (지표 연결)'),
-        el('div', { id: 'evEditTags', style: 'display:flex;flex-wrap:wrap;gap:4px;padding:6px;border:1px solid #ddd;border-radius:5px;max-height:60px;overflow-y:auto' },
-          ...allIndicators.map(ind => {
-            const checked = tagIndicatorIds.includes(ind.id)
-            return el('label', { style: `font-size:10px;padding:2px 5px;border-radius:3px;cursor:pointer;${checked ? 'background:#7C3AED;color:#fff' : 'background:#f0f0f0;color:#666'}` },
-              el('input', { type: 'checkbox', checked, style: 'display:none', onChange: () => {
-                const cb = document.querySelectorAll('#evEditTags input[type=checkbox]')
-                const newIds = []
-                cb.forEach((c, i) => { if (c.checked) newIds.push(allIndicators[i].id) })
-                Store.db.evidence_indicator.deleteMany({ where: { evidence_id: ev.id } })
-                newIds.forEach(indId => Store.db.evidence_indicator.insertOne({ evidence_id: ev.id, indicator_id: indId }))
-              } }),
-              ind.indicator_code
+        el('div', { id: 'evEditTags', style: 'display:flex;flex-wrap:wrap;gap:4px;padding:6px;border:1px solid #ddd;border-radius:5px;min-height:32px;align-items:center' },
+          ...tags.map(t => {
+            const ind = allIndicators.find(i => i.id === t.indicator_id)
+            if (!ind) return null
+            return el('span', { style: 'display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 6px;border-radius:10px;background:#7C3AED;color:#fff;cursor:default' },
+              el('span', {}, ind.indicator_code),
+              el('button', { style: 'background:none;border:none;color:#fff;cursor:pointer;font-size:10px;padding:0;line-height:1', onClick: () => {
+                Evidence.untag(ev.id, ind.id)
+                renderEvidenceMgmt()
+              } }, '×')
             )
-          })
+          }).filter(Boolean),
+          el('button', { id: 'evAddTagBtn', style: 'display:inline-flex;align-items:center;font-size:10px;padding:2px 6px;border-radius:10px;background:#f0f0f0;color:#666;cursor:pointer;border:1px dashed #ccc', onClick: (e) => {
+            e.stopPropagation()
+            const existing = document.getElementById('evTagDropdown')
+            if (existing) { existing.remove(); return }
+            const untagged = allIndicators.filter(i => !tagIndicatorIds.includes(i.id))
+            if (!untagged.length) return
+            const dd = el('div', { id: 'evTagDropdown', style: 'position:absolute;z-index:100;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:200px;overflow-y:auto;padding:4px;width:180px' },
+              ...untagged.slice(0, 20).map(ind => el('div', { style: 'font-size:11px;padding:4px 8px;cursor:pointer;border-radius:4px', onMouseEnter: e => e.currentTarget.style.background='#f5f5f5', onMouseLeave: e => e.currentTarget.style.background='', onClick: (ev2) => { ev2.stopPropagation(); Evidence.tag(ev.id, ind.id); renderEvidenceMgmt() } },
+                el('span', { style: 'font-family:monospace;color:#7C3AED;margin-right:4px' }, ind.indicator_code),
+                el('span', { style: 'color:#333' }, ind.indicator_name)
+              ))
+            )
+            const btn = document.getElementById('evAddTagBtn')
+            if (btn) btn.parentElement.appendChild(dd)
+            setTimeout(() => document.addEventListener('click', function handler() { dd.remove(); document.removeEventListener('click', handler) }, { once: true }), 0)
+          } }, '+ 지표')
         )
       ),
       el('div', { style: 'margin-bottom:12px' },
@@ -1179,11 +1318,6 @@
           const fileType = document.getElementById('evEditType').value
           const status = document.getElementById('evEditStatus').value
           Store.updateEvidence(ev.id, { title, file_type: fileType, status })
-          const newTagIds = []
-          document.querySelectorAll('#evEditTags input[type=checkbox]').forEach((cb, i) => { if (cb.checked) newTagIds.push(allIndicators[i].id) })
-          const existing = Evidence.getTags(ev.id)
-          existing.forEach(t => { if (!newTagIds.includes(t.indicator_id)) Evidence.untag(ev.id, t.indicator_id) })
-          newTagIds.forEach(indId => { if (!existing.find(t => t.indicator_id === indId)) Evidence.tag(ev.id, indId) })
           _evidencePreviewId = null
           showToast('증빙이 저장되었습니다.', 'success')
           renderEvidenceMgmt()
@@ -1213,7 +1347,7 @@
     const title = el('input', { value: ev?.title ?? '' })
     const fileTypeLabels = { pdf: 'PDF 문서', xlsx: 'Excel', docx: 'Word', img: '이미지', etc: '기타' }
     const fileType = el('select', {}, ['pdf', 'xlsx', 'docx', 'img', 'etc'].map(t => el('option', { value: t, selected: ev?.file_type === t }, fileTypeLabels[t])))
-    const status = el('select', {}, ['self', 'internal_reviewed', 'externally_verified'].map(s => el('option', { value: s, selected: ev?.status === s }, Evidence.getStatusLabel(s))))
+    const status = el('select', {}, ['pending', 'self', 'internal_reviewed', 'externally_verified', 'confirmed'].map(s => el('option', { value: s, selected: ev?.status === s }, Evidence.getStatusLabel(s))))
     const expiryDate = el('input', { type: 'date', value: ev?.expiry_date ?? '' })
     const sensitiveCheck = el('input', { type: 'checkbox', checked: ev?.contains_sensitive_data === true })
     const indicators = Store.getIndicators().filter(i => i.is_active !== false)
@@ -1237,12 +1371,27 @@
       files.forEach(file => {
         if (file.size > 10 * 1024 * 1024) { alert(file.name + '은 10MB를 초과합니다.'); return }
         window._pendingFiles.push(file)
+        const fname = file.name || ''
+        const dateMatch = fname.match(/(\d{4})[-.\s]?(\d{2})[-.\s]?(\d{2})/)
+        const typeMap = { '환경': 'ENV', '안전': 'SAF', '인권': 'HR', '윤리': 'ETH', '에너지': 'ENG', 'GHG': 'GHG', '탄소': 'GHG', '배출': 'EMI', '폐기': 'WST', '수질': 'WTR', '품질': 'QMS', '교정': 'CAL', '점검': 'INS', '보고서': 'RPT', '정책': 'POL', '인증': 'CERT' }
+        let docType = ''
+        for (const [kr, code] of Object.entries(typeMap)) { if (fname.includes(kr)) { docType = code; break } }
+        const extractionInfo = []
+        if (dateMatch) extractionInfo.push(`날짜: ${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`)
+        if (docType) extractionInfo.push(`유형: ${docType}`)
+        if (!title.value && fname) {
+          title.value = fname.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ')
+        }
         const row = el('div', { style: 'display:flex;align-items:center;gap:6px;padding:4px 8px;background:#f0fff0;border-radius:6px;margin-bottom:4px;font-size:12px' },
-          el('span', {}, '📎 ' + file.name),
+          el('span', {}, '📎 ' + fname),
           el('span', { style: 'color:#999' }, `(${(file.size / 1024).toFixed(1)}KB)`),
+          extractionInfo.length ? el('span', { style: 'color:#7C3AED;font-size:10px' }, '🤖 ' + extractionInfo.join(', ')) : null,
           el('button', { type: 'button', style: 'background:#e74c3c;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px', onClick: () => { window._pendingFiles = window._pendingFiles.filter(f => f !== file); row.remove() } }, '×')
         )
         fileListContainer.append(row)
+        if (extractionInfo.length && !isEdit) {
+          Store.addExtraction({ id: Date.now(), file_name: fname, file_hash: fname, extracted_date: dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null, extracted_type: docType || null, evidence_id: null })
+        }
       })
       fileInput.value = ''
     }
@@ -2680,6 +2829,109 @@
     )
   }
 
+  // ==================== 공개자료 점검 (S-18) ====================
+  function renderPublicData() {
+    const c = document.getElementById('page-publicdata')
+    if (!c) return
+    const agencies = Store.getAgencyMaster().filter(a => a.assessment_type === 'PUBLIC_DATA')
+    const today = new Date()
+    c.innerHTML = ''
+
+    c.append(
+      el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
+        el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '🌐 공개자료 점검 (PUBLIC_DATA)'),
+        el('span', { style: 'font-size:11px;color:#888' }, 'MSCI/Sustainalytics 등 공개자료 기반 평가기관 대응')
+      )
+    )
+
+    if (!agencies.length) {
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
+        el('p', { style: 'margin:0;color:#888' }, 'PUBLIC_DATA 유형의 기관이 없습니다.')
+      ))
+      return
+    }
+
+    const checklistItems = [
+      { id: 'homepage_esg', label: '홈페이지 ESG 페이지 게시', desc: '회사 홈페이지에 ESG 관련 페이지가 공개되어 있는지 점검', category: '홈페이지' },
+      { id: 'annual_report', label: '사업보고서 게시', desc: '최근 연도 사업보고서가 공개되어 있는지 점검', category: '보고서' },
+      { id: 'sustainability_report', label: '지속가능경영보고서 게시', desc: '지속가능경영보고서가 최신 버전으로 게시되어 있는지 점검', category: '보고서' },
+      { id: 'esg_policy', label: 'ESG 정책 공개', desc: '환경/사회/거버넌스 정책이 홈페이지에 공개되어 있는지 점검', category: '정책' },
+      { id: 'news_monitoring', label: '뉴스/이슈 모니터링', desc: '회사 관련 부정 뉴스(제재, 소송, 사고)가 있는지 점검', category: '모니터링' },
+      { id: 'rating_update', label: '등급 변동 확인', desc: 'MSCI/Sustainalytics 등급이 최근 갱신되었는지 확인', category: '등급' }
+    ]
+
+    agencies.forEach(agency => {
+      const savedChecklist = Store.getExtractionsByHash(`checklist_${agency.code}`) || []
+      const completedItems = savedChecklist.map(e => e.extracted_type) || []
+
+      const card = el('div', { className: 'card', style: 'margin-bottom:12px' },
+        el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center' },
+          el('div', {},
+            el('h3', { style: 'margin:0;font-size:14px' }, agency.name),
+            el('p', { style: 'margin:4px 0 0;font-size:11px;color:#888' }, agency.note || '')
+          ),
+          el('span', { style: `font-size:11px;padding:3px 8px;border-radius:12px;background:${completedItems.length === checklistItems.length ? '#dcfce7' : '#fef3c7'};color:${completedItems.length === checklistItems.length ? '#166534' : '#92400e'};font-weight:500` },
+            `${completedItems.length}/${checklistItems.length} 완료`)
+        ),
+        el('div', { style: 'padding:12px 16px' },
+          ...checklistItems.map(item => {
+            const isCompleted = completedItems.includes(item.id)
+            return el('div', { style: `display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:4px;border-radius:6px;cursor:pointer;${isCompleted ? 'background:#f0fdf4' : 'background:#fafafa'}`,
+              onClick: () => {
+                const extractions = Store.getExtractionsByHash(`checklist_${agency.code}`) || []
+                if (isCompleted) {
+                  Store.deleteExtraction(extractions.find(e => e.extracted_type === item.id)?.id)
+                } else {
+                  Store.addExtraction({ id: Date.now(), file_name: `${agency.code}_${item.id}`, file_hash: `checklist_${agency.code}`, extracted_date: today.toISOString().split('T')[0], extracted_type: item.id, evidence_id: null })
+                }
+                renderPublicData()
+              }
+            },
+              el('span', { style: `width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;${isCompleted ? 'background:#22c55e;color:#fff' : 'border:2px solid #ddd;color:transparent'}` }, isCompleted ? '✓' : ''),
+              el('div', { style: 'flex:1' },
+                el('div', { style: `font-size:12px;font-weight:${isCompleted ? '500' : '400'};${isCompleted ? 'color:#166534' : 'color:#333'}` }, item.label),
+                el('div', { style: 'font-size:10px;color:#888' }, item.desc)
+              ),
+              el('span', { style: 'font-size:9px;color:#aaa' }, item.category)
+            )
+          })
+        )
+      )
+      c.append(card)
+    })
+
+    const pendingReminders = Store.getAgencyMaster().filter(a => a.submission_window && a.assessment_type === 'QUESTIONNAIRE')
+    if (pendingReminders.length) {
+      const reminderCard = el('div', { className: 'card', style: 'margin-bottom:12px;background:linear-gradient(135deg,#fef3c7 0%,#fef9c3 100%)' },
+        el('div', { className: 'card-header' }, el('h3', { style: 'margin:0;font-size:14px;color:#92400e' }, '📅 제출기간 알림')),
+        el('div', { style: 'padding:8px 16px' },
+          ...pendingReminders.map(a => {
+            const [start, end] = a.submission_window.split('~')
+            const [sm, sd] = start.split('-').map(Number)
+            const [em, ed] = end.split('-').map(Number)
+            const thisYear = today.getFullYear()
+            const startDate = new Date(thisYear, sm - 1, sd)
+            const endDate = new Date(thisYear, em - 1, ed)
+            const daysUntilStart = Math.ceil((startDate - today) / (1000 * 60 * 60 * 24))
+            const daysUntilEnd = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24))
+            let status, color
+            if (today >= startDate && today <= endDate) { status = '제출기간 진행 중'; color = '#22c55e' }
+            else if (daysUntilStart > 0 && daysUntilStart <= 30) { status = `${daysUntilStart}일 후 시작`; color = '#f59e0b' }
+            else if (today > endDate) { status = '제출기간 종료'; color = '#ef4444' }
+            else { status = `${Math.abs(daysUntilStart)}일 전`; color = '#888' }
+            return el('div', { style: 'display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px' },
+              el('span', { style: `width:8px;height:8px;border-radius:50%;background:${color}` }),
+              el('span', { style: 'font-weight:500;min-width:120px' }, a.name),
+              el('span', { style: 'color:#666' }, `${a.submission_window}`),
+              el('span', { style: `color:${color};font-weight:500;margin-left:auto` }, status)
+            )
+          })
+        )
+      )
+      c.append(reminderCard)
+    }
+  }
+
   // ==================== ERP/API 연동 ====================
   function renderAPI() {
     const c = document.getElementById('page-api')
@@ -2763,6 +3015,62 @@
         )
       )
     )
+  }
+
+  // ==================== 외부 공유 관리 (S-19) ====================
+  function renderShareManagement() {
+    const c = document.getElementById('page-share')
+    if (!c) return
+    const allLinks = Store.getShareLinks() || []
+    const recentLogs = Store.getChangeLogs('shareLinks', '') || []
+    c.innerHTML = ''
+
+    c.append(
+      el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
+        el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '🔗 외부 공유 관리'),
+        el('span', { style: 'font-size:12px;color:#888' }, `${allLinks.filter(l => !l.revoked_at).length}개 활성 링크`)
+      )
+    )
+
+    const activeLinks = allLinks.filter(l => !l.revoked_at)
+    const revokedLinks = allLinks.filter(l => l.revoked_at)
+    const resourceLabels = { EVIDENCE: '증빙', REPORT: '보고서', KPI_DASHBOARD: 'KPI 대시보드', CHECKLIST: '체크리스트' }
+
+    if (activeLinks.length) {
+      c.append(el('div', { className: 'card' },
+        el('div', { className: 'card-header' }, el('h3', {}, '활성 공유 링크')),
+        el('table', { style: 'font-size:12px' },
+          el('thead', {}, el('tr', {}, el('th', {}, '리소스'), el('th', {}, '대상'), el('th', {}, '권한'), el('th', {}, '열람'), el('th', {}, '만료'), el('th', {}, '관리'))),
+          el('tbody', {}, ...activeLinks.map(l => {
+            const accessCount = Store.getShareAccessLogs(l.id).length
+            const isExpired = l.expires_at && new Date(l.expires_at) < new Date()
+            return el('tr', {},
+              el('td', {}, resourceLabels[l.resource_type] || l.resource_type),
+              el('td', {}, l.shared_with || '-'),
+              el('td', { style: 'font-size:11px' }, l.permission === 'VIEW_ONLY' ? '열람' : '코멘트'),
+              el('td', { style: 'text-align:center' }, accessCount),
+              el('td', { style: 'font-size:11px;color:#888' }, l.expires_at ? new Date(l.expires_at).toLocaleDateString('ko-KR') : '무제한'),
+              el('td', {}, el('button', { className: 'btn btn-sm', style: 'font-size:10px;color:#ef4444;background:none;border:none', onClick: () => { ESGComponents.revokeShareLink(l.id); renderShareManagement() } }, '회수'))
+            )
+          }))
+        )
+      ))
+    }
+
+    if (revokedLinks.length) {
+      c.append(el('div', { className: 'card', style: 'opacity:.6' },
+        el('div', { className: 'card-header' }, el('h3', {}, `회수된 링크 (${revokedLinks.length}개)`)),
+        el('div', { style: 'padding:8px 16px;font-size:12px;color:#888' }, `${revokedLinks.length}개의 공유 링크가 회수되었습니다.`)
+      ))
+    }
+
+    if (!allLinks.length) {
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
+        el('div', { style: 'font-size:36px;margin-bottom:12px' }, '🔗'),
+        el('h3', { style: 'margin:0 0 8px' }, '공유된 항목이 없습니다'),
+        el('p', { style: 'margin:0;color:#888;font-size:13px' }, '증빙, 보고서, KPI 대시보드에서 공유 버튼을 눌러 링크를 생성하세요.')
+      ))
+    }
   }
 
   // ==================== 보고서 편집기 (S-05) ====================
@@ -2883,6 +3191,19 @@
         el('div', { style: 'font-size:12px;color:#888;margin-top:4px' }, `연결된 증빙: ${linkedEvidences.length}건`)
       ),
       ghgWarning,
+      indicator.scope2_split_required ? (() => {
+        const summary = GHG.getSummary(_editorAssId)
+        const hasData = Object.keys(summary).length > 0
+        if (!hasData) return null
+        return el('div', { style: 'margin-bottom:16px;padding:10px;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;display:flex;align-items:center;gap:8px' },
+          el('span', { style: 'font-size:13px' }, '📊'),
+          el('span', { style: 'font-size:12px;flex:1' }, 'GHG 요약값을 보고서에 삽입합니다.'),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => {
+            const summaryText = GHG.formatSummary(summary)
+            navigator.clipboard.writeText(summaryText).then(() => showToast('GHG 요약이 클립보드에 복사되었습니다.', 'success')).catch(() => showToast('복사에 실패했습니다.', 'error'))
+          } }, '📋 GHG 최신값 복사')
+        )
+      })() : null,
       el('div', { style: 'margin-bottom:16px' },
         el('h4', { style: 'font-size:13px;margin-bottom:8px;color:#27ae60' }, `✅ 연결된 증빙 (${linkedEvidences.length}건)` ),
         linkedEvidences.length ? el('div', {}, ...linkedEvidences.map(ev =>
@@ -3014,6 +3335,24 @@
           }))
         ) : el('p', { style: 'padding:16px;color:#999;text-align:center' }, '검토 대기 중인 AI 초안이 없습니다.')
       ),
+      rejected.length ? el('div', { className: 'card' },
+        el('div', { className: 'card-header' }, el('h3', {}, `반려 (${rejected.length}건)`)),
+        el('table', { style: 'font-size:12px' },
+          el('thead', {}, el('tr', {}, el('th', {}, '지표'), el('th', { style: 'width:50px' }, '버전'), el('th', {}, '반려사유'), el('th', { style: 'width:140px' }, '관리'))),
+          el('tbody', {}, ...rejected.map(d => {
+            const ind = Store.getIndicators().find(i => i.id === d.indicator_id)
+            return el('tr', {},
+              el('td', {}, ind ? Indicator.getNameAndCode(ind) : d.indicator_id),
+              el('td', { style: 'text-align:center' }, `v${d.version || 1}`),
+              el('td', { style: 'font-size:11px;color:#e74c3c' }, d.rejection_reason || '반려됨'),
+              el('td', { style: 'white-space:nowrap' },
+                el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => { _editorAssId = d.assessment_id; navigate('editor'); setTimeout(() => { if (typeof renderReportEditor === 'function') renderReportEditor() }, 100) } }, '지금 수정하기'),
+                el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { AI.retryDraft(d.id, 'current_user'); showToast('AI 재생성이 시작되었습니다.', 'success'); renderAIHistory() } }, '재생성')
+              )
+            )
+          }))
+        )
+      ) : null,
       el('div', { className: 'card' },
         el('div', { className: 'card-header' }, el('h3', {}, `전체 이력 (${sorted.length}건)`)),
         sorted.length ? el('table', { style: 'font-size:12px' },

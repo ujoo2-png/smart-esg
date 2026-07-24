@@ -32,6 +32,7 @@ const Dashboard = {
         <div class="dash-card">${this._aiUnapprovedCard(assessmentId)}</div>
         <div class="dash-card">${this._budgetProgressCard()}</div>
         <div class="dash-card">${this._ghgTrendCard(assessmentId)}</div>
+        <div class="dash-card">${this._submissionDeadlineCard()}</div>
       </div>
     `
     requestAnimationFrame(() => {
@@ -354,9 +355,36 @@ const Dashboard = {
   </div>
   <div style="display:flex;gap:6px;margin-top:12px">
     <button onclick="navigate('assessment')" class="btn btn-sm btn-secondary" style="font-size:11px">📋 평가 관리 ↗</button>
-    <button onclick="navigate('evidence')" class="btn btn-sm btn-secondary" style="font-size:11px">📎 증빙 관리 ↗</button>
+    <button onclick="navigate('evidence')" class="btn btn-sm btn-secondary" class="btn btn-sm btn-secondary" style="font-size:11px">📎 증빙 관리 ↗</button>
     <button onclick="navigate('indicator')" class="btn btn-sm btn-secondary" style="font-size:11px">📌 지표 관리 ↗</button>
   </div>
+</div>`
+  },
+
+  _submissionDeadlineCard() {
+    const today = new Date()
+    const agencies = Store.getAgencyMaster().filter(a => a.submission_window)
+    if (!agencies.length) return ''
+    const items = agencies.map(a => {
+      const [start, end] = a.submission_window.split('~')
+      const [sm, sd] = start.split('-').map(Number)
+      const [em, ed] = end.split('-').map(Number)
+      const thisYear = today.getFullYear()
+      const startDate = new Date(thisYear, sm - 1, sd)
+      const endDate = new Date(thisYear, em - 1, ed)
+      const daysUntilStart = Math.ceil((startDate - today) / (1000 * 60 * 60 * 24))
+      let status, color
+      if (today >= startDate && today <= endDate) { status = '진행 중'; color = '#22c55e' }
+      else if (daysUntilStart > 0 && daysUntilStart <= 30) { status = `${daysUntilStart}일 후`; color = '#f59e0b' }
+      else if (today > endDate) { status = '종료'; color = '#ef4444' }
+      else { status = `${Math.abs(daysUntilStart)}일 전`; color = '#888' }
+      return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px"><span style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0"></span><span style="flex:1">${a.name}</span><span style="color:${color};font-weight:500">${status}</span></div>`
+    }).join('')
+    return `
+<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+  <div style="font-weight:600;font-size:14px;margin-bottom:12px">📅 제출기간 알림</div>
+  <div>${items}</div>
+  <div style="margin-top:10px"><button onclick="navigate('publicdata')" class="btn btn-sm btn-secondary" style="font-size:11px">🌐 공개자료 점검 ↗</button></div>
 </div>`
   }
 }
