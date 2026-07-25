@@ -4208,7 +4208,7 @@
     const dataMap = {
       assessments: Store.getAssessments() || [],
       indicators: Store.getIndicators() || [],
-      evidence: Store.getEvidence() || [],
+      evidence: Store.getEvidences() || [],
       ghg: Store.getGHGActivities() || [],
       suppliers: Supplier.getAll() || [],
       drafts: Store.getAIDrafts() || []
@@ -4225,7 +4225,7 @@
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
         ['assessments', 'indicators', 'evidence', 'ghg', 'suppliers', 'drafts'].map(type => {
           const labels = { assessments: '📋 평가', indicators: '📌 지표', evidence: '📎 증빙', ghg: '🏭 온실가스', suppliers: '🏢 협력사', drafts: '🤖 AI 초안' }
-          const count = (dataMap => dataMap[type]?.length || 0)({ assessments: Store.getAssessments(), indicators: Store.getIndicators(), evidence: Store.getEvidence(), ghg: Store.getGHGActivities(), suppliers: Supplier.getAll(), drafts: Store.getAIDrafts() })
+          const count = (dataMap => dataMap[type]?.length || 0)({ assessments: Store.getAssessments(), indicators: Store.getIndicators(), evidence: Store.getEvidences(), ghg: Store.getGHGActivities(), suppliers: Supplier.getAll(), drafts: Store.getAIDrafts() })
           return el('button', { className: 'btn btn-secondary', style: 'text-align:left;padding:12px;display:flex;justify-content:space-between;align-items:center', onClick: () => { closeModal(); window.exportData(type) } },
             el('span', {}, labels[type] || type),
             el('span', { style: 'font-size:11px;color:#999' }, `${count}건`)
@@ -4246,7 +4246,6 @@
       const a = e.target.closest('#nav a[data-page]')
       if (a) { e.preventDefault(); navigate(a.dataset.page) }
     })
-    document.getElementById('help-btn')?.addEventListener('click', toggleHelp)
     document.getElementById('sidebar-logo')?.addEventListener('click', () => navigate('dashboard'))
     document.getElementById('sb-collapse-btn')?.addEventListener('click', function() {
       const sb = document.getElementById('sidebar')
