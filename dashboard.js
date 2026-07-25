@@ -47,11 +47,17 @@ const Dashboard = {
     cardIds.forEach(id => { if (!orderedIds.includes(id)) orderedIds.push(id) })
 
     container.innerHTML = ''
-    const grid = el('div', { id: 'dash-drag-grid', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;position:relative' })
-    const guideLine = el('div', { id: 'dash-snap-guide', style: 'display:none;position:absolute;background:#7C3AED40;border:1px dashed #7C3AED;border-radius:4px;z-index:50;pointer-events:none;transition:all .15s' })
+    const grid = document.createElement('div')
+    grid.id = 'dash-drag-grid'
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;position:relative'
+    const guideLine = document.createElement('div')
+    guideLine.id = 'dash-snap-guide'
+    guideLine.style.cssText = 'display:none;position:absolute;background:#7C3AED40;border:1px dashed #7C3AED;border-radius:4px;z-index:50;pointer-events:none;transition:all .15s'
     container.append(grid, guideLine)
 
     orderedIds.forEach((id, idx) => {
+      const contentWrap = document.createElement('div')
+      contentWrap.innerHTML = cardContents[id] || ''
       const card = el('div', {
         className: 'dash-card',
         'data-card-id': id,
@@ -72,7 +78,6 @@ const Dashboard = {
         onDragOver: e => {
           e.preventDefault()
           if (!Dashboard._dragState) return
-          const targetIdx = idx
           const targetRect = e.currentTarget.getBoundingClientRect()
           const midY = targetRect.top + targetRect.height / 2
           const before = e.clientY < midY
@@ -94,7 +99,6 @@ const Dashboard = {
           const toId = id
           if (fromId === toId) return
           const fromIdx = Dashboard._cardOrder.indexOf(fromId)
-          const toIdx = Dashboard._cardOrder.indexOf(toId)
           Dashboard._cardOrder.splice(fromIdx, 1)
           const targetRect = e.currentTarget.getBoundingClientRect()
           const insertIdx = e.clientY < targetRect.top + targetRect.height / 2 ? Dashboard._cardOrder.indexOf(toId) : Dashboard._cardOrder.indexOf(toId) + 1
@@ -103,10 +107,12 @@ const Dashboard = {
           Dashboard._dragState = null
           Dashboard.render(containerId, assessmentId)
         }
-      },
-        el('div', { style: 'position:absolute;top:6px;right:8px;font-size:10px;color:#ccc;cursor:grab;user-select:none', title: '드래그하여 순서 변경' }, '⋮⋮'),
-        cardContents[id] || ''
-      )
+      })
+      const handle = document.createElement('div')
+      handle.style.cssText = 'position:absolute;top:6px;right:8px;font-size:10px;color:#ccc;cursor:grab;user-select:none;z-index:5'
+      handle.textContent = '\u22EE'
+      handle.title = '드래그하여 순서 변경'
+      card.append(handle, contentWrap)
       grid.append(card)
     })
 

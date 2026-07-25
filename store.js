@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.9.4'
+const APP_VERSION = 'v1.9.5'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -352,7 +352,8 @@ const Store = {
       changeLogs: [],
       shareLinks: [],
       shareAccessLogs: [],
-      capaItems: []
+      capaItems: [],
+      projectTasks: []
     }
   },
 
@@ -789,6 +790,12 @@ const Store = {
   addEvidenceFile(f) { this.data.evidenceFiles.push({ id: Date.now(), ...f, uploaded_at: new Date().toISOString() }); this._save(); return f },
   deleteEvidenceFile(id) { this.data.evidenceFiles = this.data.evidenceFiles.filter(f => f.id !== id); this._save() },
   deleteEvidenceFilesByEvidence(evidenceId) { this.data.evidenceFiles = this.data.evidenceFiles.filter(f => f.evidence_id !== evidenceId); this._save() },
+
+  // ==== Project Tasks ====
+  getProjectTasks() { return this.data.projectTasks || [] },
+  addProjectTask(t) { const task = { id: Date.now(), title: '', description: '', category: '일반', assignee: '', department: '', priority: '보통', status: '대기', start_date: '', due_date: '', progress: 0, tags: [], linked_type: '', linked_id: null, created_at: new Date().toISOString(), ...t }; this.data.projectTasks.push(task); this._save(); return task },
+  updateProjectTask(id, updates) { const i = (this.data.projectTasks || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.projectTasks[i], updates); this._save() } },
+  deleteProjectTask(id) { this.data.projectTasks = (this.data.projectTasks || []).filter(x => x.id !== id); this._save() },
 
   // ==== GHG Factors ====
   getGHGFactors() { return this.data.ghgFactors },

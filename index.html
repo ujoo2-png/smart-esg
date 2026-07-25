@@ -71,6 +71,14 @@
           <a href="#" data-page="submit">📤 <span class="nav-label">평가기관 제출</span></a>
         </div>
       </div>
+      <div class="nav-group" data-group="project">
+        <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="nav-group-icon">📅</span><span class="nav-label">프로젝트 관리</span><span class="nav-group-arrow">›</span>
+        </div>
+        <div class="nav-group-items">
+          <a href="#" data-page="project">📅 <span class="nav-label">업무 관리</span></a>
+        </div>
+      </div>
       <div class="nav-group" data-group="settings">
         <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
           <span class="nav-group-icon">⚙️</span><span class="nav-label">설정</span><span class="nav-group-arrow">›</span>
@@ -133,6 +141,7 @@
       <div id="page-masking" class="page"></div>
       <div id="page-api" class="page"></div>
       <div id="page-share" class="page"></div>
+      <div id="page-project" class="page"></div>
       <div id="page-settings" class="page">
         <div class="tabs">
           <button class="tab active" data-stab="tab-users" onclick="switchSettingsTab('tab-users')">👥 사용자 관리</button>

@@ -404,6 +404,7 @@
     else if (page === 'api') _safe(renderAPI)
     else if (page === 'share') _safe(renderShareManagement)
     else if (page === 'settings') _safe(() => switchSettingsTab('tab-users'))
+    else if (page === 'project') _safe(renderProjectManagement)
   }
 
   function showHelpFor(page) {
@@ -841,6 +842,8 @@
     })
     const evFileMap = {}
     evidences.forEach(ev => { evFileMap[ev.id] = Store.getEvidenceFiles(ev.id) })
+    if (!window._indFileStore) window._indFileStore = {}
+    evidences.forEach(ev => { (evFileMap[ev.id] || []).forEach((f, i) => { window._indFileStore[ev.id + '_' + i] = f }) })
     const groups = Indicator.getGroups(ind.authority_code)
     const group = groups.find(g => g.id === ind.group_id)
     const statusColors = { pending: '#f59e0b', self: '#3b82f6', internal_reviewed: '#8b5cf6', externally_verified: '#10b981', confirmed: '#10b981' }
@@ -849,7 +852,7 @@
       const files = evFileMap[ev.id] || []
       const sc = statusColors[ev.status] || '#9ca3af'
       const sl = statusLabels[ev.status] || ev.status || '-'
-      const fileBtns = files.map(f => `<span style="display:inline-flex;gap:3px;margin-left:6px"><button onclick="event.stopPropagation();window.previewEvidenceFile(${JSON.stringify(f).replace(/"/g, '&quot;')})" style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f0f7ff;color:#3b82f6;border:1px solid #bfdbfe;cursor:pointer">열람</button><button onclick="event.stopPropagation();window.downloadEvidenceFile(${JSON.stringify(f).replace(/"/g, '&quot;')})" style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;cursor:pointer">다운</button></span>`).join('')
+      const fileBtns = files.map((f, fi) => `<span style="display:inline-flex;gap:3px;margin-left:6px"><button onclick="event.stopPropagation();var f=window._indFileStore['${ev.id}_${fi}'];if(f)window.previewEvidenceFile(f)" style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f0f7ff;color:#3b82f6;border:1px solid #bfdbfe;cursor:pointer">열람</button><button onclick="event.stopPropagation();var f=window._indFileStore['${ev.id}_${fi}'];if(f)window.downloadEvidenceFile(f)" style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;cursor:pointer">다운</button></span>`).join('')
       return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:#f8f9fa;border-radius:6px;margin-bottom:4px;font-size:12px;border:1px solid #eee">
         <span style="font-size:14px;flex-shrink:0">📄</span>
         <span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ev.title || '제목 없음'}</span>
@@ -3022,10 +3025,10 @@
         el('span', {}, `갱신: ${benchmarks.last_updated}`),
         el('span', { style: `font-weight:600;color:${companyScore > benchmarks.global_avg ? '#27ae60' : '#e74c3c'}` }, `자사: ${companyScore}점`)
       ),
-      el('div', { style: 'display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:20px' },
-        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)' },
+      el('div', { style: 'display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:20px;overflow-x:auto' },
+        el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:0;overflow:hidden' },
           el('h4', { style: 'margin:0 0 12px;font-size:13px;color:#666' }, '업종별 평균 점수'),
-          el('div', { style: 'position:relative', innerHTML: industryBars + companyLine })
+          el('div', { style: 'position:relative;overflow-x:auto', innerHTML: industryBars + companyLine })
         ),
         el('div', {},
           el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:12px' },
@@ -3223,6 +3226,15 @@
     const today = new Date()
     c.innerHTML = ''
 
+    const checklistItems = [
+      { id: 'homepage_esg', label: '홈페이지 ESG 페이지 게시', desc: '회사 홈페이지에 ESG 관련 페이지가 공개되어 있는지 점검', category: '홈페이지', url: 'https://www.google.com/search?q=ESG+홈페이지+공개' },
+      { id: 'annual_report', label: '사업보고서 게시', desc: '최근 연도 사업보고서가 공개되어 있는지 점검', category: '보고서', url: 'https://dart.fss.or.kr' },
+      { id: 'sustainability_report', label: '지속가능경영보고서 게시', desc: '지속가능경영보고서가 최신 버전으로 게시되어 있는지 점검', category: '보고서', url: 'https://www.google.com/search?q=지속가능경영보고서+게시' },
+      { id: 'esg_policy', label: 'ESG 정책 공개', desc: '환경/사회/거버넌스 정책이 홈페이지에 공개되어 있는지 점검', category: '정책', url: 'https://www.google.com/search?q=ESG+정책+공개' },
+      { id: 'news_monitoring', label: '뉴스/이슈 모니터링', desc: '회사 관련 부정 뉴스(제재, 소송, 사고)가 있는지 점검', category: '모니터링', url: 'https://news.google.com/search?q=부정뉴스' },
+      { id: 'rating_update', label: '등급 변동 확인', desc: 'MSCI/Sustainalytics 등급이 최근 갱신되었는지 확인', category: '등급', url: 'https://www.google.com/search?q=ESG+등급+변동' }
+    ]
+
     c.append(
       el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
         el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '🌐 공개자료 점검 (PUBLIC_DATA)'),
@@ -3252,15 +3264,6 @@
       ))
       return
     }
-
-    const checklistItems = [
-      { id: 'homepage_esg', label: '홈페이지 ESG 페이지 게시', desc: '회사 홈페이지에 ESG 관련 페이지가 공개되어 있는지 점검', category: '홈페이지', url: 'https://www.google.com/search?q=ESG+홈페이지+공개' },
-      { id: 'annual_report', label: '사업보고서 게시', desc: '최근 연도 사업보고서가 공개되어 있는지 점검', category: '보고서', url: 'https://dart.fss.or.kr' },
-      { id: 'sustainability_report', label: '지속가능경영보고서 게시', desc: '지속가능경영보고서가 최신 버전으로 게시되어 있는지 점검', category: '보고서', url: 'https://www.google.com/search?q=지속가능경영보고서+게시' },
-      { id: 'esg_policy', label: 'ESG 정책 공개', desc: '환경/사회/거버넌스 정책이 홈페이지에 공개되어 있는지 점검', category: '정책', url: 'https://www.google.com/search?q=ESG+정책+공개' },
-      { id: 'news_monitoring', label: '뉴스/이슈 모니터링', desc: '회사 관련 부정 뉴스(제재, 소송, 사고)가 있는지 점검', category: '모니터링', url: 'https://news.google.com/search?q=부정뉴스' },
-      { id: 'rating_update', label: '등급 변동 확인', desc: 'MSCI/Sustainalytics 등급이 최근 갱신되었는지 확인', category: '등급', url: 'https://www.google.com/search?q=ESG+등급+변동' }
-    ]
 
     agencies.forEach(agency => {
       const savedChecklist = Store.getExtractionsByHash(`checklist_${agency.code}`) || []
@@ -3965,6 +3968,227 @@
     `
   }
 
+  // ==================== 프로젝트 관리 ====================
+  let _pmView = 'list'
+  let _pmFilter = 'all'
+
+  function renderProjectManagement() {
+    const c = document.getElementById('page-project')
+    if (!c) return
+    const tasks = Store.getProjectTasks()
+    const filtered = _pmFilter === 'all' ? tasks : tasks.filter(t => t.status === _pmFilter)
+    const statusCounts = { all: tasks.length, '대기': tasks.filter(t => t.status === '대기').length, '진행중': tasks.filter(t => t.status === '진행중').length, '검토': tasks.filter(t => t.status === '검토').length, '완료': tasks.filter(t => t.status === '완료').length, '지연': tasks.filter(t => t.status === '지연').length }
+    const today = new Date()
+
+    const headerCard = el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
+      el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '📅 프로젝트 관리'),
+      el('span', { style: 'font-size:12px;color:#888' }, `${tasks.length}건`),
+      Object.entries(statusCounts).map(([k, v]) => el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmFilter === k ? '#7C3AED' : '#f0f0f0'};color:${_pmFilter === k ? '#fff' : '#666'};border:1px solid ${_pmFilter === k ? '#7C3AED' : '#ddd'}`, onClick: () => { _pmFilter = k; renderProjectManagement() } }, `${k === 'all' ? '전체' : k} (${v})`)),
+      el('div', { style: 'flex:1' }),
+      el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmView === 'list' ? '#7C3AED' : '#f0f0f0'};color:${_pmView === 'list' ? '#fff' : '#666'}`, onClick: () => { _pmView = 'list'; renderProjectManagement() } }, '📋 목록'),
+      el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmView === 'gantt' ? '#7C3AED' : '#f0f0f0'};color:${_pmView === 'gantt' ? '#fff' : '#666'}`, onClick: () => { _pmView = 'gantt'; renderProjectManagement() } }, '📊 간트'),
+      el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmView === 'calendar' ? '#7C3AED' : '#f0f0f0'};color:${_pmView === 'calendar' ? '#fff' : '#666'}`, onClick: () => { _pmView = 'calendar'; renderProjectManagement() } }, '🗓 캘린더'),
+      el('button', { className: 'btn btn-primary btn-sm', onClick: () => _openProjectTaskModal(null) }, '+ 업무 추가')
+    )
+    c.innerHTML = ''
+    c.append(headerCard)
+
+    if (_pmView === 'gantt') { c.append(_renderPmGantt(filtered)); return }
+    if (_pmView === 'calendar') { c.append(_renderPmCalendar(filtered)); return }
+
+    if (!filtered.length) {
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📅'), el('p', { style: 'color:#888' }, '등록된 업무가 없습니다.'), el('button', { className: 'btn btn-primary', onClick: () => _openProjectTaskModal(null) }, '+ 첫 업무 추가')))
+      return
+    }
+
+    const priorityColors = { '높음': '#ef4444', '보통': '#3b82f6', '낮음': '#10b981' }
+    const statusColors2 = { '대기': '#f59e0b', '진행중': '#3b82f6', '검토': '#8b5cf6', '완료': '#10b981', '지연': '#ef4444' }
+
+    const listCard = el('div', { className: 'card', style: 'padding:0;overflow:hidden' })
+    filtered.sort((a, b) => { const o = { '높음': 0, '보통': 1, '낮음': 2 }; return (o[a.priority] || 1) - (o[b.priority] || 1) }).forEach((task, idx) => {
+      const isOverdue = task.due_date && new Date(task.due_date) < today && task.status !== '완료'
+      const row = el('div', { style: `border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:12px;padding:12px 16px;${idx === filtered.length - 1 ? 'border-bottom:none' : ''}` },
+        el('span', { style: `width:4px;height:32px;border-radius:2px;background:${priorityColors[task.priority] || '#999'};flex-shrink:0` }),
+        el('div', { style: 'flex:1;min-width:0' },
+          el('div', { style: 'font-size:13px;font-weight:600;color:#1a1a2e' }, task.title || '제목 없음'),
+          el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;font-size:11px' },
+            el('span', { style: `padding:2px 6px;border-radius:8px;background:${statusColors2[task.status] || '#999'}20;color:${statusColors2[task.status] || '#999'};font-weight:500` }, task.status || '대기'),
+            task.assignee ? el('span', { style: 'color:#888' }, `👤 ${task.assignee}`) : null,
+            task.department ? el('span', { style: 'color:#888' }, `🏢 ${task.department}`) : null,
+            task.category && task.category !== '일반' ? el('span', { style: 'padding:1px 5px;border-radius:4px;background:#f0f0f0;color:#666' }, task.category) : null,
+            task.linked_type ? el('span', { style: 'padding:1px 5px;border-radius:4px;background:#f0f7ff;color:#3b82f6' }, `🔗 ${task.linked_type}`) : null
+          )
+        ),
+        task.due_date ? el('span', { style: `font-size:11px;${isOverdue ? 'color:#ef4444;font-weight:600' : 'color:#888'}` }, isOverdue ? '⏰ 지연' : `📅 ${task.due_date}`) : null,
+        task.progress > 0 ? el('div', { style: 'width:60px;display:flex;align-items:center;gap:4px' },
+          el('div', { style: 'flex:1;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden' }, el('div', { style: `width:${task.progress}%;height:100%;background:${task.progress >= 100 ? '#10b981' : '#3b82f6'};border-radius:2px` })),
+          el('span', { style: 'font-size:9px;color:#888' }, `${task.progress}%`)
+        ) : null,
+        el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: () => _openProjectTaskModal(task) }, '수정'),
+        el('button', { className: 'btn btn-sm', style: 'font-size:11px;color:#e74c3c', onClick: () => { if (confirm('삭제?')) { Store.deleteProjectTask(task.id); showToast('삭제되었습니다.', 'success'); renderProjectManagement() } } }, '✕')
+      )
+      listCard.append(row)
+    })
+    c.append(listCard)
+  }
+
+  function _renderPmGantt(tasks) {
+    const withDates = tasks.filter(t => t.start_date || t.due_date)
+    if (!withDates.length) return el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📊'), el('p', { style: 'color:#888' }, '일정이 설정된 업무가 없습니다.'))
+
+    const today = new Date()
+    const allDates = withDates.flatMap(t => [t.start_date ? new Date(t.start_date) : null, t.due_date ? new Date(t.due_date) : null].filter(Boolean))
+    const minDate = new Date(Math.min(...allDates)); minDate.setDate(minDate.getDate() - 3)
+    const maxDate = new Date(Math.max(...allDates)); maxDate.setDate(maxDate.getDate() + 7)
+    const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24))
+    const dayWidth = Math.max(30, Math.min(50, 700 / totalDays))
+    const todayOffset = Math.ceil((today - minDate) / (1000 * 60 * 60 * 24))
+
+    const priorityColors = { '높음': '#ef4444', '보통': '#3b82f6', '낮음': '#10b981' }
+    const statusColors2 = { '대기': '#f59e0b', '진행중': '#3b82f6', '검토': '#8b5cf6', '완료': '#10b981', '지연': '#ef4444' }
+
+    const headerDays = []
+    for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+      const isToday = d.toDateString() === today.toDateString()
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6
+      headerDays.push(el('div', { style: `width:${dayWidth}px;flex-shrink:0;text-align:center;font-size:8px;padding:3px 0;${isToday ? 'background:#7C3AED20;font-weight:700;color:#7C3AED' : isWeekend ? 'background:#f8f9fa;color:#bbb' : 'color:#888'}` }, `${d.getMonth() + 1}/${d.getDate()}`))
+    }
+
+    const sorted = [...withDates].sort((a, b) => { const as = a.start_date ? new Date(a.start_date) : new Date(a.due_date); const bs = b.start_date ? new Date(b.start_date) : new Date(b.due_date); return as - bs })
+
+    return el('div', { className: 'card', style: 'padding:0;overflow:hidden' },
+      el('div', { style: 'padding:10px 16px;border-bottom:1px solid #eee;font-weight:600;font-size:13px' }, `📊 간트차트 (${withDates.length}건)`),
+      el('div', { style: 'display:flex;overflow-x:auto' },
+        el('div', { style: 'min-width:150px;flex-shrink:0;border-right:1px solid #eee;background:#fafafa' },
+          el('div', { style: 'height:28px;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 12px;font-size:10px;font-weight:600;color:#888' }, '업무명'),
+          ...sorted.map(t => el('div', { style: 'height:28px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;padding:0 10px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer', onClick: () => _openProjectTaskModal(t) },
+            el('span', { style: `width:5px;height:5px;border-radius:50%;background:${statusColors2[t.status] || '#999'};margin-right:6px;flex-shrink:0` }),
+            t.title || '-'
+          ))
+        ),
+        el('div', { style: 'flex:1;overflow-x:auto;position:relative' },
+          el('div', { style: `display:flex;height:28px;border-bottom:1px solid #eee;background:#fafafa` }, ...headerDays),
+          ...sorted.map(t => {
+            const start = t.start_date ? new Date(t.start_date) : new Date(t.due_date)
+            const end = t.due_date ? new Date(t.due_date) : new Date(t.start_date)
+            const startOff = Math.max(0, Math.ceil((start - minDate) / (1000 * 60 * 60 * 24)))
+            const dur = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+            const color = priorityColors[t.priority] || '#3b82f6'
+            const isOverdue = t.due_date && new Date(t.due_date) < today && t.status !== '완료'
+            return el('div', { style: 'position:relative;height:28px;border-bottom:1px solid #f0f0f0' },
+              el('div', { style: `position:absolute;left:${startOff * dayWidth}px;width:${dur * dayWidth}px;height:18px;top:5px;background:${isOverdue ? '#ef444420' : color + '20'};border:1px solid ${isOverdue ? '#ef444460' : color + '60'};border-radius:4px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 4px`, onClick: () => _openProjectTaskModal(t), title: `${t.title}\n${t.start_date || '?'} ~ ${t.due_date || '?'}\n담당: ${t.assignee || '미지정'} (${t.progress || 0}%)` },
+                el('div', { style: `height:100%;width:${t.progress || 0}%;background:${isOverdue ? '#ef4444' : color};border-radius:3px;transition:width .3s` }),
+                el('span', { style: `position:absolute;left:4px;font-size:9px;font-weight:600;color:${isOverdue ? '#ef4444' : color};white-space:nowrap;text-shadow:0 0 3px #fff` }, t.title)
+              )
+            )
+          }),
+          el('div', { style: `position:absolute;left:${todayOffset * dayWidth}px;width:2px;height:100%;background:#ef4444;z-index:2;top:0` })
+        )
+      )
+    )
+  }
+
+  function _renderPmCalendar(tasks) {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth()
+    const firstDay = new Date(year, month, 1).getDay()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const today = now.getDate()
+    const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
+
+    const tasksByDay = {}
+    tasks.forEach(t => {
+      if (t.due_date) {
+        const d = new Date(t.due_date)
+        if (d.getFullYear() === year && d.getMonth() === month) {
+          const day = d.getDate()
+          if (!tasksByDay[day]) tasksByDay[day] = []
+          tasksByDay[day].push(t)
+        }
+      }
+      if (t.start_date) {
+        const d = new Date(t.start_date)
+        if (d.getFullYear() === year && d.getMonth() === month) {
+          const day = d.getDate()
+          if (!tasksByDay['s' + day]) tasksByDay['s' + day] = []
+          tasksByDay['s' + day].push(t)
+        }
+      }
+    })
+
+    const statusColors2 = { '대기': '#f59e0b', '진행중': '#3b82f6', '검토': '#8b5cf6', '완료': '#10b981', '지연': '#ef4444' }
+    const cells = []
+    for (let i = 0; i < firstDay; i++) cells.push(el('div', { style: 'min-height:80px;background:#fafafa;border:1px solid #f0f0f0;border-radius:4px' }))
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isToday = day === today
+      const dueTasks = tasksByDay[day] || []
+      const startTasks = tasksByDay['s' + day] || []
+      cells.push(el('div', { style: `min-height:80px;border:1px solid ${isToday ? '#7C3AED' : '#f0f0f0'};border-radius:4px;padding:4px;${isToday ? 'background:#f5f0ff' : 'background:#fff'}` },
+        el('div', { style: `font-size:11px;font-weight:${isToday ? '700' : '500'};color:${isToday ? '#7C3AED' : '#333'};margin-bottom:2px` }, `${day}`),
+        ...dueTasks.slice(0, 3).map(t => el('div', { style: `font-size:9px;padding:1px 4px;border-radius:3px;margin-bottom:1px;background:${statusColors2[t.status] || '#999'}20;color:${statusColors2[t.status] || '#999'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer`, onClick: () => _openProjectTaskModal(t), title: t.title }, `📅 ${t.title}`)),
+        startTasks.filter(t => !dueTasks.includes(t)).slice(0, 2).map(t => el('div', { style: `font-size:9px;padding:1px 4px;border-radius:3px;margin-bottom:1px;background:#10b98120;color:#10b981;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer`, onClick: () => _openProjectTaskModal(t), title: t.title }, `▶ ${t.title}`)),
+        (dueTasks.length + startTasks.length) > 5 ? el('div', { style: 'font-size:8px;color:#aaa;text-align:center' }, `+${dueTasks.length + startTasks.length - 5}건`) : null
+      ))
+    }
+
+    return el('div', { className: 'card', style: 'padding:16px' },
+      el('div', { style: 'text-align:center;font-weight:600;font-size:14px;margin-bottom:12px' }, `${year}년 ${monthNames[month]}`),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center' },
+        ...['일', '월', '화', '수', '목', '금', '토'].map(d => el('div', { style: 'font-size:11px;font-weight:600;color:#888;padding:4px' }, d)),
+        ...cells
+      )
+    )
+  }
+
+  function _openProjectTaskModal(task) {
+    const isEdit = !!task
+    const categories = ['일반', '평가', '증빙', '온실가스', '보고서', '협력사', '교육', '개선', '기타']
+    const priorities = ['높음', '보통', '낮음']
+    const statuses = ['대기', '진행중', '검토', '완료', '지연']
+
+    const form = el('form', { onSubmit: e => e.preventDefault() },
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+        el('label', { style: 'font-size:12px' }, '제목 *', el('input', { id: 'pmTitle', value: task?.title || '', required: true, style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '카테고리', el('select', { id: 'pmCategory', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...categories.map(c => el('option', { value: c, selected: (task?.category || '일반') === c }, c)))),
+        el('label', { style: 'font-size:12px' }, '담당자', el('input', { id: 'pmAssignee', value: task?.assignee || '', placeholder: '이름', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '부서', el('input', { id: 'pmDept', value: task?.department || '', placeholder: '부서명', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '우선순위', el('select', { id: 'pmPriority', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...priorities.map(p => el('option', { value: p, selected: (task?.priority || '보통') === p }, p)))),
+        el('label', { style: 'font-size:12px' }, '상태', el('select', { id: 'pmStatus', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...statuses.map(s => el('option', { value: s, selected: (task?.status || '대기') === s }, s)))),
+        el('label', { style: 'font-size:12px' }, '시작일', el('input', { id: 'pmStart', type: 'date', value: task?.start_date || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '마감일', el('input', { id: 'pmDue', type: 'date', value: task?.due_date || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }))
+      ),
+      el('label', { style: 'font-size:12px;margin-top:8px;display:block' }, '설명', el('textarea', { id: 'pmDesc', value: task?.description || '', rows: '3', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;resize:vertical' })),
+      el('div', { style: 'margin-top:8px;display:flex;align-items:center;gap:8px' },
+        el('label', { style: 'font-size:12px' }, '진행률'),
+        el('input', { id: 'pmProgress', type: 'range', min: '0', max: '100', value: task?.progress || '0', style: 'flex:1', onInput: () => { const v = document.getElementById('pmProgressVal'); if (v) v.textContent = document.getElementById('pmProgress').value + '%' } }),
+        el('span', { id: 'pmProgressVal', style: 'font-size:11px;color:#888;min-width:30px' }, (task?.progress || '0') + '%')
+      )
+    )
+
+    modal(isEdit ? '업무 수정' : '업무 추가', form)
+    document.getElementById('modal-save').onclick = () => {
+      const data = {
+        title: document.getElementById('pmTitle').value,
+        category: document.getElementById('pmCategory').value,
+        assignee: document.getElementById('pmAssignee').value,
+        department: document.getElementById('pmDept').value,
+        priority: document.getElementById('pmPriority').value,
+        status: document.getElementById('pmStatus').value,
+        start_date: document.getElementById('pmStart').value,
+        due_date: document.getElementById('pmDue').value,
+        description: document.getElementById('pmDesc').value,
+        progress: parseInt(document.getElementById('pmProgress').value)
+      }
+      if (!data.title) { alert('제목을 입력하세요.'); return }
+      if (isEdit) Store.updateProjectTask(task.id, data)
+      else Store.addProjectTask(data)
+      closeModal()
+      showToast(isEdit ? '수정되었습니다.' : '추가되었습니다.', 'success')
+      renderProjectManagement()
+    }
+  }
+
   // ==================== 대시보드 ====================
   let _dashAssId = null
   function setDashAssessment(id) { _dashAssId = id; renderDashboard() }
@@ -4477,6 +4701,7 @@
   window.previewEvidenceFile = _previewEvidenceFile
   window.downloadEvidenceFile = _downloadEvidenceFile
   window.getEvidenceFilesFor = function(evidenceId) { return Store.getEvidenceFiles(evidenceId) }
+  window.el = el
 
   // ==================== 데이터 내보내기 ====================
   function exportCSV(data, filename) {
