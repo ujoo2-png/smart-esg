@@ -1203,6 +1203,22 @@
       )
     )
 
+    const dropZone = el('div', {
+      id: 'ev-dropzone',
+      style: 'border:2px dashed #c3cdda;border-radius:12px;background:#fbfcfd;padding:28px 20px;text-align:center;margin-bottom:14px;transition:border-color .15s,background .15s;cursor:pointer',
+      onDragEnter: e => { e.preventDefault(); dropZone.style.borderColor = '#7C3AED'; dropZone.style.background = '#f5f0ff' },
+      onDragOver: e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' },
+      onDragLeave: e => { if (!dropZone.contains(e.relatedTarget)) { dropZone.style.borderColor = '#c3cdda'; dropZone.style.background = '#fbfcfd' } },
+      onDrop: e => { e.preventDefault(); dropZone.style.borderColor = '#c3cdda'; dropZone.style.background = '#fbfcfd'; _handleEvidenceFileDrop(e.dataTransfer.files) },
+      onClick: () => { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.gif,.csv,.txt,.pptx'; inp.onchange = () => _handleEvidenceFileDrop(inp.files); inp.click() }
+    },
+      el('div', { style: 'font-size:28px;margin-bottom:6px' }, '📥'),
+      el('div', { style: 'font-size:13px;color:#666' }, '여기로 파일을 끌어다 놓으세요 — '),
+      el('span', { style: 'font-size:13px;color:#7C3AED;font-weight:600' }, '여러 개 동시 업로드 가능'),
+      el('div', { style: 'font-size:11px;color:#aaa;margin-top:4px' }, 'PDF, Excel, Word, 이미지 등 (최대 10MB)')
+    )
+    c.append(dropZone)
+
     const filteredEvidences = evidences.filter(ev => {
       if (!searchQuery) return true
       const q = searchQuery.toLowerCase()
@@ -1339,14 +1355,25 @@
       ),
       el('div', { style: 'margin-bottom:12px' },
         el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px' }, '첨부파일'),
+        el('div', {
+          id: 'ev-file-drop-' + ev.id,
+          style: 'border:2px dashed #d0d5dd;border-radius:8px;padding:14px;text-align:center;font-size:12px;color:#888;margin-bottom:8px;transition:border-color .15s,background .15s;cursor:pointer',
+          onDragEnter: e => { e.preventDefault(); e.currentTarget.style.borderColor = '#7C3AED'; e.currentTarget.style.background = '#f5f0ff' },
+          onDragOver: e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' },
+          onDragLeave: e => { if (!e.currentTarget.contains(e.relatedTarget)) { e.currentTarget.style.borderColor = '#d0d5dd'; e.currentTarget.style.background = '' } },
+          onDrop: e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#d0d5dd'; e.currentTarget.style.background = ''; _handleEvidenceInlineFileDrop(ev.id, e.dataTransfer.files) },
+          onClick: () => { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.gif,.csv,.txt,.pptx'; inp.onchange = () => _handleEvidenceInlineFileDrop(ev.id, inp.files); inp.click() }
+        }, '📎 여기에 파일을 끌어다 놓거나 클릭하여 첨부'),
         files.length ? el('div', { style: 'display:flex;flex-direction:column;gap:4px' },
-          ...files.map(f => el('div', { style: 'display:flex;align-items:center;gap:6px;padding:5px 8px;background:#f8f9fa;border-radius:4px;font-size:11px' },
-            el('span', {}, fileIcons[f.file_type] || '📁'),
-            el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, f.original_name || f.file_name),
-            el('span', { style: 'color:#aaa;font-size:10px' }, f.file_size ? (f.file_size / 1024).toFixed(0) + 'KB' : ''),
-            el('button', { style: { background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 11, padding: '0 2px' }, onClick: () => { Store.deleteEvidenceFile(f.id); renderEvidenceMgmt() } }, '✕')
+          ...files.map(f => el('div', { style: 'display:flex;align-items:center;gap:6px;padding:6px 8px;background:#f8f9fa;border-radius:6px;font-size:11px;border:1px solid #eee' },
+            el('span', { style: 'font-size:14px;flex-shrink:0' }, fileIcons[f.file_type] || '📁'),
+            el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500' }, f.original_name || f.file_name),
+            el('span', { style: 'color:#aaa;font-size:10px;flex-shrink:0' }, f.file_size ? (f.file_size / 1024).toFixed(0) + 'KB' : ''),
+            el('button', { style: 'background:#f0f7ff;color:#3b82f6;border:1px solid #bfdbfe;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;flex-shrink:0', onClick: () => _previewEvidenceFile(f) }, '열람'),
+            el('button', { style: 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;flex-shrink:0', onClick: () => _downloadEvidenceFile(f) }, '다운'),
+            el('button', { style: 'background:none;border:none;color:#e74c3c;cursor:pointer;font-size:12px;padding:2px 4px;flex-shrink:0', onClick: () => { if (confirm('이 파일을 삭제하시겠습니까?')) { Store.deleteEvidenceFile(f.id); renderEvidenceMgmt() } } }, '✕')
           ))
-        ) : el('span', { style: 'font-size:11px;color:#aaa' }, '첨부 파일 없음')
+        ) : el('div', { style: 'font-size:11px;color:#aaa;padding:4px 0' }, '첨부된 파일이 없습니다')
       ),
       el('div', { style: 'display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap' },
         tags.length ? el('div', { style: 'flex:1;display:flex;gap:4px;flex-wrap:wrap;align-items:center' },
@@ -1375,6 +1402,136 @@
   function openEvidencePreview(evId) {
     _evidencePreviewId = _evidencePreviewId === evId ? null : evId
     renderEvidenceMgmt()
+  }
+
+  function _handleEvidenceFileDrop(fileList) {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    if (!Evidence.canAddMore(_evidenceAssId)) {
+      alert(`증빙 문서는 평가당 55개까지 등록 가능합니다.\n기존 증빙을 삭제해주세요.`)
+      return
+    }
+    const validFiles = files.filter(f => { if (f.size > 10 * 1024 * 1024) { alert(f.name + '은 10MB를 초과합니다.'); return false }; return true })
+    if (!validFiles.length) return
+    const typeMap = { '환경': 'ENV', '안전': 'SAF', '인권': 'HR', '윤리': 'ETH', '에너지': 'ENG', 'GHG': 'GHG', '탄소': 'GHG', '배출': 'EMI', '폐기': 'WST', '수질': 'WTR', '품질': 'QMS', '교정': 'CAL', '점검': 'INS', '보고서': 'RPT', '정책': 'POL', '인증': 'CERT' }
+    const extTypeMap = { pdf: 'pdf', xlsx: 'xlsx', xls: 'xlsx', docx: 'docx', doc: 'docx', png: 'img', jpg: 'img', jpeg: 'img', gif: 'img' }
+    let loaded = 0
+    const results = []
+    validFiles.forEach(file => {
+      const ext = (file.name.split('.').pop() || '').toLowerCase()
+      const reader = new FileReader()
+      reader.onload = e => {
+        const fname = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ')
+        let docType = ''
+        for (const [kr, code] of Object.entries(typeMap)) { if (file.name.includes(kr)) { docType = code; break } }
+        results.push({
+          file_name: file.name,
+          file_data: e.target.result,
+          file_size: file.size,
+          mime_type: file.type,
+          title: fname,
+          file_type: extTypeMap[ext] || 'etc',
+          doc_type: docType
+        })
+        loaded++
+        if (loaded === validFiles.length) _finalizeFileDrop(results)
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  function _finalizeFileDrop(fileResults) {
+    let created = 0
+    const batchId = Date.now()
+    fileResults.forEach((fr, i) => {
+      const ev = Evidence.add({
+        assessment_id: _evidenceAssId,
+        title: fr.title || fr.file_name,
+        file_type: fr.file_type,
+        status: 'self',
+        contains_sensitive_data: false
+      })
+      Store.addEvidenceFile({
+        evidence_id: ev.id,
+        file_name: fr.file_name,
+        file_path: fr.file_data,
+        file_size: fr.file_size,
+        mime_type: fr.mime_type
+      })
+      created++
+    })
+    showToast(`${created}건의 증빙이 추가되었습니다.`, 'success')
+    renderEvidenceMgmt()
+  }
+
+  function _handleEvidenceInlineFileDrop(evidenceId, fileList) {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    const validFiles = files.filter(f => { if (f.size > 10 * 1024 * 1024) { alert(f.name + '은 10MB를 초과합니다.'); return false }; return true })
+    if (!validFiles.length) return
+    const extTypeMap = { pdf: 'pdf', xlsx: 'xlsx', xls: 'xlsx', docx: 'docx', doc: 'docx', png: 'img', jpg: 'img', jpeg: 'img', gif: 'img' }
+    let loaded = 0
+    validFiles.forEach(file => {
+      const ext = (file.name.split('.').pop() || '').toLowerCase()
+      const reader = new FileReader()
+      reader.onload = e => {
+        Store.addEvidenceFile({ evidence_id: evidenceId, file_name: file.name, file_path: e.target.result, file_size: file.size, mime_type: file.type })
+        loaded++
+        if (loaded === validFiles.length) {
+          showToast(`${loaded}개 파일이 첨부되었습니다.`, 'success')
+          renderEvidenceMgmt()
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  function _previewEvidenceFile(file) {
+    const dataUrl = file.file_path || file.file_data
+    if (!dataUrl) { alert('파일 데이터를 찾을 수 없습니다.'); return }
+    const mime = file.mime_type || ''
+    const isImage = mime.startsWith('image/')
+    const isPdf = mime === 'application/pdf' || (file.file_name || '').toLowerCase().endsWith('.pdf')
+    const isText = mime.startsWith('text/') || (file.file_name || '').toLowerCase().match(/\.(csv|txt|json)$/)
+
+    const body = el('div', { style: 'max-height:70vh;overflow:auto' })
+    if (isImage) {
+      const img = document.createElement('img')
+      img.src = dataUrl
+      img.style = 'max-width:100%;max-height:65vh;border-radius:8px'
+      body.append(img)
+    } else if (isPdf) {
+      const iframe = document.createElement('iframe')
+      iframe.src = dataUrl
+      iframe.style = 'width:100%;height:65vh;border:none;border-radius:8px'
+      body.append(iframe)
+    } else if (isText) {
+      try {
+        const decoded = atob(dataUrl.split(',')[1] || '')
+        const pre = el('pre', { style: 'font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-all;padding:12px;background:#f8f9fa;border-radius:8px;max-height:60vh;overflow:auto' }, decoded)
+        body.append(pre)
+      } catch { body.append(el('p', { style: 'color:#888' }, '미리보기를 지원하지 않는 파일 형식입니다.')) }
+    } else {
+      body.append(el('div', { style: 'text-align:center;padding:40px 20px' },
+        el('div', { style: 'font-size:48px;margin-bottom:12px' }, fileIcons[file.file_type] || '📁'),
+        el('p', { style: 'font-size:13px;color:#333;font-weight:600' }, file.file_name),
+        el('p', { style: 'font-size:12px;color:#888' }, '이 파일 형식은 브라우저에서 미리보기가 제한됩니다. 다운로드하여 확인하세요.')
+      ))
+    }
+    modal('📎 ' + (file.original_name || file.file_name || '파일 미리보기'), body, '닫기')
+    document.getElementById('modal-save').style.display = 'none'
+  }
+
+  function _downloadEvidenceFile(file) {
+    const dataUrl = file.file_path || file.file_data
+    if (!dataUrl) { alert('파일 데이터를 찾을 수 없습니다.'); return }
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = file.original_name || file.file_name || 'download'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    showToast('다운로드를 시작합니다.', 'success')
   }
 
   function openAddEvidence() { createEvidenceModal() }
