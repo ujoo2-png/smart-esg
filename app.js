@@ -247,13 +247,28 @@
     return String(ka).localeCompare(String(kb), 'ko')
   }
 
-  const modal = (title, body, saveLabel) => {
+  const modal = (title, body, extra) => {
     document.getElementById('modal-title').textContent = title
     document.getElementById('modal-body').innerHTML = ''
     if (typeof body === 'string') document.getElementById('modal-body').innerHTML = body
     else document.getElementById('modal-body').append(body)
-    document.getElementById('modal-save').textContent = saveLabel || '저장'
-    document.getElementById('modal-save').style.display = ''
+    const saveBtn = document.getElementById('modal-save')
+    const footer = saveBtn?.parentElement
+    if (footer) { footer.querySelectorAll('.modal-extra-btn').forEach(b => b.remove()) }
+    if (Array.isArray(extra)) {
+      saveBtn.textContent = '저장'
+      extra.forEach(opt => {
+        const btn = document.createElement('button')
+        btn.className = (opt.className || 'btn btn-secondary') + ' modal-extra-btn'
+        btn.textContent = opt.label || ''
+        btn.style.marginRight = '8px'
+        if (opt.onClick) btn.onclick = opt.onClick
+        footer.insertBefore(btn, saveBtn)
+      })
+    } else {
+      saveBtn.textContent = extra || '저장'
+    }
+    saveBtn.style.display = ''
     document.getElementById('modal-overlay').classList.remove('hidden')
   }
 
@@ -4812,6 +4827,50 @@
     )
   }
 
+  let _auditFilter = 'all'
+  function renderAuditLogs() {
+    const c = document.getElementById('audit-content')
+    if (!c) return
+    const categories = [
+      { value: 'all', label: '전체' },
+      { value: '로그인', label: '🔑 로그인' },
+      { value: '로그아웃', label: '🚪 로그아웃' },
+      { value: '사용자등록', label: '👤 신규 등록' },
+      { value: '사용자관리', label: '✅ 승인' },
+      { value: '사용자삭제', label: '🗑 삭제' }
+    ]
+    const logs = Store.getAuditLogs({ category: _auditFilter === 'all' ? null : _auditFilter })
+    const actionIcons = { '로그인 성공': '🔑', '로그인 실패': '❌', '로그아웃': '🚪', '신규 등록': '👤', '사용자 승인': '✅', '사용자 삭제': '🗑', '일괄 삭제': '🗑' }
+
+    c.innerHTML = ''
+    c.append(
+      el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap' },
+        el('h3', { style: 'margin:0;font-size:14px;white-space:nowrap' }, '📋 감사 로그'),
+        el('span', { style: 'font-size:12px;color:#888' }, `${logs.length}건`),
+        ...categories.map(cat => el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_auditFilter === cat.value ? '#7C3AED' : '#f0f0f0'};color:${_auditFilter === cat.value ? '#fff' : '#666'};border:1px solid ${_auditFilter === cat.value ? '#7C3AED' : '#ddd'}`, onClick: () => { _auditFilter = cat.value; renderAuditLogs() } }, cat.label)),
+        el('div', { style: 'flex:1' }),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { if (confirm('모든 감사 로그를 삭제하시겠습니까?')) { Store.data.auditLogs = []; Store._save(); renderAuditLogs(); showToast('로그가 삭제되었습니다.', 'success') } } }, '🗑 전체 삭제')
+      )
+    )
+    if (!logs.length) {
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px;color:#999' }, '📋 감사 로그가 없습니다.'))
+      return
+    }
+    const table = el('div', { className: 'card', style: 'padding:0;overflow:hidden' })
+    const header = el('div', { style: 'display:grid;grid-template-columns:140px 100px 1fr 120px;font-size:11px;font-weight:600;color:#888;padding:10px 16px;border-bottom:2px solid #eee;background:#fafafa' }, el('span', {}, '일시'), el('span', {}, '유형'), el('span', {}, '상세'), el('span', {}, '작업자'))
+    table.append(header)
+    logs.slice(0, 200).forEach((log, idx) => {
+      const bgColor = log.category === '사용자삭제' ? '#fef2f2' : log.category === '로그인' ? '#f0fdf4' : '#fff'
+      table.append(el('div', { style: `display:grid;grid-template-columns:140px 100px 1fr 120px;font-size:12px;padding:8px 16px;border-bottom:1px solid #f5f5f5;background:${bgColor};${idx === logs.length - 1 ? 'border-bottom:none' : ''}` },
+        el('span', { style: 'color:#888;font-size:11px' }, _formatDateTime(log.created_at)),
+        el('span', { style: 'display:flex;align-items:center;gap:4px' }, el('span', {}, actionIcons[log.action] || '📝'), el('span', { style: 'font-weight:500' }, log.action)),
+        el('span', { style: 'color:#555;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, log.detail || ''),
+        el('span', { style: 'color:#888' }, log.user_name || '시스템')
+      ))
+    })
+    c.append(table)
+  }
+
   // ==================== Settings: Users ====================
   function switchSettingsTab(tabId) {
     document.querySelectorAll('#page-settings .tab').forEach(t => t.classList.remove('active'))
@@ -4830,6 +4889,7 @@
     if (tabId === 'tab-departments') renderDepartments()
     if (tabId === 'tab-weights') renderWeights()
     if (tabId === 'tab-agencies') renderAgencies()
+    if (tabId === 'tab-audit') renderAuditLogs()
   }
 
   function switchUserListTab(tab) {
@@ -4885,7 +4945,9 @@
 
   function approveUser(id) {
     if (!currentUser) return alert('로그인이 필요합니다.')
+    const u = Store.getUsers().find(x => x.id === id)
     Store.updateUser(id, { status: 'active' })
+    Store.addAuditLog({ category: '사용자관리', action: '사용자 승인', user_id: currentUser.id, user_name: currentUser.name, detail: `대상: ${u?.name || id} (${u?.username || ''})` })
     showToast('사용자가 승인되었습니다.', 'success')
     const pc = document.getElementById('pending-count')
     if (pc) pc.textContent = Store.getUsers().filter(u => u.status !== 'active').length
@@ -4921,7 +4983,9 @@
 
   function deleteUser(id) {
     if (!confirm('정말 삭제하시겠습니까?')) return
+    const u = Store.getUsers().find(x => x.id === id)
     Store.deleteUser(id)
+    Store.addAuditLog({ category: '사용자삭제', action: '사용자 삭제', user_id: currentUser?.id || null, user_name: currentUser?.name || '', detail: `대상: ${u?.name || id} (${u?.username || ''}), 역할: ${u?.role || ''}` })
     showToast('사용자가 삭제되었습니다.', 'success')
     renderUsers()
   }
@@ -4932,7 +4996,7 @@
     if (!pending.length) return alert('미승인 대기 회원이 없습니다.')
     if (!confirm(`미승인 회원 ${pending.length}명을 삭제하시겠습니까?`)) return
     if (!confirm('정말입니까? 이 작업은 되돌릴 수 없습니다.')) return
-    pending.forEach(u => Store.deleteUser(u.id))
+    pending.forEach(u => { Store.addAuditLog({ category: '사용자삭제', action: '일괄 삭제', user_id: currentUser.id, user_name: currentUser.name, detail: `대상: ${u.name} (${u.username})` }); Store.deleteUser(u.id) })
     const pc = document.getElementById('pending-count')
     if (pc) pc.textContent = Store.getUsers().filter(u => u.status !== 'active').length
     renderUsers()
@@ -5022,6 +5086,8 @@
   window.initKeepAlive = initKeepAlive
   window.updateQR = updateQR
   window.doLogoutUI = doLogoutUI
+  window.openProfileModal = openProfileModal
+  window.openPasswordModal = openPasswordModal
   window.closeModal = closeModal
   window.saveModal = saveModal
   window.renderAssessments = renderAssessments

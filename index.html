@@ -103,7 +103,7 @@
       <div class="topbar-right">
         <div id="user-info" class="profile-dropdown" style="display:none;position:relative">
           <span class="profile-name" onclick="document.getElementById('profile-menu').classList.toggle('show')" style="cursor:pointer;padding:4px 10px;border-radius:8px;border:1px solid #ddd;font-size:12px;color:#555;display:flex;align-items:center;gap:4px">👤 <span id="profile-name-text">-</span> <span style="font-size:8px">▼</span></span>
-          <div id="profile-menu" class="profile-menu" style="display:none;position:absolute;top:100%;right:0;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:1000;min-width:160px;margin-top:4px;overflow:hidden">
+          <div id="profile-menu" class="profile-menu" style="position:absolute;top:100%;right:0;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:1000;min-width:160px;margin-top:4px;overflow:hidden">
             <button class="profile-menu-item" onclick="document.getElementById('profile-menu').classList.remove('show');openProfileModal()" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px">👤 내 프로필</button>
             <button class="profile-menu-item" onclick="document.getElementById('profile-menu').classList.remove('show');openPasswordModal()" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px">🔑 비밀번호 변경</button>
             <div style="height:1px;background:#f0f0f0;margin:2px 0"></div>
@@ -159,6 +159,7 @@
           <button class="tab" data-stab="tab-departments" onclick="switchSettingsTab('tab-departments')">🏬 부서 관리</button>
           <button class="tab" data-stab="tab-weights" onclick="switchSettingsTab('tab-weights')">⚖ 가중치·등급</button>
           <button class="tab" data-stab="tab-agencies" onclick="switchSettingsTab('tab-agencies')">🏛 평가기관</button>
+          <button class="tab" data-stab="tab-audit" onclick="switchSettingsTab('tab-audit')">📋 감사 로그</button>
         </div>
 
         <div id="tab-users" class="tab-content active">
@@ -242,6 +243,10 @@
 
         <div id="tab-agencies" class="tab-content">
           <div id="agencies-content"></div>
+        </div>
+
+        <div id="tab-audit" class="tab-content">
+          <div id="audit-content"></div>
         </div>
       </div>
     </section>

@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.9.6'
+const APP_VERSION = 'v1.9.7'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -22,9 +22,9 @@ const Store = {
   },
 
   getCurrentUser() {
-    const raw = sessionStorage.getItem('smart_esg_user')
+    const raw = sessionStorage.getItem('smart_esg_session')
     if (!raw) return null
-    try { return JSON.parse(raw) } catch { return null }
+    try { const s = JSON.parse(raw); return (this.getUsers() || []).find(u => u.id === s.id) || null } catch { return null }
   },
 
   currentUserHasRole(role) {
@@ -354,7 +354,8 @@ const Store = {
       shareAccessLogs: [],
       capaItems: [],
       projectTasks: [],
-      projectTaskLogs: []
+      projectTaskLogs: [],
+      auditLogs: []
     }
   },
 
@@ -807,6 +808,10 @@ const Store = {
   getGHGFactors() { return this.data.ghgFactors },
   addGHGFactor(f) { this.data.ghgFactors.push({ id: Date.now(), ...f }); this._save(); return f },
   deleteGHGFactor(id) { this.data.ghgFactors = this.data.ghgFactors.filter(x => x.id !== id); this._save() },
+
+  // ==== Audit Logs ====
+  addAuditLog(log) { const entry = { id: Date.now() + Math.random(), ...log, created_at: new Date().toISOString() }; if (!this.data.auditLogs) this.data.auditLogs = []; this.data.auditLogs.push(entry); this._save(); return entry },
+  getAuditLogs(filter) { let logs = (this.data.auditLogs || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); if (filter?.category) logs = logs.filter(l => l.category === filter.category); if (filter?.user_id) logs = logs.filter(l => l.user_id === filter.user_id); if (filter?.date_from) logs = logs.filter(l => l.created_at >= filter.date_from); if (filter?.date_to) logs = logs.filter(l => l.created_at <= filter.date_to + 'T23:59:59'); return logs },
 
   // ==== GHG Activities ====
   getGHGActivities() { return this.data.ghgActivities },

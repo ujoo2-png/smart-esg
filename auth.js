@@ -97,6 +97,7 @@ async function register(data) {
     role: data.role || 'user',
     status: 'pending',
   })
+  Store.addAuditLog({ category: '사용자등록', action: '신규 등록', user_id: null, user_name: data.name, detail: `아이디: ${data.username}, 이름: ${data.name}, 부서: ${data.dept_code || '미지정'}` })
   return { ok: true }
 }
 
@@ -106,11 +107,11 @@ function checkUsername(username) {
 
 async function login(username, password) {
   const user = Store.getUsers().find(u => u.username === username)
-  if (!user) return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
+  if (!user) { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: null, user_name: '', detail: `아이디: ${username} (사용자 없음)` }); return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' } }
   const pwHash = await Store.hashPassword(password)
   const pwMatch = user.password === pwHash
-  if (!pwMatch) return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
-  if (user.status !== 'active') return { error: '관리자 승인 대기 중입니다. 관리자에게 문의하세요.' }
+  if (!pwMatch) { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: user.id, user_name: user.name, detail: `아이디: ${username} (비밀번호 불일치)` }); return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' } }
+  if (user.status !== 'active') { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: user.id, user_name: user.name, detail: `아이디: ${username} (승인 대기)` }); return { error: '관리자 승인 대기 중입니다. 관리자에게 문의하세요.' } }
 
   let sbSession = null
   const sbAuth = getSbAuth()
@@ -122,10 +123,13 @@ async function login(username, password) {
   }
 
   setSession(user, sbSession)
+  Store.addAuditLog({ category: '로그인', action: '로그인 성공', user_id: user.id, user_name: user.name, detail: `아이디: ${username}` })
   return { ok: true, user }
 }
 
 async function logout() {
+  const s = getSession()
+  if (s) Store.addAuditLog({ category: '로그아웃', action: '로그아웃', user_id: s.id, user_name: s.name, detail: '' })
   const sbAuth = getSbAuth()
   if (sbAuth) { try { await sbAuth.signOut() } catch (e) { /* ignore */ } }
   setSession(null)
