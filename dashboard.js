@@ -2,6 +2,9 @@
 // 부문별 점수, 준비도, 위험도, 미완료 과제
 
 const Dashboard = {
+  _dragState: null,
+  _cardOrder: null,
+
   render(containerId, assessmentId) {
     const container = document.getElementById(containerId)
     if (!container) return
@@ -18,23 +21,95 @@ const Dashboard = {
     const drafts = Store.getAIDrafts().filter(d => d.assessment_id === assessmentId)
     const ghgSummary = GHG.getSummary(assessmentId)
 
-    container.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
-        <div class="dash-card">${this._scoreCard(assessment)}</div>
-        <div class="dash-card">${this._workflowCard(assessmentId)}</div>
-        <div class="dash-card">${this._themeRadar(items, groups, assessment.authority_code)}</div>
-        <div class="dash-card">${this._evidenceCard(evidenceCount)}</div>
-        <div class="dash-card">${this._draftStatusCard(drafts)}</div>
-        <div class="dash-card">${this._ghgCard(ghgSummary)}</div>
-        <div class="dash-card">${this._supplierRiskCard()}</div>
-        <div class="dash-card">${this._completionCard(items)}</div>
-        <div class="dash-card">${this._kssbSubmissionCard()}</div>
-        <div class="dash-card">${this._aiUnapprovedCard(assessmentId)}</div>
-        <div class="dash-card">${this._budgetProgressCard()}</div>
-        <div class="dash-card">${this._ghgTrendCard(assessmentId)}</div>
-        <div class="dash-card">${this._submissionDeadlineCard()}</div>
-      </div>
-    `
+    const cardIds = ['score', 'workflow', 'themeRadar', 'evidence', 'draftStatus', 'ghg', 'supplierRisk', 'completion', 'kssb', 'aiUnapproved', 'budget', 'ghgTrend', 'deadline']
+    const cardContents = {
+      score: this._scoreCard(assessment),
+      workflow: this._workflowCard(assessmentId),
+      themeRadar: this._themeRadar(items, groups, assessment.authority_code),
+      evidence: this._evidenceCard(evidenceCount),
+      draftStatus: this._draftStatusCard(drafts),
+      ghg: this._ghgCard(ghgSummary),
+      supplierRisk: this._supplierRiskCard(),
+      completion: this._completionCard(items),
+      kssb: this._kssbSubmissionCard(),
+      aiUnapproved: this._aiUnapprovedCard(assessmentId),
+      budget: this._budgetProgressCard(),
+      ghgTrend: this._ghgTrendCard(assessmentId),
+      deadline: this._submissionDeadlineCard()
+    }
+    const cardLabels = { score: '총점', workflow: '워크플로우', themeRadar: '테마 점수', evidence: '증빙', draftStatus: 'AI 초안', ghg: '온실가스', supplierRisk: '협력사', completion: '완료율', kssb: 'KSSB 공시', aiUnapproved: 'AI 미승인', budget: '예산', ghgTrend: 'Scope 분포', deadline: '제출기간' }
+
+    if (!this._cardOrder) {
+      const saved = localStorage.getItem('smartesg_dash_order')
+      this._cardOrder = saved ? JSON.parse(saved) : cardIds.slice()
+    }
+    const orderedIds = this._cardOrder.filter(id => cardIds.includes(id))
+    cardIds.forEach(id => { if (!orderedIds.includes(id)) orderedIds.push(id) })
+
+    container.innerHTML = ''
+    const grid = el('div', { id: 'dash-drag-grid', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;position:relative' })
+    const guideLine = el('div', { id: 'dash-snap-guide', style: 'display:none;position:absolute;background:#7C3AED40;border:1px dashed #7C3AED;border-radius:4px;z-index:50;pointer-events:none;transition:all .15s' })
+    container.append(grid, guideLine)
+
+    orderedIds.forEach((id, idx) => {
+      const card = el('div', {
+        className: 'dash-card',
+        'data-card-id': id,
+        draggable: 'true',
+        style: 'position:relative;cursor:default;transition:transform .15s,box-shadow .15s',
+        onDragStart: e => {
+          Dashboard._dragState = { id, startIdx: idx }
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', id)
+          setTimeout(() => { e.target.style.opacity = '0.4'; e.target.style.transform = 'scale(0.98)' }, 0)
+        },
+        onDragEnd: e => {
+          e.target.style.opacity = '1'; e.target.style.transform = ''
+          Dashboard._dragState = null
+          guideLine.style.display = 'none'
+          grid.querySelectorAll('.dash-card').forEach(c => { c.style.borderTop = ''; c.style.paddingTop = '' })
+        },
+        onDragOver: e => {
+          e.preventDefault()
+          if (!Dashboard._dragState) return
+          const targetIdx = idx
+          const targetRect = e.currentTarget.getBoundingClientRect()
+          const midY = targetRect.top + targetRect.height / 2
+          const before = e.clientY < midY
+          guideLine.style.display = 'block'
+          guideLine.style.left = targetRect.left - 4 + 'px'
+          guideLine.style.width = targetRect.width + 8 + 'px'
+          guideLine.style.top = (before ? targetRect.top - 4 : targetRect.bottom + 2) + 'px'
+          guideLine.style.height = '4px'
+          grid.querySelectorAll('.dash-card').forEach(c => { c.style.borderTop = ''; c.style.paddingTop = '' })
+          e.currentTarget.style.borderTop = before ? '3px solid #7C3AED' : ''
+          e.currentTarget.style.paddingTop = before ? '4px' : ''
+        },
+        onDrop: e => {
+          e.preventDefault()
+          guideLine.style.display = 'none'
+          grid.querySelectorAll('.dash-card').forEach(c => { c.style.borderTop = ''; c.style.paddingTop = '' })
+          if (!Dashboard._dragState) return
+          const fromId = Dashboard._dragState.id
+          const toId = id
+          if (fromId === toId) return
+          const fromIdx = Dashboard._cardOrder.indexOf(fromId)
+          const toIdx = Dashboard._cardOrder.indexOf(toId)
+          Dashboard._cardOrder.splice(fromIdx, 1)
+          const targetRect = e.currentTarget.getBoundingClientRect()
+          const insertIdx = e.clientY < targetRect.top + targetRect.height / 2 ? Dashboard._cardOrder.indexOf(toId) : Dashboard._cardOrder.indexOf(toId) + 1
+          Dashboard._cardOrder.splice(insertIdx, 0, fromId)
+          localStorage.setItem('smartesg_dash_order', JSON.stringify(Dashboard._cardOrder))
+          Dashboard._dragState = null
+          Dashboard.render(containerId, assessmentId)
+        }
+      },
+        el('div', { style: 'position:absolute;top:6px;right:8px;font-size:10px;color:#ccc;cursor:grab;user-select:none', title: '드래그하여 순서 변경' }, '⋮⋮'),
+        cardContents[id] || ''
+      )
+      grid.append(card)
+    })
+
     requestAnimationFrame(() => {
       container.querySelectorAll('.dash-bar-init').forEach(bar => {
         const w = bar.getAttribute('data-width')

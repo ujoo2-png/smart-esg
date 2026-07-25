@@ -20,6 +20,23 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; backg
 #nav a.active { background:rgba(124,58,237,.25); color:#fff; border-right:3px solid #a78bfa; font-weight:600 }
 .nav-label { white-space:nowrap }
 
+.nav-group { margin-bottom:2px }
+.nav-group-header { display:flex; align-items:center; gap:8px; padding:9px 16px; color:rgba(255,255,255,.5); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; cursor:pointer; transition:.15s; user-select:none }
+.nav-group-header:hover { color:rgba(255,255,255,.8) }
+.nav-group-icon { font-size:12px; width:16px; text-align:center }
+.nav-group-arrow { margin-left:auto; font-size:14px; transition:transform .2s; color:rgba(255,255,255,.3) }
+.nav-group.open .nav-group-arrow { transform:rotate(90deg) }
+.nav-group-items { max-height:0; overflow:hidden; transition:max-height .25s ease }
+.nav-group.open .nav-group-items { max-height:500px }
+.nav-group-items a { padding-left:20px !important; font-size:12px !important }
+
+#sidebar.collapsed .nav-group-header { padding:12px 0; justify-content:center; font-size:0 }
+#sidebar.collapsed .nav-group-icon { font-size:16px }
+#sidebar.collapsed .nav-group-arrow,
+#sidebar.collapsed .nav-group-header .nav-label { display:none }
+#sidebar.collapsed .nav-group-items { max-height:none !important }
+#sidebar.collapsed .nav-group-items a { padding:12px 0 !important; text-align:center; margin:0; border-radius:0 }
+
 #main { flex:1; display:flex; flex-direction:column; overflow:hidden }
 #topbar { height:52px; background:#fff; border-bottom:1px solid #e8eaed; display:flex; align-items:center; justify-content:space-between; padding:0 20px; flex-shrink:0 }
 .topbar-left { display:flex; align-items:center; gap:8px }

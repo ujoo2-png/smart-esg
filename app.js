@@ -3,6 +3,7 @@
   const PAGE_SIZE = 15
   let _evidencePreviewId = null
   let _evidenceSearchQuery = ''
+  let _evidenceViewMode = 'list'
 
   const el = (tag, attrs = {}, ...children) => {
     const e = document.createElement(tag)
@@ -369,7 +370,11 @@
     document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'))
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
     const link = document.querySelector(`#nav a[data-page="${page}"]`)
-    if (link) link.classList.add('active')
+    if (link) {
+      link.classList.add('active')
+      const group = link.closest('.nav-group')
+      if (group && !group.classList.contains('open')) group.classList.add('open')
+    }
     const pageEl = document.getElementById('page-' + page)
     if (pageEl) pageEl.classList.add('active')
     const label = link ? link.textContent.replace(/^[^\s]+\s/, '') : page
@@ -834,8 +839,24 @@
       const tags = Store.getEvidenceTags().filter(t => t.indicator_id === ind.id)
       return tags.some(t => t.evidence_id === ev.id)
     })
+    const evFileMap = {}
+    evidences.forEach(ev => { evFileMap[ev.id] = Store.getEvidenceFiles(ev.id) })
     const groups = Indicator.getGroups(ind.authority_code)
     const group = groups.find(g => g.id === ind.group_id)
+    const statusColors = { pending: '#f59e0b', self: '#3b82f6', internal_reviewed: '#8b5cf6', externally_verified: '#10b981', confirmed: '#10b981' }
+    const statusLabels = { pending: '미확인', self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증', confirmed: '확정' }
+    const evHtml = evidences.length ? evidences.map(ev => {
+      const files = evFileMap[ev.id] || []
+      const sc = statusColors[ev.status] || '#9ca3af'
+      const sl = statusLabels[ev.status] || ev.status || '-'
+      const fileBtns = files.map(f => `<span style="display:inline-flex;gap:3px;margin-left:6px"><button onclick="event.stopPropagation();window.previewEvidenceFile(${JSON.stringify(f).replace(/"/g, '&quot;')})" style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f0f7ff;color:#3b82f6;border:1px solid #bfdbfe;cursor:pointer">열람</button><button onclick="event.stopPropagation();window.downloadEvidenceFile(${JSON.stringify(f).replace(/"/g, '&quot;')})" style="font-size:9px;padding:1px 5px;border-radius:3px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;cursor:pointer">다운</button></span>`).join('')
+      return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:#f8f9fa;border-radius:6px;margin-bottom:4px;font-size:12px;border:1px solid #eee">
+        <span style="font-size:14px;flex-shrink:0">📄</span>
+        <span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ev.title || '제목 없음'}</span>
+        <span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${sc}18;color:${sc};flex-shrink:0">${sl}</span>
+        ${files.length ? `<span style="font-size:10px;color:#7C3AED;flex-shrink:0">${files.length}파일</span>${fileBtns}` : '<span style="font-size:10px;color:#bbb;flex-shrink:0">파일 없음</span>'}
+      </div>`
+    }).join('') : '<div style="color:#888;font-size:12px;padding:8px 0">연결된 증빙이 없습니다.</div>'
     const tabs = [
       { id: 'detail', label: '상세정보', content: `
         <div style="padding:16px">
@@ -856,7 +877,7 @@
           </div>
           <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">
             <div style="font-weight:600;font-size:13px;margin-bottom:8px">📎 연결 증빙 (${evidences.length}건)</div>
-            ${evidences.length ? evidences.map(ev => `<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#f8f9fa;border-radius:4px;margin-bottom:4px;font-size:12px"><span>📄</span><span style="flex:1">${ev.title || '제목 없음'}</span><span style="color:#888;font-size:10px">${ev.status || '-'}</span></div>`).join('') : '<div style="color:#888;font-size:12px">연결된 증빙이 없습니다.</div>'}
+            ${evHtml}
           </div>
         </div>` },
       { id: 'history', label: '변경이력', content: ESGComponents.changeLogTimeline('indicators', ind.id) },
@@ -1190,6 +1211,8 @@
         ),
         el('input', { id: 'evSearch', type: 'text', placeholder: '🔍 제목/유형/태그 검색...', value: searchQuery, style: 'flex:1;min-width:200px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onInput: () => { _evidenceSearchQuery = document.getElementById('evSearch').value; renderEvidenceMgmt() } }),
         el('span', { style: 'font-size:12px;color:#888' }, `${evidences.length}건`),
+        el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_evidenceViewMode === 'list' ? '#7C3AED' : '#f0f0f0'};color:${_evidenceViewMode === 'list' ? '#fff' : '#666'};border:1px solid ${_evidenceViewMode === 'list' ? '#7C3AED' : '#ddd'}`, onClick: () => { _evidenceViewMode = 'list'; renderEvidenceMgmt() } }, '📋 목록'),
+        el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_evidenceViewMode === 'gantt' ? '#7C3AED' : '#f0f0f0'};color:${_evidenceViewMode === 'gantt' ? '#fff' : '#666'};border:1px solid ${_evidenceViewMode === 'gantt' ? '#7C3AED' : '#ddd'}`, onClick: () => { _evidenceViewMode = 'gantt'; renderEvidenceMgmt() } }, '📊 간트차트'),
         el('button', { className: 'btn btn-primary btn-sm', onClick: openAddEvidence }, '+ 증빙 추가'),
         el('button', { className: 'btn btn-sm', style: 'font-size:11px;background:#f0f7ff;color:#3b82f6;border:1px solid #bfdbfe', onClick: () => {
           if (!confirm('이전 평가의 증빙을 현재 평가로 복제하시겠습니까?\n(이미 동일 제목의 증빙은 건너뜁니다)')) return
@@ -1247,6 +1270,11 @@
     const statusLabels = { pending: '미확인', self: '자가입력', internal_reviewed: '내부검토', externally_verified: '외부검증', confirmed: '확정' }
     const statusColors = { pending: '#f59e0b', self: '#3b82f6', internal_reviewed: '#8b5cf6', externally_verified: '#10b981', confirmed: '#10b981', expired: '#ef4444', missing: '#9ca3af' }
     const fileIcons = { pdf: '📄', xlsx: '📊', docx: '📝', img: '🖼', etc: '📁' }
+
+    if (_evidenceViewMode === 'gantt') {
+      c.append(renderEvidenceGantt(filteredEvidences))
+      return
+    }
 
     const listCard = el('div', { className: 'card', style: 'padding:0;overflow:hidden' })
 
@@ -1353,6 +1381,23 @@
           } }, '+ 지표')
         )
       ),
+      el('div', { style: 'margin-bottom:12px;padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0' },
+        el('div', { style: 'font-weight:600;font-size:11px;color:#166534;margin-bottom:6px' }, '📋 프로젝트 정보'),
+        el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:11px' },
+          el('div', {}, el('span', { style: 'color:#888' }, '담당자: '), el('strong', {}, ev.assignee || '미지정')),
+          el('div', {}, el('span', { style: 'color:#888' }, '부서: '), el('strong', {}, ev.department || '미지정')),
+          el('div', {}, el('span', { style: 'color:#888' }, '업무: '), el('strong', {}, ev.task_type || '-')),
+          el('div', {}, el('span', { style: 'color:#888' }, '우선순위: '), el('strong', { style: `color:${ev.priority === '높음' ? '#ef4444' : ev.priority === '낮음' ? '#3b82f6' : '#333'}` }, ev.priority || '보통')),
+          el('div', {}, el('span', { style: 'color:#888' }, '시작: '), el('strong', {}, ev.start_date || '-')),
+          el('div', {}, el('span', { style: 'color:#888' }, '마감: '), el('strong', { style: ev.due_date && new Date(ev.due_date) < new Date() ? 'color:#ef4444' : '' }, ev.due_date || '-'))
+        ),
+        ev.progress > 0 ? el('div', { style: 'margin-top:6px;display:flex;align-items:center;gap:6px' },
+          el('div', { style: 'flex:1;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden' },
+            el('div', { style: `width:${ev.progress}%;height:100%;background:#16a34a;border-radius:3px;transition:width .3s` })
+          ),
+          el('span', { style: 'font-size:10px;color:#166534;font-weight:600' }, ev.progress + '%')
+        ) : null
+      ),
       el('div', { style: 'margin-bottom:12px' },
         el('label', { style: 'font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px' }, '첨부파일'),
         el('div', {
@@ -1402,6 +1447,83 @@
   function openEvidencePreview(evId) {
     _evidencePreviewId = _evidencePreviewId === evId ? null : evId
     renderEvidenceMgmt()
+  }
+
+  function renderEvidenceGantt(evidences) {
+    const today = new Date()
+    const allWithDates = evidences.filter(ev => ev.start_date || ev.due_date)
+    if (!allWithDates.length) return el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📊'), el('p', { style: 'color:#888' }, '일정이 설정된 증빙이 없습니다. 증빙 추가/수정 시 시작일과 마감일을 지정해주세요.'))
+
+    const allDates = allWithDates.flatMap(ev => [ev.start_date ? new Date(ev.start_date) : null, ev.due_date ? new Date(ev.due_date) : null].filter(Boolean))
+    const minDate = new Date(Math.min(...allDates))
+    const maxDate = new Date(Math.max(...allDates))
+    minDate.setDate(minDate.getDate() - 3)
+    maxDate.setDate(maxDate.getDate() + 7)
+    const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24))
+    const dayWidth = Math.max(40, Math.min(60, 800 / totalDays))
+
+    const priorityColors = { '높음': '#ef4444', '보통': '#3b82f6', '낮음': '#10b981' }
+    const statusColors = { pending: '#f59e0b', self: '#3b82f6', internal_reviewed: '#8b5cf6', externally_verified: '#10b981', confirmed: '#10b981' }
+
+    const headerDays = []
+    for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
+      const isToday = d.toDateString() === today.toDateString()
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6
+      headerDays.push(el('div', { style: `width:${dayWidth}px;flex-shrink:0;text-align:center;font-size:9px;padding:4px 0;${isToday ? 'background:#7C3AED20;font-weight:700;color:#7C3AED' : isWeekend ? 'background:#f8f9fa;color:#bbb' : 'color:#888'}` }, `${d.getMonth() + 1}/${d.getDate()}`))
+    }
+
+    const rows = allWithDates.sort((a, b) => {
+      const aStart = a.start_date ? new Date(a.start_date) : new Date(a.due_date)
+      const bStart = b.start_date ? new Date(b.start_date) : new Date(b.due_date)
+      return aStart - bStart
+    }).map(ev => {
+      const start = ev.start_date ? new Date(ev.start_date) : new Date(ev.due_date)
+      const end = ev.due_date ? new Date(ev.due_date) : new Date(ev.start_date)
+      const startOffset = Math.max(0, Math.ceil((start - minDate) / (1000 * 60 * 60 * 24)))
+      const duration = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1)
+      const barLeft = startOffset * dayWidth
+      const barWidth = duration * dayWidth
+      const isOverdue = ev.due_date && new Date(ev.due_date) < today && ev.status !== 'confirmed'
+      const color = isOverdue ? '#ef4444' : (priorityColors[ev.priority] || '#3b82f6')
+
+      const barBg = el('div', {
+        style: `position:absolute;left:${barLeft}px;width:${barWidth}px;height:22px;background:${color}20;border:1px solid ${color}60;border-radius:4px;top:4px;cursor:pointer;display:flex;align-items:center;padding:0 6px;overflow:hidden`,
+        onClick: () => { _evidencePreviewId = ev.id; renderEvidenceMgmt() },
+        title: `${ev.title}\n${ev.start_date || '?'} ~ ${ev.due_date || '?'}\n담당: ${ev.assignee || '미지정'} (${ev.progress || 0}%)`
+      },
+        el('div', { style: `height:100%;width:${ev.progress || 0}%;background:${color};border-radius:3px;transition:width .3s` }),
+        el('span', { style: `position:absolute;left:8px;font-size:10px;font-weight:600;color:${color};white-space:nowrap;text-shadow:0 0 3px #fff` }, ev.title)
+      )
+
+      const todayLine = el('div', { style: `position:absolute;left:${Math.ceil((today - minDate) / (1000 * 60 * 60 * 24)) * dayWidth}px;width:2px;height:100%;background:#ef4444;z-index:2;top:0` })
+
+      return el('div', { style: 'position:relative;height:30px;border-bottom:1px solid #f0f0f0' }, barBg, todayLine)
+    })
+
+    return el('div', { className: 'card', style: 'padding:0;overflow:hidden' },
+      el('div', { style: 'padding:12px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center' },
+        el('span', { style: 'font-weight:600;font-size:13px' }, `📊 간트차트 (${allWithDates.length}건)`),
+        el('div', { style: 'display:flex;gap:8px;font-size:10px' },
+          el('span', {}, el('span', { style: 'display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:2px;margin-right:3px' }, ''), '지연'),
+          el('span', {}, el('span', { style: 'display:inline-block;width:10px;height:10px;background:#3b82f6;border-radius:2px;margin-right:3px' }, ''), '보통'),
+          el('span', {}, el('span', { style: 'display:inline-block;width:10px;height:10px;background:#10b981;border-radius:2px;margin-right:3px' }, ''), '낮음'),
+          el('span', {}, el('span', { style: 'display:inline-block;width:2px;height:10px;background:#ef4444;margin-right:3px' }, ''), '오늘')
+        )
+      ),
+      el('div', { style: 'display:flex;overflow-x:auto' },
+        el('div', { style: `min-width:160px;flex-shrink:0;border-right:1px solid #eee;background:#fafafa` },
+          el('div', { style: 'height:32px;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 12px;font-size:10px;font-weight:600;color:#888' }, '증빙명'),
+          ...allWithDates.sort((a, b) => { const as = a.start_date ? new Date(a.start_date) : new Date(a.due_date); const bs = b.start_date ? new Date(b.start_date) : new Date(b.due_date); return as - bs }).map(ev => el('div', { style: 'height:30px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;padding:0 12px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer', onClick: () => { _evidencePreviewId = ev.id; renderEvidenceMgmt() } },
+            el('span', { style: `width:6px;height:6px;border-radius:50%;background:${statusColors[ev.status] || '#9ca3af'};margin-right:6px;flex-shrink:0` }),
+            ev.title || '제목 없음'
+          ))
+        ),
+        el('div', { style: 'flex:1;overflow-x:auto;position:relative' },
+          el('div', { style: `display:flex;height:32px;border-bottom:1px solid #eee;background:#fafafa` }, ...headerDays),
+          ...rows
+        )
+      )
+    )
   }
 
   function _handleEvidenceFileDrop(fileList) {
@@ -1651,11 +1773,41 @@
     title.addEventListener('input', _checkAutoTag)
     if (!isEdit) setTimeout(_checkAutoTag, 100)
 
-    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'font-size:12px' }, sensitiveCheck, ' 민감정보 포함'), autoTagBox, el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, fileListContainer), el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
+    const assignee = el('input', { value: ev?.assignee ?? '', placeholder: '담당자 이름', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' })
+    const deptInput = el('input', { value: ev?.department ?? '', placeholder: '부서명', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' })
+    const taskType = el('select', { style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' },
+      ...['', '정책수립', '검증', '보고서 작성', '데이터 수집', '개선조치', '교육훈련', '기타'].map(t => el('option', { value: t, selected: ev?.task_type === t }, t || '-- 업무유형 선택 --'))
+    )
+    const startDate = el('input', { type: 'date', value: ev?.start_date ?? '', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' })
+    const dueDate = el('input', { type: 'date', value: ev?.due_date ?? '', style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' })
+    const prioritySel = el('select', { style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:5px;font-size:12px;box-sizing:border-box' },
+      ...['높음', '보통', '낮음'].map(p => el('option', { value: p, selected: (ev?.priority || '보통') === p }, p))
+    )
+    const progressInput = el('input', { type: 'range', min: '0', max: '100', value: ev?.progress ?? '0', style: 'width:100%' })
+    const progressLabel = el('span', { style: 'font-size:11px;color:#888;margin-left:8px' }, (ev?.progress ?? '0') + '%')
+    progressInput.oninput = () => { progressLabel.textContent = progressInput.value + '%' }
+
+    const pmSection = el('div', { style: 'margin-top:12px;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid #eee' },
+      el('div', { style: 'font-weight:600;font-size:12px;color:#555;margin-bottom:8px' }, '📋 프로젝트 관리'),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
+        el('label', { style: 'font-size:11px' }, '담당자', assignee),
+        el('label', { style: 'font-size:11px' }, '부서', deptInput),
+        el('label', { style: 'font-size:11px' }, '업무유형', taskType),
+        el('label', { style: 'font-size:11px' }, '우선순위', prioritySel),
+        el('label', { style: 'font-size:11px' }, '시작일', startDate),
+        el('label', { style: 'font-size:11px' }, '마감일', dueDate)
+      ),
+      el('div', { style: 'margin-top:8px;display:flex;align-items:center' },
+        el('label', { style: 'font-size:11px;flex-shrink:0' }, '진행률'),
+        progressInput, progressLabel
+      )
+    )
+
+    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'font-size:12px' }, sensitiveCheck, ' 민감정보 포함'), autoTagBox, el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, fileListContainer), pmSection, el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
     modal(isEdit ? '증빙 수정' : '증빙 추가', form)
     document.getElementById('modal-save').onclick = function save() {
       const pendingFiles = window._pendingFiles || []
-      const data = { assessment_id: _evidenceAssId, title: title.value, file_type: fileType.value, status: status.value }
+      const data = { assessment_id: _evidenceAssId, title: title.value, file_type: fileType.value, status: status.value, assignee: assignee.value, department: deptInput.value, task_type: taskType.value, start_date: startDate.value, due_date: dueDate.value, priority: prioritySel.value, progress: parseInt(progressInput.value) }
       if (pendingFiles.length > 0) {
         let loaded = 0
         const results = []
@@ -4322,6 +4474,9 @@
   window.renderAIHistory = renderAIHistory
   window.renderBudget = renderBudget
   window.renderMasking = renderMasking
+  window.previewEvidenceFile = _previewEvidenceFile
+  window.downloadEvidenceFile = _downloadEvidenceFile
+  window.getEvidenceFilesFor = function(evidenceId) { return Store.getEvidenceFiles(evidenceId) }
 
   // ==================== 데이터 내보내기 ====================
   function exportCSV(data, filename) {

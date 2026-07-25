@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.9.3'
+const APP_VERSION = 'v1.9.4'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -685,7 +685,7 @@ const Store = {
 
   // ==== Evidences ====
   getEvidences() { return this.data.evidences },
-  addEvidence(e) { this.data.evidences.push({ id: Date.now(), expiry_date: '', contains_sensitive_data: false, ...e }); this._save(); return e },
+  addEvidence(e) { this.data.evidences.push({ id: Date.now(), expiry_date: '', contains_sensitive_data: false, assignee: '', department: '', task_type: '', due_date: '', start_date: '', priority: '보통', progress: 0, ...e }); this._save(); return e },
   updateEvidence(id, updates) { const i = this.data.evidences.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.evidences[i], updates); this._save() } },
   deleteEvidence(id) { this.data.evidences = this.data.evidences.filter(x => x.id !== id); this.data.evidenceFiles = this.data.evidenceFiles.filter(f => f.evidence_id !== id); this._addDeletedId('evidences', id); this._save() },
 

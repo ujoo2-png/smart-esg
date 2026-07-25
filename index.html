@@ -20,27 +20,69 @@
       <div id="sb-header-collapsed" style="display:none;text-align:center;font-size:22px;padding:8px 0">SE</div>
     </div>
     <nav id="nav">
-      <a href="#" class="active" data-page="dashboard">📊 <span class="nav-label">대시보드</span></a>
-      <a href="#" data-page="assessment">📋 <span class="nav-label">ESG 평가</span></a>
-      <a href="#" data-page="indicator">📌 <span class="nav-label">지표 관리</span></a>
-      <a href="#" data-page="evidence">📎 <span class="nav-label">증빙 관리</span></a>
-      <a href="#" data-page="ghg">🏭 <span class="nav-label">온실가스</span></a>
-      <a href="#" data-page="supplier">🏢 <span class="nav-label">협력사 리스크</span></a>
-      <a href="#" data-page="ai">🤖 <span class="nav-label">AI 보고서</span></a>
-      <a href="#" data-page="editor">📝 <span class="nav-label">보고서 편집기</span></a>
-      <a href="#" data-page="gri">📊 <span class="nav-label">GRI 준수율</span></a>
-      <a href="#" data-page="risk">⚠️ <span class="nav-label">리스크 예측</span></a>
-      <a href="#" data-page="monitor">📈 <span class="nav-label">벤치마크</span></a>
-      <a href="#" data-page="issa">🛡️ <span class="nav-label">감사 보증</span></a>
-      <a href="#" data-page="submit">📤 <span class="nav-label">평가기관 제출</span></a>
-      <a href="#" data-page="publicdata">🌐 <span class="nav-label">공개자료 점검</span></a>
-      <a href="#" data-page="kssb">📜 <span class="nav-label">KSSB 공시</span></a>
-      <a href="#" data-page="aihistory">🕐 <span class="nav-label">AI 이력</span></a>
-      <a href="#" data-page="budget">💰 <span class="nav-label">예산/리스크</span></a>
-      <a href="#" data-page="masking">🔒 <span class="nav-label">마스킹 설정</span></a>
-      <a href="#" data-page="api">🔌 <span class="nav-label">API 연동</span></a>
-      <a href="#" data-page="share">🔗 <span class="nav-label">외부 공유</span></a>
-      <a href="#" data-page="settings">⚙️ <span class="nav-label">설정</span></a>
+      <div class="nav-group" data-group="overview">
+        <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="nav-group-icon">📊</span><span class="nav-label">현황</span><span class="nav-group-arrow">›</span>
+        </div>
+        <div class="nav-group-items">
+          <a href="#" data-page="dashboard">📊 <span class="nav-label">대시보드</span></a>
+          <a href="#" data-page="monitor">📈 <span class="nav-label">벤치마크</span></a>
+          <a href="#" data-page="risk">⚠️ <span class="nav-label">리스크 예측</span></a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="assessment">
+        <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="nav-group-icon">📋</span><span class="nav-label">평가·관리</span><span class="nav-group-arrow">›</span>
+        </div>
+        <div class="nav-group-items">
+          <a href="#" data-page="assessment">📋 <span class="nav-label">ESG 평가</span></a>
+          <a href="#" data-page="indicator">📌 <span class="nav-label">지표 관리</span></a>
+          <a href="#" data-page="evidence">📎 <span class="nav-label">증빙 관리</span></a>
+          <a href="#" data-page="budget">💰 <span class="nav-label">예산/리스크</span></a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="environment">
+        <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="nav-group-icon">🏭</span><span class="nav-label">환경</span><span class="nav-group-arrow">›</span>
+        </div>
+        <div class="nav-group-items">
+          <a href="#" data-page="ghg">🏭 <span class="nav-label">온실가스</span></a>
+          <a href="#" data-page="publicdata">🌐 <span class="nav-label">공개자료 점검</span></a>
+          <a href="#" data-page="kssb">📜 <span class="nav-label">KSSB 공시</span></a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="ai">
+        <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="nav-group-icon">🤖</span><span class="nav-label">AI·보고서</span><span class="nav-group-arrow">›</span>
+        </div>
+        <div class="nav-group-items">
+          <a href="#" data-page="ai">🤖 <span class="nav-label">AI 보고서</span></a>
+          <a href="#" data-page="editor">📝 <span class="nav-label">보고서 편집기</span></a>
+          <a href="#" data-page="aihistory">🕐 <span class="nav-label">AI 이력</span></a>
+          <a href="#" data-page="issa">🛡️ <span class="nav-label">감사 보증</span></a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="supplier">
+        <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="nav-group-icon">🏢</span><span class="nav-label">협력사</span><span class="nav-group-arrow">›</span>
+        </div>
+        <div class="nav-group-items">
+          <a href="#" data-page="supplier">🏢 <span class="nav-label">협력사 리스크</span></a>
+          <a href="#" data-page="submit">📤 <span class="nav-label">평가기관 제출</span></a>
+        </div>
+      </div>
+      <div class="nav-group" data-group="settings">
+        <div class="nav-group-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="nav-group-icon">⚙️</span><span class="nav-label">설정</span><span class="nav-group-arrow">›</span>
+        </div>
+        <div class="nav-group-items">
+          <a href="#" data-page="gri">📊 <span class="nav-label">GRI 준수율</span></a>
+          <a href="#" data-page="masking">🔒 <span class="nav-label">마스킹 설정</span></a>
+          <a href="#" data-page="api">🔌 <span class="nav-label">API 연동</span></a>
+          <a href="#" data-page="share">🔗 <span class="nav-label">외부 공유</span></a>
+          <a href="#" data-page="settings">⚙️ <span class="nav-label">설정</span></a>
+        </div>
+      </div>
     </nav>
     <div id="sb-collapse-btn" style="padding:10px 0;text-align:center;border-top:1px solid rgba(255,255,255,.08);cursor:pointer;color:rgba(255,255,255,.5);font-size:14px" title="사이드바 접기/펼치기">◀</div>
   </aside>
