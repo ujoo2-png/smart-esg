@@ -4386,8 +4386,7 @@
       if (!data.title) { alert('제목을 입력하세요.'); return }
       let savedTask
       if (isEdit) { Store.updateProjectTask(task.id, data); savedTask = task }
-      else { savedTask = Store.addProjectTask(data) }
-      if (data.repeat !== 'none' && data.repeat_until && data.start_date && data.due_date) _createRepeatingTasks(savedTask, data)
+      else { savedTask = Store.addProjectTask(data); if (data.repeat !== 'none' && data.repeat_until && data.start_date && data.due_date) _createRepeatingTasks(savedTask, data) }
       closeModal()
       showToast(isEdit ? '수정되었습니다.' : '추가되었습니다.', 'success')
       renderProjectManagement()
@@ -4902,6 +4901,50 @@
     renderUsers()
   }
 
+  function openAddUserModal() {
+    const companies = Store.getCompanies()
+    const depts = (Store.getDepartments() || []).filter(d => d.is_active !== false)
+    const companyOpts = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+    const deptOpts = depts.map(d => `<option value="${d.dept_code}">${d.dept_name}</option>`).join('')
+    const form = document.createElement('form')
+    form.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label style="font-size:12px">아이디 *<input id="a-username" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"></label>
+        <label style="font-size:12px">비밀번호 *<input id="a-password" type="password" required minlength="6" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"></label>
+        <label style="font-size:12px">이름 *<input id="a-name" required style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"></label>
+        <label style="font-size:12px">이메일<input id="a-email" type="email" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"></label>
+        <label style="font-size:12px">전화번호<input id="a-phone" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"></label>
+        <label style="font-size:12px">회사<select id="a-company" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="">선택</option>${companyOpts}</select></label>
+        <label style="font-size:12px">부서<select id="a-dept" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="">선택</option>${deptOpts}</select></label>
+        <label style="font-size:12px">직급<input id="a-position" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"></label>
+        <label style="font-size:12px">역할<select id="a-role" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="user">일반 사용자</option><option value="manager">매니저</option><option value="admin">관리자</option><option value="viewer">뷰어</option></select></label>
+        <label style="font-size:12px">상태<select id="a-status" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box"><option value="active">활성</option><option value="pending">승인대기</option></select></label>
+      </div>
+    `
+    modal('사용자 추가', form)
+    document.getElementById('modal-save').onclick = async () => {
+      const username = document.getElementById('a-username').value.trim()
+      const password = document.getElementById('a-password').value
+      const name = document.getElementById('a-name').value.trim()
+      const email = document.getElementById('a-email').value.trim()
+      const phone = document.getElementById('a-phone').value.trim()
+      const company_id = document.getElementById('a-company').value || null
+      const dept_code = document.getElementById('a-dept').value
+      const position = document.getElementById('a-position').value.trim()
+      const role = document.getElementById('a-role').value
+      const status = document.getElementById('a-status').value
+      if (!username || !password || !name) { alert('아이디, 비밀번호, 이름은 필수입니다.'); return }
+      if (password.length < 6) { alert('비밀번호는 6자 이상이어야 합니다.'); return }
+      const exists = Store.getUsers().find(u => u.username === username)
+      if (exists) { alert('이미 사용 중인 아이디입니다.'); return }
+      Store.addUser({ username, password: await Store.hashPassword(password), name, email, phone, company_id: company_id ? parseInt(company_id) : null, dept_code, position, role, status })
+      Store.addAuditLog({ category: '사용자등록', action: '관리자 등록', user_id: currentUser?.id || null, user_name: currentUser?.name || '', detail: `대상: ${name} (${username}), 역할: ${role}, 상태: ${status}` })
+      closeModal()
+      showToast('사용자가 추가되었습니다.', 'success')
+      renderUsers()
+    }
+  }
+
   function renderUsers() {
     const tbody = document.getElementById('user-tbody')
     if (!tbody) return
@@ -5088,6 +5131,7 @@
   window.doLogoutUI = doLogoutUI
   window.openProfileModal = openProfileModal
   window.openPasswordModal = openPasswordModal
+  window.openAddUserModal = openAddUserModal
   window.closeModal = closeModal
   window.saveModal = saveModal
   window.renderAssessments = renderAssessments
