@@ -79,7 +79,14 @@
         const rid = el.dataset.rid ? parseInt(el.dataset.rid) : null
         Store.markNotificationRead(id)
         document.getElementById('notif-panel').classList.add('hidden')
-        if (page) { navigate(page); if (rid && page === 'assessment') { setTimeout(() => showAssessmentDetail(rid), 100) } }
+        if (page) {
+          navigate(page)
+          if (rid && page === 'assessment') setTimeout(() => showAssessmentDetail(rid), 100)
+          else if (rid && page === 'ghg') setTimeout(() => { if (typeof renderGHG === 'function') renderGHG() }, 100)
+          else if (rid && page === 'submit') setTimeout(() => { if (typeof renderSubmit === 'function') renderSubmit() }, 100)
+          else if (rid && page === 'kssb') setTimeout(() => { if (typeof renderKSSB === 'function') renderKSSB() }, 100)
+          else if (rid && page === 'editor') { _editorAssId = rid; setTimeout(() => { if (typeof renderReportEditor === 'function') renderReportEditor() }, 100) }
+        }
         refreshNotifBadge()
       })
     })
@@ -468,6 +475,7 @@
     const items = Store.getAssessmentItems().filter(i => i.assessment_id === id)
     const groups = Indicator.getGroups(a.authority_code)
     const allIndicators = Store.getIndicators().filter(i => i.authority_code === a.authority_code && i.is_active !== false)
+    const evidences = Store.getEvidences().filter(e => e.assessment_id === id)
     const agencies = Store.getAgencyMaster ? Store.getAgencyMaster() : []
     const ag = agencies.find(x => x.code === a.authority_code)
     const isPublicData = ag?.assessment_type === 'PUBLIC_DATA'
@@ -494,6 +502,15 @@
           el('span', {}, `총점: <strong>${a.total_score != null ? a.total_score.toFixed(1) : '-'}</strong>`),
           el('span', {}, `등급: <strong>${a.rating || '-'}</strong>`),
           el('span', {}, `항목: ${allIndicators.length}개 / 입력: ${items.length}개`)
+        )
+      ),
+      el('div', { className: 'card', style: 'margin-bottom:12px' },
+        el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center' },
+          el('h3', { style: 'margin:0;font-size:14px' }, '✅ 검증 체크리스트'),
+          el('span', { style: 'font-size:12px;color:#27ae60', id: 'checklist-progress' }, '')
+        ),
+        el('div', { id: 'checklist-body', style: 'padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:6px' },
+          ...renderChecklist(a, items, allIndicators, evidences)
         )
       ),
       ...groups.map(g => {
@@ -595,6 +612,34 @@
     }
     Store.updateAssessment(id, { total_score: finalScore, rating })
     showAssessmentDetail(id)
+  }
+
+  function renderChecklist(a, items, allIndicators, evidences) {
+    const linkedEvidenceCount = evidences.length
+    const scoredCount = items.filter(i => i.score != null && i.score > 0).length
+    const completedCount = items.filter(i => i.status === 'completed').length
+    const tags = Store.getEvidenceTags().filter(t => items.some(i => i.indicator_id === t.indicator_id))
+    const ghgData = Store.getGHGSummary(a.id) || []
+    const hasGHG = ghgData.length > 0
+    const allIndicatorsLinked = allIndicators.length > 0 && allIndicators.every(ind => tags.some(t => t.indicator_id === ind.id))
+    const checks = [
+      { label: '지표 목록 등록 완료', done: allIndicators.length > 0, detail: `${allIndicators.length}개` },
+      { label: '모든 지표에 점수 입력', done: scoredCount === allIndicators.length && allIndicators.length > 0, detail: `${scoredCount}/${allIndicators.length}` },
+      { label: '증빙 파일 등록', done: linkedEvidenceCount > 0, detail: `${linkedEvidenceCount}건` },
+      { label: '전체 지표에 증빙 연결', done: allIndicatorsLinked, detail: `${new Set(tags.map(t => t.indicator_id)).size}/${allIndicators.length}` },
+      { label: 'GHG 활동자료 등록', done: hasGHG, detail: hasGHG ? '완료' : '미등록' },
+      { label: '검증 완료', done: a.status === 'verified' || a.status === 'approved', detail: a.status },
+    ]
+    setTimeout(() => {
+      const doneCount = checks.filter(c => c.done).length
+      const progressEl = document.getElementById('checklist-progress')
+      if (progressEl) progressEl.textContent = `${doneCount}/${checks.length} 완료`
+    }, 0)
+    return checks.map(ch => el('div', { style: `display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:${ch.done ? '#f0fdf4' : '#fafafa'};border:1px solid ${ch.done ? '#bbf7d0' : '#f0f0f0'}` },
+      el('span', { style: `width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;${ch.done ? 'background:#22c55e;color:#fff' : 'border:2px solid #ddd;color:transparent'}` }, ch.done ? '✓' : ''),
+      el('span', { style: `font-size:12px;${ch.done ? 'color:#166534;font-weight:500' : 'color:#666'}` }, ch.label),
+      el('span', { style: 'font-size:10px;color:#aaa;margin-left:auto' }, ch.detail)
+    ))
   }
 
   function transitionStatus(id) {
@@ -1129,7 +1174,7 @@
       el('span', { style: `font-size:13px;font-weight:700;color:${confidenceColor}` }, `${confirmedRate}%`),
       el('span', { style: 'font-size:11px;color:#888' }, `(${statusCounts.confirmed || 0}건 확정 / ${statusCounts.total || 0}건 전체)`),
       statusCounts.pending > 0 ? el('button', { className: 'btn btn-sm', style: 'font-size:11px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d', onClick: () => {
-        if (!confirm(`${statusCounts.pending}건의 미확인 증빙을 일괄 확정하시겠습니까?\n(상태: 자가입력 → 확정)')) return
+        if (!confirm(statusCounts.pending + '건의 미확인 증빙을 일괄 확정하시겠습니까?\n(상태: 자가입력 → 확정)')) return
         evidences.forEach(ev => { if (ev.status === 'self' || ev.status === 'pending') Store.updateEvidence(ev.id, { status: 'confirmed' }) })
         showToast('일괄 확정이 완료되었습니다.', 'success')
         renderEvidenceMgmt()
@@ -2234,6 +2279,8 @@
     const generated = drafts.length
     const approved = drafts.filter(d => d.human_status === 'approved').length
     const verified = drafts.filter(d => d.ver_status === 'pass').length
+    const pending = drafts.filter(d => d.human_status === 'pending').length
+    const rejected = drafts.filter(d => d.human_status === 'rejected').length
     const pct = total ? Math.round(approved / total * 100) : 0
 
     c.append(
@@ -2284,6 +2331,36 @@
           el('span', { style: 'font-size:11px;color:#999' }, `미생성: ${total - generated}건`)
         )
       ),
+      pending > 0 || rejected > 0 ? el('div', { className: 'card', style: 'margin:0 20px 12px;padding:14px 20px;background:linear-gradient(135deg,#fef3c7 0%,#fff7ed 100%)' },
+        el('div', { style: 'font-weight:600;font-size:13px;margin-bottom:10px' }, '📋 승인 워크플로우'),
+        el('div', { style: 'display:flex;gap:16px;align-items:center;flex-wrap:wrap' },
+          el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
+            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#f39c12` }),
+            el('span', {}, `검토 대기: <strong>${pending}</strong>건`)
+          ),
+          el('span', { style: 'color:#ccc' }, '→'),
+          el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
+            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#3498db` }),
+            el('span', {}, `검증 통과: <strong>${verified}</strong>건`)
+          ),
+          el('span', { style: 'color:#ccc' }, '→'),
+          el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
+            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#27ae60` }),
+            el('span', {}, `승인 완료: <strong>${approved}</strong>건`)
+          ),
+          rejected > 0 ? el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
+            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#e74c3c` }),
+            el('span', { style: 'color:#e74c3c' }, `반려: <strong>${rejected}</strong>건`)
+          ) : null
+        ),
+        pending > 0 ? el('div', { style: 'margin-top:10px;display:flex;gap:6px' },
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => {
+            drafts.filter(d => d.human_status === 'pending').forEach(d => { AI.approveDraft(d.id, currentUser?.name || 'admin') })
+            showToast(`${pending}건의 초안이 승인되었습니다.`, 'success')
+            renderAI()
+          }}, '✅ 일괄 승인')
+        ) : null
+      ) : null,
       el('div', { style: 'display:grid;grid-template-columns:280px 1fr;gap:0;min-height:500px' },
         el('div', { style: 'border-right:1px solid #eee;overflow-y:auto;max-height:600px' },
           ...groups.map(g => {
@@ -2841,6 +2918,22 @@
       el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
         el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '🌐 공개자료 점검 (PUBLIC_DATA)'),
         el('span', { style: 'font-size:11px;color:#888' }, 'MSCI/Sustainalytics 등 공개자료 기반 평가기관 대응')
+      ),
+      el('div', { className: 'card', style: 'margin-bottom:12px;padding:16px 20px;background:linear-gradient(135deg,#f0f7ff 0%,#f8f6ff 100%)' },
+        el('div', { style: 'font-weight:600;font-size:13px;margin-bottom:10px' }, '📊 공개자료 현황 요약'),
+        el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px' },
+          ...agencies.map(ag => {
+            const saved = Store.getExtractionsByHash(`checklist_${ag.code}`) || []
+            const done = saved.length
+            const total = checklistItems.length
+            const rate = total ? Math.round(done / total * 100) : 0
+            return el('div', { style: `padding:10px;background:#fff;border-radius:8px;border-left:3px solid ${rate >= 80 ? '#22c55e' : rate >= 40 ? '#f59e0b' : '#ef4444'}` },
+              el('div', { style: 'font-size:11px;color:#888' }, ag.name),
+              el('div', { style: 'font-size:18px;font-weight:700;color:#333;margin-top:2px' }, `${rate}%`),
+              el('div', { style: 'font-size:10px;color:#aaa' }, `${done}/${total} 항목`)
+            )
+          })
+        )
       )
     )
 
@@ -2852,12 +2945,12 @@
     }
 
     const checklistItems = [
-      { id: 'homepage_esg', label: '홈페이지 ESG 페이지 게시', desc: '회사 홈페이지에 ESG 관련 페이지가 공개되어 있는지 점검', category: '홈페이지' },
-      { id: 'annual_report', label: '사업보고서 게시', desc: '최근 연도 사업보고서가 공개되어 있는지 점검', category: '보고서' },
-      { id: 'sustainability_report', label: '지속가능경영보고서 게시', desc: '지속가능경영보고서가 최신 버전으로 게시되어 있는지 점검', category: '보고서' },
-      { id: 'esg_policy', label: 'ESG 정책 공개', desc: '환경/사회/거버넌스 정책이 홈페이지에 공개되어 있는지 점검', category: '정책' },
-      { id: 'news_monitoring', label: '뉴스/이슈 모니터링', desc: '회사 관련 부정 뉴스(제재, 소송, 사고)가 있는지 점검', category: '모니터링' },
-      { id: 'rating_update', label: '등급 변동 확인', desc: 'MSCI/Sustainalytics 등급이 최근 갱신되었는지 확인', category: '등급' }
+      { id: 'homepage_esg', label: '홈페이지 ESG 페이지 게시', desc: '회사 홈페이지에 ESG 관련 페이지가 공개되어 있는지 점검', category: '홈페이지', url: 'https://www.google.com/search?q=ESG+홈페이지+공개' },
+      { id: 'annual_report', label: '사업보고서 게시', desc: '최근 연도 사업보고서가 공개되어 있는지 점검', category: '보고서', url: 'https://dart.fss.or.kr' },
+      { id: 'sustainability_report', label: '지속가능경영보고서 게시', desc: '지속가능경영보고서가 최신 버전으로 게시되어 있는지 점검', category: '보고서', url: 'https://www.google.com/search?q=지속가능경영보고서+게시' },
+      { id: 'esg_policy', label: 'ESG 정책 공개', desc: '환경/사회/거버넌스 정책이 홈페이지에 공개되어 있는지 점검', category: '정책', url: 'https://www.google.com/search?q=ESG+정책+공개' },
+      { id: 'news_monitoring', label: '뉴스/이슈 모니터링', desc: '회사 관련 부정 뉴스(제재, 소송, 사고)가 있는지 점검', category: '모니터링', url: 'https://news.google.com/search?q=부정뉴스' },
+      { id: 'rating_update', label: '등급 변동 확인', desc: 'MSCI/Sustainalytics 등급이 최근 갱신되었는지 확인', category: '등급', url: 'https://www.google.com/search?q=ESG+등급+변동' }
     ]
 
     agencies.forEach(agency => {
@@ -2892,7 +2985,8 @@
                 el('div', { style: `font-size:12px;font-weight:${isCompleted ? '500' : '400'};${isCompleted ? 'color:#166534' : 'color:#333'}` }, item.label),
                 el('div', { style: 'font-size:10px;color:#888' }, item.desc)
               ),
-              el('span', { style: 'font-size:9px;color:#aaa' }, item.category)
+              el('span', { style: 'font-size:9px;color:#aaa' }, item.category),
+              item.url ? el('a', { href: item.url, target: '_blank', style: 'font-size:10px;color:#7C3AED;text-decoration:none;margin-left:4px', onClick: e => e.stopPropagation() }, '🔗') : null
             )
           })
         )
@@ -3394,7 +3488,26 @@
           el('div', { className: 'stat-card' }, el('div', { className: 'stat-value' }, `₩${(totalPlanned/10000).toFixed(0)}만`), el('div', { className: 'stat-label' }, '계획 예산')),
           el('div', { className: 'stat-card' }, el('div', { className: 'stat-value' }, `₩${(totalActual/10000).toFixed(0)}만`), el('div', { className: 'stat-label' }, '집행 예산')),
           el('div', { className: 'stat-card' }, el('div', { className: 'stat-value', style: { color: totalPlanned ? (totalActual/totalPlanned > 0.9 ? '#e74c3c' : '#27ae60') : '#999' } }, totalPlanned ? Math.round(totalActual/totalPlanned*100) + '%' : '-'), el('div', { className: 'stat-label' }, '집행률'))
-        )
+        ),
+        budget.length ? (() => {
+          const cats = {}
+          budget.forEach(b => { if (!cats[b.category]) cats[b.category] = { planned: 0, actual: 0 }; cats[b.category].planned += b.planned_amount || 0; cats[b.category].actual += b.actual_amount || 0 })
+          const maxVal = Math.max(...Object.values(cats).map(c => c.planned), 1)
+          const colors = ['#7C3AED', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+          return el('div', { style: 'padding:0 20px 16px' },
+            el('div', { style: 'font-size:12px;font-weight:600;color:#555;margin-bottom:8px' }, '카테고리별 예산 분포'),
+            el('div', { style: 'display:flex;flex-direction:column;gap:6px' },
+              ...Object.entries(cats).map(([cat, val], i) => el('div', { style: 'display:flex;align-items:center;gap:8px;font-size:11px' },
+                el('span', { style: 'width:80px;text-align:right;color:#666;flex-shrink:0' }, cat),
+                el('div', { style: 'flex:1;height:18px;background:#f0f0f0;border-radius:4px;overflow:hidden;display:flex' },
+                  el('div', { style: `width:${val.planned ? Math.round(val.planned/maxVal*100) : 0}%;background:${colors[i%colors.length]}20;border-right:2px solid ${colors[i%colors.length]};height:100%` }),
+                  el('div', { style: `width:${val.planned ? Math.round(val.actual/maxVal*100) : 0}%;background:${colors[i%colors.length]};height:100%` })
+                ),
+                el('span', { style: 'width:80px;color:#888;flex-shrink:0' }, `₩${(val.actual/10000).toFixed(0)}/${(val.planned/10000).toFixed(0)}만`)
+              ))
+            )
+          )
+        })() : null
       ),
       el('div', { className: 'card' },
         el('div', { className: 'card-header' },
@@ -3506,21 +3619,41 @@
         )) : el('p', { style: 'padding:16px;color:#999;text-align:center' }, '설정된 마스킹 규칙이 없습니다.')
       ),
       el('div', { className: 'card' },
-        el('div', { className: 'card-header' }, el('h3', {}, 'AI 전송 마스킹 미리보기')),
-        el('div', { style: 'padding:16px 20px;font-size:12px' },
-          el('div', { style: 'margin-bottom:8px;color:#666' }, '마스킹이 적용된 증빙 데이터 (AI 프롬프트에 전달되는 형태):'),
-          el('table', { style: 'font-size:11px;width:100%' },
-            el('thead', {}, el('tr', {}, el('th', {}, '원본'), el('th', {}, '마스킹 결과'))),
-            el('tbody', {},
-              rules.map(r => {
-                const examples = { '전체마스킹': '[마스킹됨]', '부분마스킹': '김**', '집계치만허용': '(합계: 5,200만원)' }
-                return el('tr', {}, el('td', {}, r.field_name), el('td', { style: 'color:#e74c3c;font-weight:500' }, examples[r.masking_type] || '-'))
-              })
-            )
-          )
+        el('div', { className: 'card-header' }, el('h3', {}, '🔍 마스킹 실시간 미리보기')),
+        el('div', { style: 'padding:16px 20px' },
+          el('div', { style: 'margin-bottom:12px' },
+            el('label', { style: 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px' }, '테스트할 데이터를 입력하세요'),
+            el('input', { id: 'maskTestInput', type: 'text', placeholder: '예: 김철수, 서울시 강남구, 010-1234-5678', style: 'width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box', onInput: () => updateMaskPreview() })
+          ),
+          el('div', { id: 'mask-preview-result', style: 'font-size:12px;color:#666' }, '위 입력란에 데이터를 입력하면 마스킹 결과가 실시간으로 표시됩니다.')
         )
       )
     )
+  }
+
+  function updateMaskPreview() {
+    const input = document.getElementById('maskTestInput')?.value || ''
+    const container = document.getElementById('mask-preview-result')
+    if (!container) return
+    if (!input) { container.innerHTML = '<span style="color:#aaa">위 입력란에 데이터를 입력하면 마스킹 결과가 실시간으로 표시됩니다.</span>'; return }
+    const rules = Store.getMaskingRules() || []
+    const results = rules.map(r => {
+      let masked = input
+      if (r.masking_type === '전체마스킹') masked = '[마스킹됨]'
+      else if (r.masking_type === '부분마스킹') masked = input.length > 2 ? input.slice(0, 2) + '**' : '**'
+      else if (r.masking_type === '집계치만허용') masked = `(합계: ${input})`
+      return { field: r.field_name, original: input, masked, applied: r.applies_to_ai_api }
+    })
+    container.innerHTML = `
+      <div style="margin-bottom:8px;font-weight:600;color:#333">원본: <span style="color:#27ae60">${input}</span></div>
+      ${results.length ? results.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0">
+          <span style="width:100px;color:#888;font-size:11px">${r.field}</span>
+          <span style="flex:1;color:#e74c3c;font-weight:500;font-size:12px">${r.masked}</span>
+          <span style="font-size:10px;color:${r.applied ? '#27ae60' : '#999'}">${r.applied ? '✅ AI적용' : '❌ 미적용'}</span>
+        </div>
+      `).join('') : '<div style="color:#aaa;padding:8px 0">설정된 마스킹 규칙이 없습니다.</div>'}
+    `
   }
 
   // ==================== 대시보드 ====================

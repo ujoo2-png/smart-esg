@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.9.0'
+const APP_VERSION = 'v1.9.1'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -1021,6 +1021,21 @@ const Store = {
         if (!existingMsgs.has(key) && diffDays <= 14) {
           alerts.push({ type: 'warning', key, message: `${code} 증빙 미연결${assigneeName ? ' - ' + assigneeName : ''}`, related_page: 'assessment', related_id: item.assessment_id, user_id: item.assignee_id })
         }
+      }
+    })
+
+    const submissions = this.data.submissions || []
+    submissions.filter(s => s.status !== 'submitted' && s.status !== 'approved').forEach(s => {
+      const agency = (this.data.agencyMaster || []).find(a => a.code === s.agency_code)
+      if (!agency || !agency.submission_window) return
+      const key = 'submit_' + s.id
+      if (existingMsgs.has(key)) return
+      const [start, end] = agency.submission_window.split('~')
+      const [em, ed] = end.split('-').map(Number)
+      const endDate = new Date(now.getFullYear(), em - 1, ed)
+      const diffDays = Math.ceil((endDate - now) / 86400000)
+      if (diffDays <= 14 && diffDays >= 0) {
+        alerts.push({ type: 'warning', key, message: `${agency.name} 제출 마감 D-${diffDays} — ${s.assessment_year}년`, related_page: 'submit', related_id: s.id })
       }
     })
 
