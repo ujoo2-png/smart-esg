@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.9.5'
+const APP_VERSION = 'v1.9.6'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -353,7 +353,8 @@ const Store = {
       shareLinks: [],
       shareAccessLogs: [],
       capaItems: [],
-      projectTasks: []
+      projectTasks: [],
+      projectTaskLogs: []
     }
   },
 
@@ -793,9 +794,14 @@ const Store = {
 
   // ==== Project Tasks ====
   getProjectTasks() { return this.data.projectTasks || [] },
-  addProjectTask(t) { const task = { id: Date.now(), title: '', description: '', category: '일반', assignee: '', department: '', priority: '보통', status: '대기', start_date: '', due_date: '', progress: 0, tags: [], linked_type: '', linked_id: null, created_at: new Date().toISOString(), ...t }; this.data.projectTasks.push(task); this._save(); return task },
-  updateProjectTask(id, updates) { const i = (this.data.projectTasks || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.projectTasks[i], updates); this._save() } },
-  deleteProjectTask(id) { this.data.projectTasks = (this.data.projectTasks || []).filter(x => x.id !== id); this._save() },
+  addProjectTask(t) { const task = { id: Date.now(), title: '', description: '', category: '일반', assignee: '', assignee_id: null, department: '', dept_code: '', priority: '보통', status: '대기', start_date: '', due_date: '', progress: 0, tags: [], linked_type: '', linked_id: null, repeat: 'none', repeat_until: '', depends_on: [], comments: [], created_at: new Date().toISOString(), ...t }; this.data.projectTasks.push(task); this._logProjectTask(task.id, '생성', '', '', task.title); this._save(); return task },
+  updateProjectTask(id, updates) { const i = (this.data.projectTasks || []).findIndex(x => x.id === id); if (i > -1) { const old = { ...this.data.projectTasks[i] }; Object.assign(this.data.projectTasks[i], updates); if (updates.status && updates.status !== old.status) this._logProjectTask(id, '상태변경', old.status, updates.status); if (updates.progress != null && updates.progress !== old.progress) this._logProjectTask(id, '진행률', old.progress + '%', updates.progress + '%'); if (updates.assignee && updates.assignee !== old.assignee) this._logProjectTask(id, '담당자변경', old.assignee, updates.assignee); this._save() } },
+  deleteProjectTask(id) { this.data.projectTasks = (this.data.projectTasks || []).filter(x => x.id !== id); this.data.projectTaskLogs = (this.data.projectTaskLogs || []).filter(x => x.task_id !== id); this._save() },
+  _logProjectTask(taskId, action, from, to, detail) { if (!this.data.projectTaskLogs) this.data.projectTaskLogs = []; this.data.projectTaskLogs.push({ id: Date.now() + Math.random(), task_id: taskId, user_id: null, action, from_value: String(from), to_value: String(to), detail: detail || '', created_at: new Date().toISOString() }) },
+  getProjectTaskLogs(taskId) { return (this.data.projectTaskLogs || []).filter(l => l.task_id === taskId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) },
+
+  // ==== Project Task Comments ====
+  addProjectTaskComment(taskId, text, userId, userName) { const i = (this.data.projectTasks || []).findIndex(x => x.id === taskId); if (i > -1) { if (!this.data.projectTasks[i].comments) this.data.projectTasks[i].comments = []; this.data.projectTasks[i].comments.push({ id: Date.now(), user_id: userId, user_name: userName, text, created_at: new Date().toISOString() }); this._logProjectTask(taskId, '코멘트', '', text); this._save() } },
 
   // ==== GHG Factors ====
   getGHGFactors() { return this.data.ghgFactors },

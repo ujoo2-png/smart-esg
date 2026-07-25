@@ -383,7 +383,7 @@
     if (_helpOpen) showHelpFor(page)
 
     const _safe = (fn) => { try { fn() } catch (e) { console.error('Render error [' + page + ']:', e); const c = document.getElementById('page-' + page); if (c) { c.innerHTML = ''; c.append(el('div', { className: 'card' }, el('div', { style: 'padding:20px;color:#e74c3c' }, el('h3', { style: 'margin:0 0 8px' }, '오류가 발생했습니다'), el('p', { style: 'margin:0 0 12px;font-size:13px' }, e.message), el('button', { className: 'btn btn-secondary', onClick: () => navigate(page) }, '다시 시도')))) } } }
-    if (page === 'dashboard') _safe(renderDashboard)
+    if (page === 'dashboard') { _safe(renderDashboard); setTimeout(() => _showFirstLoginProjectPopup(), 500) }
     else if (page === 'assessment') _safe(renderAssessments)
     else if (page === 'indicator') _safe(renderIndicators)
     else if (page === 'evidence') _safe(renderEvidenceMgmt)
@@ -3968,26 +3968,94 @@
     `
   }
 
+  // ==================== 프로필 관리 ====================
+  function openProfileModal() {
+    const user = typeof Store.getCurrentUser === 'function' ? Store.getCurrentUser() : null
+    if (!user) { alert('로그인이 필요합니다.'); return }
+    const dept = user.dept_code ? (Store.getDepartments() || []).find(d => d.dept_code === user.dept_code) : null
+    const form = el('form', { onSubmit: e => e.preventDefault() },
+      el('div', { style: 'display:flex;align-items:center;gap:16px;margin-bottom:16px' },
+        el('div', { style: 'width:56px;height:56px;border-radius:50%;background:#7C3AED20;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#7C3AED;flex-shrink:0' }, (user.name || '?')[0]),
+        el('div', {},
+          el('div', { style: 'font-weight:600;font-size:15px' }, user.name || '-'),
+          el('div', { style: 'font-size:12px;color:#888' }, `${user.position || ''} · ${dept?.dept_name || user.dept_code || '미지정'}`)
+        )
+      ),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+        el('label', { style: 'font-size:12px' }, '아이디', el('input', { value: user.username || '', readonly: true, style: 'width:100%;padding:7px 10px;border:1px solid #eee;border-radius:6px;font-size:13px;background:#f9f9f9;color:#999;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '이름', el('input', { id: 'profName', value: user.name || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '이메일', el('input', { id: 'profEmail', type: 'email', value: user.email || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '전화번호', el('input', { id: 'profPhone', value: user.phone || '', placeholder: '010-0000-0000', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '부서', el('input', { value: dept?.dept_name || user.dept_code || '-', readonly: true, style: 'width:100%;padding:7px 10px;border:1px solid #eee;border-radius:6px;font-size:13px;background:#f9f9f9;color:#999;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '직급', el('input', { id: 'profPosition', value: user.position || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '역할', el('input', { value: roleLabel(user.role) || '-', readonly: true, style: 'width:100%;padding:7px 10px;border:1px solid #eee;border-radius:6px;font-size:13px;background:#f9f9f9;color:#999;box-sizing:border-box' }))
+      )
+    )
+    modal('내 프로필', form)
+    document.getElementById('modal-save').onclick = () => {
+      const updates = { name: document.getElementById('profName').value, email: document.getElementById('profEmail').value, phone: document.getElementById('profPhone').value, position: document.getElementById('profPosition').value }
+      Store.updateUser(user.id, updates)
+      const s = getSession()
+      if (s) { s.name = updates.name; sessionStorage.setItem('smart_esg_session', JSON.stringify(s)) }
+      applyAuthUI()
+      closeModal()
+      showToast('프로필이 수정되었습니다.', 'success')
+    }
+  }
+
+  function openPasswordModal() {
+    const user = typeof Store.getCurrentUser === 'function' ? Store.getCurrentUser() : null
+    if (!user) { alert('로그인이 필요합니다.'); return }
+    const form = el('form', { onSubmit: e => e.preventDefault() },
+      el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
+        el('label', { style: 'font-size:12px' }, '현재 비밀번호', el('input', { id: 'pwCurrent', type: 'password', required: true, style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '새 비밀번호', el('input', { id: 'pwNew', type: 'password', required: true, minLength: 6, style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '새 비밀번호 확인', el('input', { id: 'pwConfirm', type: 'password', required: true, style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }))
+      )
+    )
+    modal('비밀번호 변경', form)
+    document.getElementById('modal-save').onclick = async () => {
+      const cur = document.getElementById('pwCurrent').value
+      const nw = document.getElementById('pwNew').value
+      const cf = document.getElementById('pwConfirm').value
+      if (!cur || !nw || !cf) { alert('모든 필드를 입력하세요.'); return }
+      if (nw !== cf) { alert('새 비밀번호가 일치하지 않습니다.'); return }
+      if (nw.length < 6) { alert('비밀번호는 6자 이상이어야 합니다.'); return }
+      const curHash = await Store.hashPassword(cur)
+      const users = Store.getUsers()
+      const u = users.find(x => x.id === user.id)
+      if (!u || u.password !== curHash) { alert('현재 비밀번호가 올바르지 않습니다.'); return }
+      const newHash = await Store.hashPassword(nw)
+      Store.updateUser(user.id, { password: newHash })
+      closeModal()
+      showToast('비밀번호가 변경되었습니다.', 'success')
+    }
+  }
+
   // ==================== 프로젝트 관리 ====================
   let _pmView = 'list'
   let _pmFilter = 'all'
+  const _catColors = { '평가': '#3b82f6', '증빙': '#10b981', '온실가스': '#f59e0b', '보고서': '#8b5cf6', '협력사': '#ef4444', '교육': '#06b6d4', '개선': '#84cc16', '일반': '#6b7280', '기타': '#9ca3af' }
 
   function renderProjectManagement() {
     const c = document.getElementById('page-project')
     if (!c) return
     const tasks = Store.getProjectTasks()
-    const filtered = _pmFilter === 'all' ? tasks : tasks.filter(t => t.status === _pmFilter)
-    const statusCounts = { all: tasks.length, '대기': tasks.filter(t => t.status === '대기').length, '진행중': tasks.filter(t => t.status === '진행중').length, '검토': tasks.filter(t => t.status === '검토').length, '완료': tasks.filter(t => t.status === '완료').length, '지연': tasks.filter(t => t.status === '지연').length }
+    const curUser = (typeof Store.getCurrentUser === 'function' ? Store.getCurrentUser() : null)
+    const myTasks = curUser ? tasks.filter(t => String(t.assignee_id) === String(curUser.id)) : []
+    let filtered = _pmFilter === 'all' ? tasks : _pmFilter === 'mine' ? myTasks : tasks.filter(t => t.status === _pmFilter)
+    const statusCounts = { all: tasks.length, mine: myTasks.length, '대기': tasks.filter(t => t.status === '대기').length, '진행중': tasks.filter(t => t.status === '진행중').length, '검토': tasks.filter(t => t.status === '검토').length, '완료': tasks.filter(t => t.status === '완료').length, '지연': tasks.filter(t => t.status === '지연').length }
     const today = new Date()
 
     const headerCard = el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
       el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '📅 프로젝트 관리'),
       el('span', { style: 'font-size:12px;color:#888' }, `${tasks.length}건`),
-      Object.entries(statusCounts).map(([k, v]) => el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmFilter === k ? '#7C3AED' : '#f0f0f0'};color:${_pmFilter === k ? '#fff' : '#666'};border:1px solid ${_pmFilter === k ? '#7C3AED' : '#ddd'}`, onClick: () => { _pmFilter = k; renderProjectManagement() } }, `${k === 'all' ? '전체' : k} (${v})`)),
+      Object.entries(statusCounts).map(([k, v]) => el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmFilter === k ? '#7C3AED' : '#f0f0f0'};color:${_pmFilter === k ? '#fff' : '#666'};border:1px solid ${_pmFilter === k ? '#7C3AED' : '#ddd'}`, onClick: () => { _pmFilter = k; renderProjectManagement() } }, `${k === 'all' ? '전체' : k === 'mine' ? '📌 내 업무' : k} (${v})`)),
       el('div', { style: 'flex:1' }),
       el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmView === 'list' ? '#7C3AED' : '#f0f0f0'};color:${_pmView === 'list' ? '#fff' : '#666'}`, onClick: () => { _pmView = 'list'; renderProjectManagement() } }, '📋 목록'),
       el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmView === 'gantt' ? '#7C3AED' : '#f0f0f0'};color:${_pmView === 'gantt' ? '#fff' : '#666'}`, onClick: () => { _pmView = 'gantt'; renderProjectManagement() } }, '📊 간트'),
       el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmView === 'calendar' ? '#7C3AED' : '#f0f0f0'};color:${_pmView === 'calendar' ? '#fff' : '#666'}`, onClick: () => { _pmView = 'calendar'; renderProjectManagement() } }, '🗓 캘린더'),
+      el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_pmView === 'timeline' ? '#7C3AED' : '#f0f0f0'};color:${_pmView === 'timeline' ? '#fff' : '#666'}`, onClick: () => { _pmView = 'timeline'; renderProjectManagement() } }, '📜 타임라인'),
       el('button', { className: 'btn btn-primary btn-sm', onClick: () => _openProjectTaskModal(null) }, '+ 업무 추가')
     )
     c.innerHTML = ''
@@ -3995,6 +4063,7 @@
 
     if (_pmView === 'gantt') { c.append(_renderPmGantt(filtered)); return }
     if (_pmView === 'calendar') { c.append(_renderPmCalendar(filtered)); return }
+    if (_pmView === 'timeline') { c.append(_renderPmTimeline(filtered)); return }
 
     if (!filtered.length) {
       c.append(el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('div', { style: 'font-size:36px;margin-bottom:12px' }, '📅'), el('p', { style: 'color:#888' }, '등록된 업무가 없습니다.'), el('button', { className: 'btn btn-primary', onClick: () => _openProjectTaskModal(null) }, '+ 첫 업무 추가')))
@@ -4015,7 +4084,7 @@
             el('span', { style: `padding:2px 6px;border-radius:8px;background:${statusColors2[task.status] || '#999'}20;color:${statusColors2[task.status] || '#999'};font-weight:500` }, task.status || '대기'),
             task.assignee ? el('span', { style: 'color:#888' }, `👤 ${task.assignee}`) : null,
             task.department ? el('span', { style: 'color:#888' }, `🏢 ${task.department}`) : null,
-            task.category && task.category !== '일반' ? el('span', { style: 'padding:1px 5px;border-radius:4px;background:#f0f0f0;color:#666' }, task.category) : null,
+            task.category && task.category !== '일반' ? el('span', { style: `padding:1px 5px;border-radius:4px;background:${_catColors[task.category] || '#6b7280'}18;color:${_catColors[task.category] || '#6b7280'};font-weight:500` }, task.category) : null,
             task.linked_type ? el('span', { style: 'padding:1px 5px;border-radius:4px;background:#f0f7ff;color:#3b82f6' }, `🔗 ${task.linked_type}`) : null
           )
         ),
@@ -4076,9 +4145,10 @@
             const color = priorityColors[t.priority] || '#3b82f6'
             const isOverdue = t.due_date && new Date(t.due_date) < today && t.status !== '완료'
             return el('div', { style: 'position:relative;height:28px;border-bottom:1px solid #f0f0f0' },
-              el('div', { style: `position:absolute;left:${startOff * dayWidth}px;width:${dur * dayWidth}px;height:18px;top:5px;background:${isOverdue ? '#ef444420' : color + '20'};border:1px solid ${isOverdue ? '#ef444460' : color + '60'};border-radius:4px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 4px`, onClick: () => _openProjectTaskModal(t), title: `${t.title}\n${t.start_date || '?'} ~ ${t.due_date || '?'}\n담당: ${t.assignee || '미지정'} (${t.progress || 0}%)` },
+              el('div', { style: `position:absolute;left:${startOff * dayWidth}px;width:${dur * dayWidth}px;height:18px;top:5px;background:${isOverdue ? '#ef444420' : color + '20'};border:1px solid ${isOverdue ? '#ef444460' : color + '60'};border-radius:4px;cursor:pointer;overflow:hidden;display:flex;align-items:center;padding:0 4px`, onClick: () => _openProjectTaskModal(t), title: `${t.title}\n${t.start_date || '?'} ~ ${t.due_date || '?'}\n담당: ${t.assignee || '미지정'} (${t.progress || 0}%)\n${(t.depends_on||[]).length ? '의존: ' + (t.depends_on||[]).map(did => { const dt = tasks.find(x=>x.id===did); return dt?dt.title:did }).join(', ') : ''}` },
                 el('div', { style: `height:100%;width:${t.progress || 0}%;background:${isOverdue ? '#ef4444' : color};border-radius:3px;transition:width .3s` }),
-                el('span', { style: `position:absolute;left:4px;font-size:9px;font-weight:600;color:${isOverdue ? '#ef4444' : color};white-space:nowrap;text-shadow:0 0 3px #fff` }, t.title)
+                el('span', { style: `position:absolute;left:4px;font-size:9px;font-weight:600;color:${isOverdue ? '#ef4444' : color};white-space:nowrap;text-shadow:0 0 3px #fff` }, t.title),
+                (t.depends_on || []).length ? el('span', { style: 'position:absolute;right:4px;font-size:8px;color:#8b5cf6', title: `${(t.depends_on||[]).length}개 업무에 의존` }, '🔗') : null
               )
             )
           }),
@@ -4133,7 +4203,10 @@
     }
 
     return el('div', { className: 'card', style: 'padding:16px' },
-      el('div', { style: 'text-align:center;font-weight:600;font-size:14px;margin-bottom:12px' }, `${year}년 ${monthNames[month]}`),
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' },
+        el('div', { style: 'text-align:center;font-weight:600;font-size:14px' }, `${year}년 ${monthNames[month]}`),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: _exportCalendarIcal, style: 'font-size:11px' }, '📤 캘린더 복사')
+      ),
       el('div', { style: 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center' },
         ...['일', '월', '화', '수', '목', '금', '토'].map(d => el('div', { style: 'font-size:11px;font-weight:600;color:#888;padding:4px' }, d)),
         ...cells
@@ -4141,53 +4214,226 @@
     )
   }
 
+  function _renderPmTimeline(tasks) {
+    if (!tasks.length) return el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' }, el('p', { style: 'color:#888' }, '표시할 업무가 없습니다.'))
+    const logs = []
+    tasks.forEach(t => {
+      Store.getProjectTaskLogs(t.id).forEach(l => logs.push({ ...l, task_title: t.title, task_id: t.id }))
+    })
+    logs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    const actionIcons = { '생성': '🆕', '상태변경': '🔄', '진행률': '📊', '담당자변경': '👤', '코멘트': '💬' }
+
+    const card = el('div', { className: 'card', style: 'padding:0;overflow:hidden' },
+      el('div', { style: 'padding:12px 16px;border-bottom:1px solid #eee;font-weight:600;font-size:13px' }, `📜 변경 이력 (${logs.length}건)`)
+    )
+    if (!logs.length) {
+      card.append(el('div', { style: 'text-align:center;padding:40px;color:#888' }, '변경 이력이 없습니다.'))
+    } else {
+      logs.slice(0, 100).forEach((l, idx) => {
+        card.append(el('div', { style: `padding:10px 16px;display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid #f5f5f5;${idx === logs.length - 1 ? 'border-bottom:none' : ''}` },
+          el('span', { style: 'font-size:18px;flex-shrink:0' }, actionIcons[l.action] || '📝'),
+          el('div', { style: 'flex:1;min-width:0' },
+            el('div', { style: 'display:flex;gap:6px;align-items:center;margin-bottom:2px' },
+              el('span', { style: 'font-weight:600;font-size:12px;color:#333;cursor:pointer;text-decoration:underline', onClick: () => _openProjectTaskModal(tasks.find(t => t.id === l.task_id)) }, l.task_title),
+              el('span', { style: 'font-size:11px;font-weight:500;color:#7C3AED' }, l.action),
+              l.from_value ? el('span', { style: 'font-size:11px;text-decoration:line-through;color:#bbb' }, l.from_value) : null,
+              l.to_value ? el('span', { style: 'font-size:11px;color:#27ae60;font-weight:500' }, l.to_value) : null
+            ),
+            el('div', { style: 'font-size:10px;color:#aaa' }, _formatDateTime(l.created_at))
+          )
+        ))
+      })
+    }
+    return card
+  }
+
+  function _exportCalendarIcal() {
+    const tasks = Store.getProjectTasks().filter(t => t.start_date || t.due_date)
+    if (!tasks.length) { showToast('내보낼 일정이 없습니다.', 'warning'); return }
+    let ical = 'BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//SmartESG//KO\nCALSCALE:GREGORIAN\n'
+    tasks.forEach(t => {
+      const uid = `task-${t.id}@smartesg.local`
+      const summary = (t.title || '').replace(/[\n\r,;:]/g, ' ')
+      const desc = (t.description || '').replace(/[\n\r]/g, '\\n').replace(/[;,]/g, ' ')
+      const dtstart = t.start_date ? t.start_date.replace(/-/g, '') + 'T090000' : t.due_date ? t.due_date.replace(/-/g, '') + 'T090000' : ''
+      const dtend = t.due_date ? t.due_date.replace(/-/g, '') + 'T180000' : dtstart
+      if (!dtstart) return
+      ical += `BEGIN:VEVENT\nDTSTART:${dtstart}\nDTEND:${dtend}\nUID:${uid}\nSUMMARY:${summary}\nDESCRIPTION:${desc} (담당:${t.assignee || '미지정'} 상태:${t.status || '대기'})\nEND:VEVENT\n`
+    })
+    ical += 'END:VCALENDAR'
+    navigator.clipboard.writeText(ical).then(() => showToast('iCal 형식으로 클립보드에 복사되었습니다.', 'success')).catch(() => {
+      const ta = document.createElement('textarea')
+      ta.value = ical
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      showToast('iCal 형식으로 클립보드에 복사되었습니다.', 'success')
+    })
+  }
+
   function _openProjectTaskModal(task) {
     const isEdit = !!task
     const categories = ['일반', '평가', '증빙', '온실가스', '보고서', '협력사', '교육', '개선', '기타']
     const priorities = ['높음', '보통', '낮음']
     const statuses = ['대기', '진행중', '검토', '완료', '지연']
+    const repeats = [
+      { value: 'none', label: '반복 없음' },
+      { value: 'daily', label: '매일' },
+      { value: 'weekly', label: '매주' },
+      { value: 'monthly', label: '매월' }
+    ]
+    const users = (Store.getUsers() || []).filter(u => u.status === 'active')
+    const depts = (Store.getDepartments() || []).filter(d => d.is_active !== false)
+    const tasks = Store.getProjectTasks().filter(t => !task || t.id !== task.id)
+    const logs = task ? Store.getProjectTaskLogs(task.id) : []
+    const comments = task?.comments || []
+
+    const userMap = {}
+    users.forEach(u => { userMap[u.id] = u })
 
     const form = el('form', { onSubmit: e => e.preventDefault() },
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' },
         el('label', { style: 'font-size:12px' }, '제목 *', el('input', { id: 'pmTitle', value: task?.title || '', required: true, style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
         el('label', { style: 'font-size:12px' }, '카테고리', el('select', { id: 'pmCategory', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...categories.map(c => el('option', { value: c, selected: (task?.category || '일반') === c }, c)))),
-        el('label', { style: 'font-size:12px' }, '담당자', el('input', { id: 'pmAssignee', value: task?.assignee || '', placeholder: '이름', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
-        el('label', { style: 'font-size:12px' }, '부서', el('input', { id: 'pmDept', value: task?.department || '', placeholder: '부서명', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '담당자', el('select', { id: 'pmAssignee', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box', onChange: () => { const uid = document.getElementById('pmAssignee').value; const u = userMap[uid]; if (u) { const ds = document.getElementById('pmDept'); const dOpt = [...ds.options].find(o => o.value === u.dept_code); if (dOpt) ds.value = u.dept_code } } }, el('option', { value: '' }, '미지정'), ...users.map(u => el('option', { value: u.id, selected: String(task?.assignee_id) === String(u.id) }, `${u.name} (${u.position || ''})`)))),
+        el('label', { style: 'font-size:12px' }, '부서', el('select', { id: 'pmDept', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, el('option', { value: '' }, '미지정'), ...depts.map(d => el('option', { value: d.dept_code, selected: (task?.dept_code || '') === d.dept_code }, d.dept_name)))),
         el('label', { style: 'font-size:12px' }, '우선순위', el('select', { id: 'pmPriority', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...priorities.map(p => el('option', { value: p, selected: (task?.priority || '보통') === p }, p)))),
         el('label', { style: 'font-size:12px' }, '상태', el('select', { id: 'pmStatus', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...statuses.map(s => el('option', { value: s, selected: (task?.status || '대기') === s }, s)))),
         el('label', { style: 'font-size:12px' }, '시작일', el('input', { id: 'pmStart', type: 'date', value: task?.start_date || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' })),
         el('label', { style: 'font-size:12px' }, '마감일', el('input', { id: 'pmDue', type: 'date', value: task?.due_date || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }))
       ),
-      el('label', { style: 'font-size:12px;margin-top:8px;display:block' }, '설명', el('textarea', { id: 'pmDesc', value: task?.description || '', rows: '3', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;resize:vertical' })),
+      el('div', { style: 'margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+        el('label', { style: 'font-size:12px' }, '반복', el('select', { id: 'pmRepeat', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...repeats.map(r => el('option', { value: r.value, selected: (task?.repeat || 'none') === r.value }, r.label)))),
+        el('label', { style: 'font-size:12px' }, '반복 종료일', el('input', { id: 'pmRepeatUntil', type: 'date', value: task?.repeat_until || '', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box' }))
+      ),
+      el('label', { style: 'font-size:12px;margin-top:8px;display:block' }, '설명 (@"이름"으로 담당자 태그 가능)', el('textarea', { id: 'pmDesc', value: task?.description || '', rows: '3', style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;resize:vertical', onInput: (e) => _handleMentionInput(e, users) })),
+      el('div', { id: 'pmMentionList', style: 'position:relative' }),
       el('div', { style: 'margin-top:8px;display:flex;align-items:center;gap:8px' },
         el('label', { style: 'font-size:12px' }, '진행률'),
         el('input', { id: 'pmProgress', type: 'range', min: '0', max: '100', value: task?.progress || '0', style: 'flex:1', onInput: () => { const v = document.getElementById('pmProgressVal'); if (v) v.textContent = document.getElementById('pmProgress').value + '%' } }),
         el('span', { id: 'pmProgressVal', style: 'font-size:11px;color:#888;min-width:30px' }, (task?.progress || '0') + '%')
-      )
+      ),
+      tasks.length ? el('label', { style: 'font-size:12px;margin-top:8px;display:block' },
+        '의존 업무',
+        el('select', { id: 'pmDepends', multiple: true, style: 'width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box;min-height:60px' },
+          ...tasks.map(t => el('option', { value: t.id, selected: (task?.depends_on || []).includes(t.id) }, `${t.title} (${t.assignee || '미지정'})`))
+        )
+      ) : null,
+      isEdit && logs.length ? el('div', { style: 'margin-top:12px' },
+        el('div', { style: 'font-size:12px;font-weight:600;margin-bottom:6px;color:#555' }, '📋 변경 이력'),
+        el('div', { style: 'max-height:120px;overflow-y:auto;font-size:11px;color:#666', id: 'pmTimeline' },
+          ...logs.slice(0, 20).map(l => el('div', { style: 'padding:4px 0;border-bottom:1px solid #f5f5f5;display:flex;gap:8px;align-items:center' },
+            el('span', { style: 'color:#aaa;white-space:nowrap' }, _formatDateTime(l.created_at)),
+            el('span', { style: 'font-weight:500;color:#555' }, l.action),
+            l.from_value ? el('span', { style: 'text-decoration:line-through;color:#bbb' }, l.from_value) : null,
+            l.to_value ? el('span', { style: 'color:#27ae60;font-weight:500' }, l.to_value) : null
+          ))
+        )
+      ) : null,
+      isEdit ? el('div', { style: 'margin-top:12px' },
+        el('div', { style: 'font-size:12px;font-weight:600;margin-bottom:6px;color:#555' }, '💬 코멘트'),
+        el('div', { id: 'pmComments', style: 'max-height:120px;overflow-y:auto;margin-bottom:6px' },
+          ...comments.map(c => el('div', { style: 'padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:11px' },
+            el('div', { style: 'display:flex;gap:6px;align-items:center;margin-bottom:2px' },
+              el('span', { style: 'font-weight:600;color:#555' }, c.user_name || '익명'),
+              el('span', { style: 'color:#aaa' }, _formatDateTime(c.created_at))
+            ),
+            el('div', { style: 'color:#333' }, c.text)
+          ))
+        ),
+        el('div', { style: 'display:flex;gap:6px' },
+          el('input', { id: 'pmCommentInput', placeholder: '코멘트 입력...', style: 'flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px', onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _addTaskComment(task.id) } } }),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => _addTaskComment(task.id), style: 'font-size:11px;padding:4px 10px' }, '등록')
+        )
+      ) : null
     )
 
-    modal(isEdit ? '업무 수정' : '업무 추가', form)
+    modal(isEdit ? '업무 수정' : '업무 추가', form, isEdit ? [{ label: '🗑 삭제', className: 'btn btn-danger', onClick: () => { if (confirm('이 업무를 삭제하시겠습니까?')) { Store.deleteProjectTask(task.id); closeModal(); showToast('삭제되었습니다.', 'success'); renderProjectManagement() } } }] : [])
     document.getElementById('modal-save').onclick = () => {
       const data = {
         title: document.getElementById('pmTitle').value,
         category: document.getElementById('pmCategory').value,
-        assignee: document.getElementById('pmAssignee').value,
-        department: document.getElementById('pmDept').value,
+        assignee_id: document.getElementById('pmAssignee').value || null,
+        assignee: document.getElementById('pmAssignee').selectedOptions[0]?.textContent?.replace(/\s*\(.*\)/, '') || '',
+        dept_code: document.getElementById('pmDept').value,
+        department: document.getElementById('pmDept').selectedOptions[0]?.textContent || '',
         priority: document.getElementById('pmPriority').value,
         status: document.getElementById('pmStatus').value,
         start_date: document.getElementById('pmStart').value,
         due_date: document.getElementById('pmDue').value,
         description: document.getElementById('pmDesc').value,
-        progress: parseInt(document.getElementById('pmProgress').value)
+        progress: parseInt(document.getElementById('pmProgress').value),
+        repeat: document.getElementById('pmRepeat').value,
+        repeat_until: document.getElementById('pmRepeatUntil').value,
+        depends_on: [...(document.getElementById('pmDepends')?.selectedOptions || [])].map(o => parseInt(o.value))
       }
       if (!data.title) { alert('제목을 입력하세요.'); return }
-      if (isEdit) Store.updateProjectTask(task.id, data)
-      else Store.addProjectTask(data)
+      let savedTask
+      if (isEdit) { Store.updateProjectTask(task.id, data); savedTask = task }
+      else { savedTask = Store.addProjectTask(data) }
+      if (data.repeat !== 'none' && data.repeat_until && data.start_date && data.due_date) _createRepeatingTasks(savedTask, data)
       closeModal()
       showToast(isEdit ? '수정되었습니다.' : '추가되었습니다.', 'success')
       renderProjectManagement()
     }
   }
+
+  function _handleMentionInput(e, users) {
+    const ta = e.target
+    const val = ta.value
+    const cur = ta.selectionStart
+    const before = val.substring(0, cur)
+    const match = before.match(/@(\S*)$/)
+    const list = document.getElementById('pmMentionList')
+    if (!list) { if (e.target._mentionHandler) { e.target._mentionHandler = null } return }
+    if (match) {
+      const q = match[1].toLowerCase()
+      const found = users.filter(u => !q || u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q)).slice(0, 5)
+      if (found.length) {
+        list.innerHTML = ''
+        const ul = el('div', { style: 'position:absolute;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:100;max-height:120px;overflow-y:auto' })
+        found.forEach(u => {
+          const item = el('div', { style: 'padding:6px 10px;cursor:pointer;font-size:12px;display:flex;gap:8px;align-items:center', onClick: () => { const pre = val.substring(0, cur - match[0].length); const post = val.substring(cur); ta.value = pre + '@' + u.name + ' ' + post; list.innerHTML = ''; ta.focus() } }, el('span', { style: 'font-weight:600' }, u.name), el('span', { style: 'color:#888' }, u.position || ''))
+          ul.append(item)
+        })
+        list.append(ul)
+        return
+      }
+    }
+    list.innerHTML = ''
+  }
+
+  function _addTaskComment(taskId) {
+    const input = document.getElementById('pmCommentInput')
+    if (!input || !input.value.trim()) return
+    const user = typeof Store.getCurrentUser === 'function' ? Store.getCurrentUser() : null
+    Store.addProjectTaskComment(taskId, input.value.trim(), user?.id || null, user?.name || '익명')
+    _openProjectTaskModal(Store.getProjectTasks().find(t => t.id === taskId))
+  }
+
+  function _createRepeatingTasks(baseTask, data) {
+    const start = new Date(data.start_date)
+    const end = new Date(data.due_date)
+    const repeatEnd = new Date(data.repeat_until)
+    const dur = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
+    let next = new Date(start)
+    if (data.repeat === 'daily') next.setDate(next.getDate() + 1)
+    else if (data.repeat === 'weekly') next.setDate(next.getDate() + 7)
+    else if (data.repeat === 'monthly') next.setMonth(next.getMonth() + 1)
+    while (next <= repeatEnd) {
+      const ns = new Date(next)
+      const ne = new Date(ns); ne.setDate(ne.getDate() + dur)
+      Store.addProjectTask({ ...data, title: data.title + ' (반복)', start_date: _fmtDate(ns), due_date: _fmtDate(ne), status: '대기', progress: 0, repeat: 'none', depends_on: [], comments: [], created_at: new Date().toISOString() })
+      if (data.repeat === 'daily') next.setDate(next.getDate() + 1)
+      else if (data.repeat === 'weekly') next.setDate(next.getDate() + 7)
+      else if (data.repeat === 'monthly') next.setMonth(next.getMonth() + 1)
+      else break
+    }
+  }
+
+  function _fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  function _formatDateTime(iso) { if (!iso) return ''; const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
 
   // ==================== 대시보드 ====================
   let _dashAssId = null
@@ -4197,15 +4443,117 @@
     if (!c) return
     const assessments = Store.getAssessments() || []
     c.innerHTML = ''
+
+    const projectCard = _renderDashboardProjectSummary()
+    if (projectCard) c.append(projectCard)
+
     if (!assessments.length) {
-      c.innerHTML = '<div style="text-align:center;padding:60px 40px"><div style="font-size:48px;margin-bottom:16px">📊</div><h2 style="margin:0 0 8px;color:#2c3e50">Smart ESG에 오신 것을 환영합니다</h2><p style="margin:0 0 24px;color:#888;font-size:14px;line-height:1.6">ESG 평가를 시작하려면 먼저 평가를 생성하세요.</p><button class="btn btn-primary" style="font-size:16px;padding:12px 32px" onclick="navigate(\'assessment\')">+ 첫 번째 평가 만들기</button></div>'
+      c.append(el('div', { style: 'text-align:center;padding:60px 40px' }, el('div', { style: 'font-size:48px;margin-bottom:16px' }, '📊'), el('h2', { style: 'margin:0 0 8px;color:#2c3e50' }, 'Smart ESG에 오신 것을 환영합니다'), el('p', { style: 'margin:0 0 24px;color:#888;font-size:14px;line-height:1.6' }, 'ESG 평가를 시작하려면 먼저 평가를 생성하세요.'), el('button', { className: 'btn btn-primary', style: 'font-size:16px;padding:12px 32px', onClick: () => navigate('assessment') }, '+ 첫 번째 평가 만들기')))
       return
     }
     _dashAssId = _dashAssId || assessments[0]?.id
     if (!assessments.find(a => a.id === _dashAssId)) _dashAssId = assessments[0]?.id
     const selOpts = assessments.map(a => '<option value="' + a.id + '"' + (a.id === _dashAssId ? ' selected' : '') + '>' + a.title + ' (' + a.assessment_year + '년)</option>').join('')
-    c.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0;margin-bottom:16px"><h3 style="margin:0;font-size:16px">📊 대시보드</h3><div style="display:flex;gap:8px;align-items:center"><select id="dashAssSelect" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px" onchange="setDashAssessment(Number(this.value))">' + selOpts + '</select></div></div><div id="dashGrid"></div>'
+    c.append(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' }, el('h3', { style: 'margin:0;font-size:16px' }, '📊 대시보드'), el('div', { style: 'display:flex;gap:8px;align-items:center' }, Object.assign(document.createElement('div'), { innerHTML: '<select id="dashAssSelect" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px" onchange="setDashAssessment(Number(this.value))">' + selOpts + '</select>' }).firstChild)))
+    const gridDiv = document.createElement('div')
+    gridDiv.id = 'dashGrid'
+    c.append(gridDiv)
     Dashboard.render('dashGrid', _dashAssId)
+  }
+
+  function _renderDashboardProjectSummary() {
+    const tasks = Store.getProjectTasks() || []
+    if (!tasks.length) return null
+    const today = new Date()
+    const todayStr = today.toISOString().slice(0, 10)
+    const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7)
+    const overdue = tasks.filter(t => t.due_date && t.due_date < todayStr && t.status !== '완료').length
+    const inProgress = tasks.filter(t => t.status === '진행중').length
+    const todayDue = tasks.filter(t => t.due_date === todayStr && t.status !== '완료').length
+    const weekDue = tasks.filter(t => t.due_date && t.due_date >= todayStr && t.due_date <= weekEnd.toISOString().slice(0, 10) && t.status !== '완료').length
+    const done = tasks.filter(t => t.status === '완료').length
+    const total = tasks.length
+    const avgProgress = total ? Math.round(tasks.reduce((s, t) => s + (t.progress || 0), 0) / total) : 0
+
+    const statBox = (label, value, color) => el('div', { style: `flex:1;min-width:80px;text-align:center;padding:10px 8px;background:${color}10;border-radius:8px;border:1px solid ${color}20`, onClick: () => navigate('project'), cursor: 'pointer' },
+      el('div', { style: `font-size:20px;font-weight:700;color:${color}` }, String(value)),
+      el('div', { style: 'font-size:10px;color:#888;margin-top:2px' }, label)
+    )
+
+    return el('div', { className: 'card', style: 'padding:16px 20px;margin-bottom:16px;cursor:default' },
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' },
+        el('h3', { style: 'margin:0;font-size:14px;display:flex;align-items:center;gap:6px', onClick: () => navigate('project'), style: 'cursor:pointer' }, '📅 프로젝트 현황'),
+        el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: () => navigate('project') }, '전체보기 →')
+      ),
+      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px' },
+        statBox('오늘 마감', todayDue, '#f59e0b'),
+        statBox('진행중', inProgress, '#3b82f6'),
+        statBox('지연', overdue, '#ef4444'),
+        statBox('이번주', weekDue, '#8b5cf6'),
+        statBox('완료', done, '#10b981')
+      ),
+      el('div', { style: 'display:flex;align-items:center;gap:8px' },
+        el('div', { style: 'flex:1;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden' }, el('div', { style: `width:${avgProgress}%;height:100%;background:linear-gradient(90deg,#7C3AED,#3b82f6);border-radius:3px;transition:width .3s` })),
+        el('span', { style: 'font-size:11px;color:#888;white-space:nowrap' }, `전체 진행률 ${avgProgress}%`)
+      )
+    )
+  }
+
+  function _showFirstLoginProjectPopup() {
+    const user = typeof Store.getCurrentUser === 'function' ? Store.getCurrentUser() : null
+    if (!user) return
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const flagKey = `smart_esg_proj_seen_${user.id}_${today}`
+    if (localStorage.getItem(flagKey)) return
+    const tasks = Store.getProjectTasks() || []
+    if (!tasks.length) return
+    localStorage.setItem(flagKey, '1')
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + 7)
+    const overdue = tasks.filter(t => t.due_date && t.due_date < todayStr && t.status !== '완료')
+    const inProgress = tasks.filter(t => t.status === '진행중')
+    const todayDue = tasks.filter(t => t.due_date === todayStr && t.status !== '완료')
+    const weekDue = tasks.filter(t => t.due_date && t.due_date >= todayStr && t.due_date <= weekEnd.toISOString().slice(0, 10) && t.status !== '완료')
+    const myTasks = user.id ? tasks.filter(t => String(t.assignee_id) === String(user.id) && t.status !== '완료') : []
+
+    const overlay = el('div', { style: 'position:fixed;top:0;right:0;bottom:0;width:400px;max-width:100vw;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.15);z-index:9999;transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column', id: 'first-login-slide' },
+      el('div', { style: 'padding:20px 24px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center' },
+        el('div', {},
+          el('div', { style: 'font-size:18px;font-weight:700;color:#1a1a2e' }, `안녕하세요, ${user.name}님! 👋`),
+          el('div', { style: 'font-size:12px;color:#888;margin-top:2px' }, `${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })} 프로젝트 현황`)
+        ),
+        el('button', { style: 'background:none;border:none;font-size:20px;cursor:pointer;color:#999;padding:4px 8px', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) { s.style.transform = 'translateX(100%)'; setTimeout(() => s.remove(), 300) } } }, '✕')
+      ),
+      el('div', { style: 'flex:1;overflow-y:auto;padding:16px 24px' },
+        el('div', { style: 'font-size:12px;font-weight:600;color:#555;margin-bottom:8px' }, '📊 오늘의 업무 요약'),
+        ...[
+          { label: '⏰ 오늘 마감', items: todayDue, color: '#f59e0b' },
+          { label: '🔄 진행중', items: inProgress, color: '#3b82f6' },
+          { label: '🚨 지연', items: overdue, color: '#ef4444' },
+          { label: '📅 이번주 예정', items: weekDue, color: '#8b5cf6' }
+        ].filter(s => s.items.length).map(s => el('div', { style: 'margin-bottom:12px' },
+          el('div', { style: 'font-size:12px;font-weight:600;color:' + s.color + ';margin-bottom:4px' }, `${s.label} (${s.items.length}건)`),
+          ...s.items.slice(0, 5).map(t => el('div', { style: 'padding:6px 8px;background:#fafafa;border-radius:6px;margin-bottom:3px;font-size:11px;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) s.remove(); navigate('project') } },
+            el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, t.title),
+            el('span', { style: 'color:#888;white-space:nowrap;margin-left:8px;font-size:10px' }, t.assignee || '미지정')
+          )),
+          s.items.length > 5 ? el('div', { style: 'font-size:10px;color:#aaa;text-align:center;padding:4px' }, `+${s.items.length - 5}건 더보기`) : null
+        )),
+        !overdue.length && !inProgress.length && !todayDue.length && !weekDue.length ? el('div', { style: 'text-align:center;padding:20px;color:#aaa;font-size:13px' }, '🎉 모든 업무를 완료했습니다!') : null,
+        myTasks.length ? el('div', { style: 'margin-top:16px' },
+          el('div', { style: 'font-size:12px;font-weight:600;color:#555;margin-bottom:8px' }, `📌 나의 미완료 업무 (${myTasks.length}건)`),
+          ...myTasks.slice(0, 5).map(t => el('div', { style: 'padding:6px 8px;background:#f5f0ff;border-radius:6px;margin-bottom:3px;font-size:11px;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) s.remove(); navigate('project') } },
+            el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, t.title),
+            el('span', { style: 'color:#7C3AED;white-space:nowrap;margin-left:8px;font-size:10px' }, `${t.progress || 0}%`)
+          ))
+        ) : null
+      ),
+      el('div', { style: 'padding:16px 24px;border-top:1px solid #f0f0f0' },
+        el('button', { className: 'btn btn-primary', style: 'width:100%;padding:10px', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) s.remove(); navigate('project') } }, '프로젝트 관리로 이동')
+      )
+    )
+    document.body.append(overlay)
+    setTimeout(() => { overlay.style.transform = 'translateX(0)' }, 50)
   }
 
   // ==================== Settings: Companies ====================
@@ -4782,6 +5130,8 @@
     document.addEventListener('click', e => {
       const a = e.target.closest('#nav a[data-page]')
       if (a) { e.preventDefault(); navigate(a.dataset.page) }
+      const pm = document.getElementById('profile-menu')
+      if (pm && !e.target.closest('.profile-dropdown')) pm.classList.remove('show')
     })
     document.getElementById('sidebar-logo')?.addEventListener('click', () => navigate('dashboard'))
     document.getElementById('sb-collapse-btn')?.addEventListener('click', function() {

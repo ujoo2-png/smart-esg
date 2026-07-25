@@ -420,9 +420,13 @@ function applyAuthUI() {
   const user = currentUser
   const app = document.getElementById('app')
   if (app) app.style.display = user ? 'flex' : 'none'
-  document.getElementById('user-info').textContent = user ? (user.name + ' (' + roleLabel(user.role) + ')') : '로그인 필요'
+  const userInfo = document.getElementById('user-info')
+  if (userInfo) {
+    userInfo.style.display = user ? 'block' : 'none'
+    const nameEl = document.getElementById('profile-name-text')
+    if (nameEl) nameEl.textContent = user ? (user.name + ' (' + roleLabel(user.role) + ')') : ''
+  }
   document.getElementById('login-btn-top').style.display = user ? 'none' : 'inline-block'
-  document.getElementById('logout-btn-top').style.display = user ? 'inline-block' : 'none'
   document.body.classList.toggle('viewer-mode', user && user.role === 'viewer')
   if (user) { applyNavRoles(); if (typeof refreshNotifBadge === 'function') refreshNotifBadge(); if (typeof Store !== 'undefined') Store.checkDeadlines() }
 }
