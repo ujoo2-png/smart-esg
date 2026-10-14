@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.1.2'
+const APP_VERSION = 'v2.1.3'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -683,6 +683,35 @@ const Store = {
     this._sbSync()
   },
 
+  _fmtSbError(e) {
+    if (!e) return 'unknown'
+    return [e.code, e.message, e.details, e.hint].filter(Boolean).join(' | ')
+  },
+
+  _buildSyncPayload(rows, cols, table) {
+    const byId = new Map()
+    const window = rows.slice(-200)
+    let fallback = 0
+    for (const row of window) {
+      const out = {}
+      cols.forEach(c => {
+        if (c === 'id') return
+        const v = row[c]
+        if (v == null || v === '') { out[c] = null; return }
+        if (typeof v === 'number' || typeof v === 'boolean') { out[c] = v; return }
+        if (Array.isArray(v)) { out[c] = v.map(x => typeof x === 'number' ? String(x) : x); return }
+        if (c.endsWith('_id')) { out[c] = String(v); return }
+        out[c] = v
+      })
+      let id
+      if (row.id != null) id = String(row.id)
+      else id = String(row.code || row.field_name || row.dept_code || row.indicator_code || row.username || (table + '_' + (fallback++)))
+      out.id = id
+      byId.set(id, out)
+    }
+    return [...byId.values()]
+  },
+
   async _sbSync() {
     const sb = getSupabase ? getSupabase() : null
     if (!sb) return
@@ -690,33 +719,58 @@ const Store = {
     if (this._lastSync && now - this._lastSync < 3000) return
     this._lastSync = now
     const deleted = this._getDeletedIds()
+    const errors = []
     for (const table of Object.keys(SB_SYNC_MAP)) {
       const [tb, cols] = SB_SYNC_MAP[table]
       try {
         if (deleted[table]?.length) {
-          await sb.from(tb).delete().in('id', deleted[table].map(String))
-          deleted[table] = []
+          const { error: delErr } = await sb.from(tb).delete().in('id', deleted[table].map(String))
+          if (delErr) {
+            console.error(`[sbSync] DELETE ${tb}`, this._fmtSbError(delErr))
+            errors.push({ table: tb, op: 'delete', err: this._fmtSbError(delErr) })
+          } else deleted[table] = []
         }
         const rows = this._data[table]
         if (rows?.length) {
-          const payload = rows.slice(-50).map((row, i) => {
-            const out = {}
-            cols.forEach(c => {
-              if (c === 'id') { out.id = row.id != null ? String(row.id) : String(row.code || row.field_name || row.dept_code || row.indicator_code || row.username || (table + '_' + i)); return }
-              const v = row[c]
-              if (v == null) { out[c] = null; return }
-              if (Array.isArray(v)) { out[c] = v.map(x => typeof x === 'number' ? String(x) : x); return }
-              out[c] = (c.endsWith('_id')) ? String(v) : v
-            })
-            return out
-          })
-          await sb.from(tb).upsert(payload, { onConflict: 'id' })
+          const payload = this._buildSyncPayload(rows, cols, table)
+          const { error } = await sb.from(tb).upsert(payload, { onConflict: 'id' })
+          if (error) {
+            console.error(`[sbSync] UPSERT ${tb} (${payload.length}행)`, this._fmtSbError(error))
+            console.error(`[sbSync] ${tb} 첫 행 예시`, JSON.stringify(payload[0]).slice(0, 400))
+            errors.push({ table: tb, op: 'upsert', rows: payload.length, err: this._fmtSbError(error) })
+            for (let i = 0; i < payload.length; i++) {
+              const { error: e2 } = await sb.from(tb).upsert([payload[i]], { onConflict: 'id' })
+              if (e2) {
+                console.error(`[sbSync] ${tb} 개별행 #${i} 실패`, this._fmtSbError(e2), JSON.stringify(payload[i]).slice(0, 400))
+                errors.push({ table: tb, op: 'row', row: i, err: this._fmtSbError(e2) })
+                break
+              }
+            }
+          }
         }
-      } catch (e) { console.warn(`_sbSync ${table} 실패:`, e.message) }
+      } catch (e) { console.error(`[sbSync] ${tb} 예외`, e && e.message) }
+    }
+    this._lastSyncErrors = errors
+    if (typeof window !== 'undefined' && errors.length && typeof window.renderSupabaseStatus === 'function') {
+      try { window.renderSupabaseStatus() } catch (_) {}
     }
     if (Object.keys(deleted).some(k => deleted[k]?.length)) {
       localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(deleted))
     }
+  },
+
+  async diagnoseSupabase() {
+    const sb = getSupabase ? getSupabase() : null
+    if (!sb) { console.warn('Supabase 미연결 (getSupabase 없음)'); return null }
+    const report = {}
+    for (const table of Object.keys(SB_SYNC_MAP)) {
+      const [tb] = SB_SYNC_MAP[table]
+      const { error, count } = await sb.from(tb).select('id', { count: 'exact', head: true })
+      report[tb] = error ? this._fmtSbError(error) : `OK (행 ${count == null ? '?' : count})`
+    }
+    console.table(report)
+    console.log(JSON.stringify(report, null, 2))
+    return report
   },
 
   _notify() {

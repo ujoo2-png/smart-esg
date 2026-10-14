@@ -468,7 +468,13 @@
     } catch (e) { ok = false }
     delete dot.dataset.checking
     const remote = (typeof StorageAdapter !== 'undefined' && StorageAdapter.isRemote)
-    if (ok) {
+    const syncErrors = Store._lastSyncErrors || []
+    if (ok && syncErrors.length) {
+      box.className = 'supa-status is-err'
+      const first = syncErrors[0]
+      box.title = `동기화 경고: ${syncErrors.length}개 테이블 실패\n` + syncErrors.map(e => `${e.table}: ${e.err}`).join('\n')
+      if (txt) txt.textContent = `동기화 오류 (${syncErrors.length})`
+    } else if (ok) {
       box.className = 'supa-status is-on'
       box.title = 'Supabase 연결됨 · 저장소 모드: ' + (remote ? '원격' : '로컬(IndexedDB)')
       if (txt) txt.textContent = 'Supabase 연결됨'
@@ -479,6 +485,7 @@
     }
   }
   window.renderSupabaseStatus = renderSupabaseStatus
+  window.diagnoseSupabase = () => Store.diagnoseSupabase()
 
   function init() {
     document.getElementById('version-label').textContent = '지속가능경영보고서 시스템 ' + Store.version
