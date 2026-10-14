@@ -1,6 +1,38 @@
-const APP_VERSION = 'v1.9.9'
+const APP_VERSION = 'v2.0.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
+
+// Supabase 미러 동기화 매핑: [테이블명, 허용 컬럼]
+// 허용 컬럼만 전송하고 나머지는 null로 채워 모든 행의 키를 동일하게 맞춘다.
+// (PostgREST는 한 배치의 모든 행이 같은 키 집합을 가져야 함)
+// tb_risk_register.score는 GENERATED 컬럼이므로 제외한다.
+const SB_SYNC_MAP = {
+  assessments: ['tb_assessment', ['id', 'company_id', 'title', 'assessment_year', 'authority_code', 'status', 'total_score', 'rating', 'created_by', 'created_at', 'updated_at']],
+  assessmentItems: ['tb_assessment_item', ['id', 'assessment_id', 'indicator_id', 'score', 'weight', 'narrative', 'target_value', 'actual_value', 'status']],
+  evidences: ['tb_evidence', ['id', 'assessment_id', 'title', 'description', 'file_url', 'file_type', 'file_size', 'status', 'notes', 'uploaded_by', 'uploaded_at', 'expiry_date', 'contains_sensitive_data', 'reuse_linked_indicators', 'upload_count_flag']],
+  evidenceTags: ['tb_evidence_tag', ['id', 'evidence_id', 'indicator_id', 'is_primary']],
+  aiDrafts: ['tb_ai_report_draft', ['id', 'assessment_id', 'indicator_id', 'draft_text', 'evidence_ids', 'ver_status', 'ver_result', 'ver_date', 'human_status', 'human_reviewer', 'human_reviewed_at', 'human_feedback', 'version', 'created_at', 'updated_at', 'masked_before_send', 'cited_evidence_ids']],
+  aiVerificationLogs: ['tb_ai_verification_log', ['id', 'draft_id', 'verifier', 'result', 'score', 'criteria_results', 'fail_reasons', 'suggestions', 'created_at']],
+  users: ['tb_user', ['id', 'company_id', 'dept_code', 'username', 'password', 'name', 'email', 'phone', 'position', 'role', 'status', 'created_at', 'updated_at']],
+  companies: ['tb_company', ['id', 'name', 'business_number', 'ceo_name', 'address', 'industry_code', 'employee_count', 'revenue', 'created_at', 'updated_at']],
+  departments: ['tb_department', ['id', 'dept_code', 'dept_name', 'manager_name', 'manager_email', 'parent_dept', 'is_active', 'created_at', 'updated_at']],
+  indicators: ['tb_indicator', ['id', 'group_id', 'authority_code', 'indicator_code', 'indicator_name', 'pillar', 'description', 'weight_default', 'is_active', 'sort_order', 'data_type', 'unit', 'dept_code', 'review_cycle', 'scope2_split_required', 'materiality_optional', 'theme_code']],
+  indicatorGroups: ['tb_indicator_group', ['id', 'authority_code', 'group_code', 'group_name', 'description', 'sort_order']],
+  indicatorMappings: ['tb_indicator_mapping', ['id', 'source_authority', 'source_indicator_id', 'target_authority', 'target_indicator_id', 'mapping_type', 'confidence', 'notes']],
+  ghgFactors: ['tb_ghg_emission_factor', ['id', 'energy_type', 'scope', 'scope2_method', 'factor', 'unit', 'source', 'valid_from', 'valid_to']],
+  ghgActivities: ['tb_ghg_activity_data', ['id', 'assessment_id', 'energy_type', 'scope', 'scope2_method', 'value', 'unit', 'emission_factor_id', 'co2eq', 'period_start', 'period_end', 'notes', 'created_at', 'dept_code', 'evidence_id', 'calculated_emission']],
+  ghgSummary: ['tb_ghg_summary', ['id', 'assessment_id', 'scope', 'scope2_method', 'total', 'unit', 'last_updated']],
+  weightParams: ['tb_weight_param', ['id', 'authority_code', 'year', 'theme_code', 'weight', 'updated_at']],
+  ratingThresholds: ['tb_rating_threshold', ['id', 'authority_code', 'year', 'rating', 'min_score', 'max_score', 'notes', 'effective_from']],
+  maskingRules: ['tb_data_masking_rule', ['id', 'field_name', 'masking_type', 'description', 'applies_to_ai_api', 'is_active', 'created_at']],
+  projectBudget: ['tb_project_budget', ['id', 'project_name', 'category', 'planned_amount', 'actual_amount', 'status', 'start_date', 'end_date', 'notes', 'created_at', 'updated_at']],
+  riskRegister: ['tb_risk_register', ['id', 'risk_name', 'category', 'description', 'probability', 'impact', 'status', 'owner', 'mitigation_plan', 'created_at', 'updated_at']],
+  agencyMaster: ['tb_agency_master', ['id', 'code', 'name', 'track_type', 'description', 'effective_date', 'website_url', 'is_active', 'created_at']],
+  referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'status', 'error', 'tags', 'created_at', 'updated_at', 'converted_at']],
+  reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'created_at', 'updated_at']],
+  reportDocSections: ['tb_report_doc_section', ['id', 'doc_id', 'title', 'content', 'sort_order', 'status', 'indicator_refs', 'created_at', 'updated_at']],
+  reportFeedback: ['tb_report_feedback', ['id', 'doc_id', 'section_id', 'kind', 'message', 'suggestion', 'reference_title', 'page', 'status', 'created_at']]
+}
 
 async function _sha256(str) {
   const buf = new TextEncoder().encode(str)
@@ -409,7 +441,12 @@ const Store = {
       auditLogs: [],
       apiEndpoints: [],
       apiDataLogs: [],
-      benchmarks: null
+      benchmarks: null,
+      referenceDocs: [],
+      referenceChunks: [],
+      reportDocs: [],
+      reportDocSections: [],
+      reportFeedback: []
     }
   },
 
@@ -653,19 +690,27 @@ const Store = {
     if (this._lastSync && now - this._lastSync < 3000) return
     this._lastSync = now
     const deleted = this._getDeletedIds()
-    const tbMap = { assessments:'tb_assessment', assessmentItems:'tb_assessment_item', evidences:'tb_evidence', evidenceTags:'tb_evidence_tag', aiDrafts:'tb_ai_report_draft', aiVerificationLogs:'tb_ai_verification_log', users:'tb_user', companies:'tb_company', departments:'tb_department', indicators:'tb_indicator', indicatorGroups:'tb_indicator_group', indicatorMappings:'tb_indicator_mapping', ghgFactors:'tb_ghg_emission_factor', ghgActivities:'tb_ghg_activity_data', ghgSummary:'tb_ghg_summary', weightParams:'tb_weight_param', ratingThresholds:'tb_rating_threshold', maskingRules:'tb_data_masking_rule', projectBudget:'tb_project_budget', riskRegister:'tb_risk_register', agencyMaster:'tb_agency_master' }
-    const tables = Object.keys(tbMap)
-    for (const table of tables) {
+    for (const table of Object.keys(SB_SYNC_MAP)) {
+      const [tb, cols] = SB_SYNC_MAP[table]
       try {
-        const tb = tbMap[table]
         if (deleted[table]?.length) {
-          await sb.from(tb).delete().in('id', deleted[table])
+          await sb.from(tb).delete().in('id', deleted[table].map(String))
           deleted[table] = []
         }
         const rows = this._data[table]
         if (rows?.length) {
-          const chunk = rows.slice(-50)
-          await sb.from(tb).upsert(chunk, { onConflict: 'id' })
+          const payload = rows.slice(-50).map((row, i) => {
+            const out = {}
+            cols.forEach(c => {
+              if (c === 'id') { out.id = row.id != null ? String(row.id) : String(row.code || row.field_name || row.dept_code || row.indicator_code || row.username || (table + '_' + i)); return }
+              const v = row[c]
+              if (v == null) { out[c] = null; return }
+              if (Array.isArray(v)) { out[c] = v.map(x => typeof x === 'number' ? String(x) : x); return }
+              out[c] = (c.endsWith('_id')) ? String(v) : v
+            })
+            return out
+          })
+          await sb.from(tb).upsert(payload, { onConflict: 'id' })
         }
       } catch (e) { console.warn(`_sbSync ${table} 실패:`, e.message) }
     }
@@ -921,6 +966,40 @@ const Store = {
   addRiskRegister(r) { this.data.riskRegister.push({ id: Date.now(), ...r, created_at: new Date().toISOString() }); this._save(); return r },
   updateRiskRegister(id, updates) { const i = this.data.riskRegister.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.riskRegister[i], updates); this._save() } },
   deleteRiskRegister(id) { this.data.riskRegister = this.data.riskRegister.filter(x => x.id !== id); this._save() },
+
+  // ==== Reference Docs (참고자료 라이브러리) ====
+  getReferenceDocs() { return this.data.referenceDocs || [] },
+  getReferenceDoc(id) { return (this.data.referenceDocs || []).find(d => d.id === id) },
+  addReferenceDoc(doc) { const rec = { id: Date.now(), status: 'pending', tags: [], chunk_count: 0, created_at: new Date().toISOString(), ...doc }; this.data.referenceDocs.push(rec); this._save(); return rec },
+  updateReferenceDoc(id, updates) { const i = (this.data.referenceDocs || []).findIndex(d => d.id === id); if (i > -1) { Object.assign(this.data.referenceDocs[i], updates, { updated_at: new Date().toISOString() }); this._save() } return this.getReferenceDoc(id) },
+  deleteReferenceDoc(id) { this.data.referenceDocs = (this.data.referenceDocs || []).filter(d => d.id !== id); this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => c.reference_id !== id); this._addDeletedId('referenceDocs', id); this._save() },
+
+  // ==== Reference Chunks (검색 인덱스) ====
+  getReferenceChunks(referenceId) { const all = this.data.referenceChunks || []; return referenceId == null ? all : all.filter(c => c.reference_id === referenceId) },
+  replaceReferenceChunks(referenceId, chunks) {
+    this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => c.reference_id !== referenceId)
+    chunks.forEach((c, idx) => this.data.referenceChunks.push({ id: Date.now() + idx, reference_id: referenceId, ...c }))
+    this._save()
+  },
+
+  // ==== Report Docs (작성 중 보고서) ====
+  getReportDocs() { return this.data.reportDocs || [] },
+  getReportDoc(id) { return (this.data.reportDocs || []).find(d => d.id === id) },
+  addReportDoc(doc) { const rec = { id: Date.now(), status: 'draft', progress: 0, created_at: new Date().toISOString(), ...doc }; this.data.reportDocs.push(rec); this._save(); return rec },
+  updateReportDoc(id, updates) { const i = (this.data.reportDocs || []).findIndex(d => d.id === id); if (i > -1) { Object.assign(this.data.reportDocs[i], updates, { updated_at: new Date().toISOString() }); this._save() } return this.getReportDoc(id) },
+  deleteReportDoc(id) { this.data.reportDocs = (this.data.reportDocs || []).filter(d => d.id !== id); this.data.reportDocSections = (this.data.reportDocSections || []).filter(s => s.doc_id !== id); this.data.reportFeedback = (this.data.reportFeedback || []).filter(f => f.doc_id !== id); this._addDeletedId('reportDocs', id); this._save() },
+
+  // ==== Report Doc Sections (보고서 섹션) ====
+  getReportDocSections(docId) { const all = this.data.reportDocSections || []; return docId == null ? all : all.filter(s => s.doc_id === docId) },
+  addReportSection(sec) { this.data.reportDocSections.push({ id: Date.now(), status: 'empty', indicator_ids: [], sort_order: this.data.reportDocSections.length + 1, created_at: new Date().toISOString(), ...sec }); this._save(); return sec },
+  updateReportSection(id, updates) { const i = (this.data.reportDocSections || []).findIndex(s => s.id === id); if (i > -1) { Object.assign(this.data.reportDocSections[i], updates, { updated_at: new Date().toISOString() }); this._save() } },
+  deleteReportSection(id) { this.data.reportDocSections = (this.data.reportDocSections || []).filter(s => s.id !== id); this.data.reportFeedback = (this.data.reportFeedback || []).filter(f => f.section_id !== id); this._save() },
+
+  // ==== Report Feedback (참고자료 대비 제안) ====
+  getFeedback(docId) { const all = this.data.reportFeedback || []; return docId == null ? all : all.filter(f => f.doc_id === docId) },
+  addFeedbackItem(fb) { this.data.reportFeedback.push({ id: Date.now() + Math.random(), status: 'open', created_at: new Date().toISOString(), ...fb }); this._save(); return fb },
+  updateFeedbackItem(id, updates) { const i = (this.data.reportFeedback || []).findIndex(f => f.id === id); if (i > -1) { Object.assign(this.data.reportFeedback[i], updates); this._save() } },
+  deleteFeedbackItem(id) { this.data.reportFeedback = (this.data.reportFeedback || []).filter(f => f.id !== id); this._save() },
 
   // ==== Agency Master ====
   getAgencyMaster() { return this.data.agencyMaster || [] },

@@ -1,0 +1,13 @@
+project_id = "smart-esg"
+
+[functions.sign-upload]
+verify_jwt = true
+
+[functions.sign-download]
+verify_jwt = true
+
+[functions.remove-object]
+verify_jwt = true
+
+[functions.convert]
+verify_jwt = true

@@ -71,7 +71,7 @@ async function register(data) {
     try {
       const sb = getSupabase()
       if (sb) {
-        const { data: dup } = await sb.from('users').select('id').eq('username', data.username)
+        const { data: dup } = await sb.from('tb_user').select('id').eq('username', data.username)
         if (dup && dup.length > 0) return { error: '이미 사용 중인 아이디입니다.' }
       } else return { error: '이미 사용 중인 아이디입니다.' }
     } catch (e) { return { error: '이미 사용 중인 아이디입니다.' } }
@@ -154,6 +154,7 @@ const _rolePages = {
   dashboard: 'viewer', assessment: 'user', indicator: 'viewer',
   evidence: 'viewer', ghg: 'user', supplier: 'manager',
   ai: 'manager', editor: 'manager', gri: 'viewer',
+  references: 'user', writer: 'user',
   risk: 'manager', monitor: 'viewer', issa: 'manager',
   submit: 'manager', kssb: 'manager', aihistory: 'viewer',
   budget: 'manager', masking: 'admin', api: 'admin', settings: 'admin'
@@ -389,7 +390,7 @@ async function checkIdDup() {
   else {
     try {
       const sb = getSupabase()
-      if (sb) { const { data } = await sb.from('users').select('id').eq('username', id); ok = !data || data.length === 0 }
+      if (sb) { const { data } = await sb.from('tb_user').select('id').eq('username', id); ok = !data || data.length === 0 }
       else { ok = false }
     } catch (e) { ok = false }
   }

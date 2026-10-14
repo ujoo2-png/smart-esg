@@ -309,6 +309,15 @@
 • OpenCode AI를 활용하여 지속가능경영보고서를 자동 생성합니다.<br>
 • 생성된 보고서는 <strong>검증</strong> 단계를 거쳐 증빙-텍스트 연결이 강제됩니다.<br>
 • 초안 상태: 초안 → 검증완료 → 승인됨 순서로 진행됩니다.`,
+    references: `<strong>📚 참고자료 라이브러리</strong><br><br>
+• 지속가능경영보고서, 업종 보고서, 가이드라인(PDF/PPT/Word/Excel)을 업로드하면 Markdown으로 자동 변환되어 검색 가능한 지식베이스가 됩니다.<br>
+• 변환된 문서는 <strong>보고서 작성기</strong>에서 내 원고와 대비하여 진행방향·문구 다듬기 제안에 활용됩니다.<br>
+• 저장 위치는 <strong>설정 › 저장소</strong>에서 로컬/원격(R2·S3·GDrive)을 선택할 수 있습니다.`,
+    writer: `<strong>✍️ 보고서 작성기</strong><br><br>
+• 섹션 단위로 원고를 작성하고, 참고자료 라이브러리와 대비하여 피드백을 받습니다.<br>
+• <strong>진행방향</strong>: 아직 다루지 않은 필수 항목을 제안합니다.<br>
+• <strong>문구 다듬기</strong>: 참고자료 근거와 함께 표현 개선안을 제시합니다.<br>
+• 피드백은 반영/무시 처리하여 진도를 관리합니다.`,
     editor: `<strong>📝 보고서 편집기 (S-05)</strong><br><br>
 • 지표별로 연결할 증빙을 관리하는 화면입니다.<br>
 • <strong>지표 ↔ 증빙 다대다 연결</strong>: 보고서 편집기에서만 연결 작업을 수행합니다.<br>
@@ -405,6 +414,8 @@
     else if (page === 'ghg') _safe(renderGHG)
     else if (page === 'supplier') _safe(renderSupplier)
     else if (page === 'ai') _safe(renderAI)
+    else if (page === 'references') _safe(renderReferences)
+    else if (page === 'writer') _safe(renderWriter)
     else if (page === 'editor') _safe(renderReportEditor)
     else if (page === 'gri') _safe(renderGRI)
     else if (page === 'risk') _safe(renderRisk)
@@ -3793,6 +3804,376 @@
     }
   }
 
+  // ==================== 참고자료 라이브러리 ====================
+  let _refQuery = ''
+  let _refStatus = 'all'
+
+  const _esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+
+  function _mdToHtml(md) {
+    const inline = (t) => _esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/`(.+?)`/g, '<code>$1</code>')
+    const lines = (md || '').split('\n')
+    let html = ''
+    let inList = false
+    lines.forEach(line => {
+      const h = line.match(/^(#{1,6})\s+(.*)$/)
+      if (h) { if (inList) { html += '</ul>'; inList = false } const lv = Math.min(h[1].length + 1, 6); html += `<h${lv}>${inline(h[2])}</h${lv}>`; return }
+      const li = line.match(/^\s*[-*+]\s+(.*)$/)
+      if (li) { if (!inList) { html += '<ul>'; inList = true } html += `<li>${inline(li[1])}</li>`; return }
+      if (inList) { html += '</ul>'; inList = false }
+      if (line.trim() === '') return
+      html += `<p>${inline(line)}</p>`
+    })
+    if (inList) html += '</ul>'
+    return html
+  }
+
+  function renderReferences() {
+    const c = document.getElementById('page-references')
+    if (!c) return
+    const docs = Reference.getAll()
+    const q = _refQuery.trim().toLowerCase()
+    const filtered = docs.filter(d => {
+      if (_refStatus !== 'all' && d.status !== _refStatus) return false
+      if (!q) return true
+      return [d.title, d.source_org, d.industry, d.year, (d.tags || []).join(' ')].join(' ').toLowerCase().includes(q)
+    })
+    const ready = docs.filter(d => d.status === 'ready').length
+    const busy = docs.filter(d => d.status === 'uploading' || d.status === 'converting').length
+    const totalPages = docs.reduce((s, d) => s + (d.page_count || 0), 0)
+
+    c.innerHTML = ''
+    c.append(el('div', { className: 'card' },
+      el('div', { className: 'card-header' },
+        el('h3', {}, '📚 참고자료 라이브러리'),
+        el('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+          el('input', { type: 'text', placeholder: '검색 (제목/기관/태그)', value: _refQuery, style: { padding: '7px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, width: 220 }, onInput: e => { _refQuery = e.target.value; renderReferences() } }),
+          el('button', { className: 'btn btn-secondary', onClick: openStorageSettings, title: '저장소 설정' }, '⚙ 저장소'),
+          el('button', { className: 'btn btn-primary', onClick: openReferenceUpload }, '＋ 참고자료 업로드')
+        )
+      ),
+      el('div', { style: { display: 'flex', gap: 12, flexWrap: 'wrap', padding: '0 4px 12px' } },
+        _refStat('전체 문서', docs.length, '#3b82f6'),
+        _refStat('변환 완료', ready, '#22c55e'),
+        _refStat('처리 중', busy, '#f59e0b'),
+        _refStat('총 페이지', totalPages, '#8b5cf6')
+      )
+    ))
+
+    const chips = ['all', 'ready', 'converting', 'pending', 'error']
+    c.append(el('div', { style: { display: 'flex', gap: 8, marginBottom: 12, padding: '0 4px', flexWrap: 'wrap' } },
+      chips.map(s => el('button', {
+        className: 'btn btn-sm ' + (_refStatus === s ? 'btn-primary' : 'btn-secondary'),
+        onClick: () => { _refStatus = s; renderReferences() }
+      }, s === 'all' ? '전체' : Reference.statusLabel(s)))
+    ))
+
+    if (!filtered.length) {
+      c.append(el('div', { className: 'card' },
+        el('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#888' } },
+          el('div', { style: { fontSize: 36, marginBottom: 12 } }, '📚'),
+          el('h3', { style: { margin: '0 0 8px' } }, docs.length ? '검색 결과가 없습니다' : '등록된 참고자료가 없습니다'),
+          el('p', { style: { margin: 0, fontSize: 13 } }, 'PDF·PPT·Word·Excel 문서를 업로드하면 Markdown으로 변환되어 검색·활용됩니다.'))
+      ))
+      return
+    }
+
+    const rows = filtered.map(d => el('tr', {},
+      el('td', {}, el('div', { style: { fontWeight: 600 } }, d.title || d.file_name || '(제목 없음)'), el('div', { style: { fontSize: 12, color: '#888' } }, [Reference.typeLabel(d.file_name), d.file_name].filter(Boolean).join(' · '))),
+      el('td', {}, d.source_org || '-'),
+      el('td', {}, d.year || '-'),
+      el('td', {}, el('span', { style: { display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, color: '#fff', background: Reference.statusColor(d.status) } }, Reference.statusLabel(d.status))),
+      el('td', {}, d.status === 'ready' ? (d.page_count || 0) + 'p / ' + (d.chunk_count || 0) + 'chunk' : '-'),
+      el('td', {}, el('div', { style: { display: 'flex', gap: 4 } },
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openReferencePreview(d.id) }, '미리보기'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => reconvertReference(d.id) }, '재변환'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteReference(d.id) }, '삭제')
+      ))
+    ))
+
+    c.append(el('div', { className: 'card', style: { padding: 0 } },
+      el('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 13 } },
+        el('thead', {}, el('tr', {}, ['제목', '출처 기관', '연도', '상태', '분량', '관리'].map(h => el('th', { style: { textAlign: 'left', padding: '10px 12px', borderBottom: '1px solid #eee', color: '#666', fontWeight: 600 } }, h)))),
+        el('tbody', {}, rows)
+      )
+    ))
+  }
+
+  function _refStat(label, value, color) {
+    return el('div', { style: { flex: '1 1 140px', background: '#f8fafc', borderRadius: 10, padding: '12px 16px', borderLeft: '3px solid ' + color } },
+      el('div', { style: { fontSize: 12, color: '#888' } }, label),
+      el('div', { style: { fontSize: 22, fontWeight: 700, color: '#1e293b' } }, String(value))
+    )
+  }
+
+  function openReferenceUpload() {
+    const fileInput = el('input', { type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.json' })
+    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+      el('label', {}, '제목'), el('input', { id: 'ref-title', type: 'text', placeholder: '예: 2024 지속가능경영보고서' }),
+      el('label', {}, '출처 기관'), el('input', { id: 'ref-org', type: 'text', placeholder: '예: 삼성전자 / GRI / KSSB' }),
+      el('label', {}, '업종'), el('input', { id: 'ref-industry', type: 'text', placeholder: '예: 전기전자' }),
+      el('label', {}, '발간연도'), el('input', { id: 'ref-year', type: 'number', placeholder: '2024' }),
+      el('label', {}, '태그 (쉼표 구분)'), el('input', { id: 'ref-tags', type: 'text', placeholder: '환경, 온실가스, GRI' }),
+      el('label', {}, '파일'), fileInput,
+      el('p', { style: { fontSize: 12, color: '#888', margin: 0 } }, '변환은 저장된 원본을 기반으로 서버에서 수행됩니다. 텍스트 파일은 브라우저에서 즉시 변환됩니다.')
+    )
+    modal('참고자료 업로드', form)
+    document.getElementById('modal-save').onclick = async () => {
+      const file = fileInput.files[0]
+      if (!file) { showToast('파일을 선택하세요.', 'error'); return }
+      const payload = {
+        title: document.getElementById('ref-title').value.trim(),
+        source_org: document.getElementById('ref-org').value.trim(),
+        industry: document.getElementById('ref-industry').value.trim(),
+        year: parseInt(document.getElementById('ref-year').value) || null,
+        tags: document.getElementById('ref-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+        file
+      }
+      closeModal()
+      showLoading('업로드 및 변환 중...')
+      try {
+        await Reference.create(payload)
+        showToast('참고자료가 등록되었습니다.')
+      } catch (e) {
+        showToast('등록 실패: ' + e.message, 'error')
+      } finally {
+        hideLoading()
+        renderReferences()
+      }
+    }
+  }
+
+  async function openReferencePreview(id) {
+    const doc = Reference.getById(id)
+    if (!doc) return
+    showLoading('문서 불러오는 중...')
+    let md = doc.markdown || ''
+    if (!md) { try { const blob = await Reference.getBlob(id); md = await blob.text() } catch (e) { showToast('파일을 불러올 수 없습니다.', 'error') } }
+    hideLoading()
+    const sugg = Reference.suggestIndicators(id, 8)
+    const body = el('div', { style: { maxHeight: '65vh', overflow: 'auto', fontSize: 13, lineHeight: 1.6 } },
+      el('div', { style: { marginBottom: 12, padding: '8px 12px', background: '#f8fafc', borderRadius: 8, fontSize: 12, color: '#666' } },
+        [doc.source_org, doc.year ? doc.year + '년' : '', Reference.typeLabel(doc.file_name)].filter(Boolean).join(' · ')),
+      sugg.length ? el('div', { style: { marginBottom: 12, padding: '10px 12px', background: '#f8f6ff', border: '1px solid #e9e2ff', borderRadius: 8 } },
+        el('div', { style: { fontSize: 12, fontWeight: 600, color: '#7C3AED', marginBottom: 6 } }, '🔗 관련 지표 제안'),
+        el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+          ...sugg.map(s => el('span', { style: { fontSize: 11, padding: '3px 8px', background: '#fff', border: '1px solid #e2d9ff', borderRadius: 99, color: '#5b21b6' } }, Indicator.getNameAndCode({ indicator_code: s.code, indicator_name: s.name })))
+        )
+      ) : null,
+      el('div', { innerHTML: md ? _mdToHtml(md) : '<p style="color:#888">변환된 내용이 없습니다. 재변환을 시도하세요.</p>' })
+    )
+    modal('📚 ' + (doc.title || doc.file_name || '참고자료'), body, '닫기')
+    document.getElementById('modal-save').style.display = 'none'
+  }
+
+  async function reconvertReference(id) {
+    showLoading('재변환 중...')
+    try { await Reference.recreate(id); showToast('재변환 요청 완료.') }
+    catch (e) { showToast('실패: ' + e.message, 'error') }
+    finally { hideLoading(); renderReferences() }
+  }
+
+  async function deleteReference(id) {
+    const doc = Reference.getById(id)
+    if (!doc) return
+    if (!confirm('"' + (doc.title || doc.file_name) + '" 참고자료를 삭제할까요?')) return
+    showLoading('삭제 중...')
+    try { await Reference.remove(id); showToast('삭제되었습니다.') }
+    catch (e) { showToast('실패: ' + e.message, 'error') }
+    finally { hideLoading(); renderReferences() }
+  }
+
+  function openStorageSettings() {
+    const mode = StorageAdapter.mode
+    const remoteReady = typeof SUPABASE_CONFIG !== 'undefined' && !!SUPABASE_CONFIG.url && !SUPABASE_CONFIG.url.includes('your-project')
+    const note = el('div', { id: 'storage-remote-note', style: { display: mode !== 'local' ? 'block' : 'none', whiteSpace: 'pre-line', fontSize: 12, lineHeight: 1.5, color: remoteReady ? '#666' : '#e74c3c', background: '#f8fafc', padding: '8px 12px', borderRadius: 8 } },
+      remoteReady
+        ? ('Supabase: ' + SUPABASE_CONFIG.url + '\n저장 백엔드(S3/R2/Supabase)는 배포된 Edge Function의 환경변수로 결정됩니다.')
+        : '⚠ supabase.js의 URL/anonKey가 placeholder입니다. 원격 저장을 사용하려면 실제 값을 설정하세요.')
+    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 } },
+      el('p', { style: { margin: 0, color: '#666' } }, '참고자료 원본 파일의 저장 위치를 선택합니다. DB·Markdown·메타데이터는 항상 Supabase에 저장됩니다.'),
+      el('label', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+        el('input', { type: 'radio', name: 'storagemode', value: 'local', checked: mode === 'local', onChange: e => { if (e.target.checked) document.getElementById('storage-remote-note').style.display = 'none' } }),
+        el('span', {}, '로컬 저장 (IndexedDB · 이 브라우저에만 저장)')),
+      el('label', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
+        el('input', { type: 'radio', name: 'storagemode', value: 'remote', checked: mode !== 'local', onChange: e => { if (e.target.checked) document.getElementById('storage-remote-note').style.display = 'block' } }),
+        el('span', {}, '원격 저장 (S3/R2/Supabase · Edge Function presigned 경유)')),
+      note
+    )
+    modal('⚙ 저장소 설정', form, [{
+      label: '연결 테스트',
+      className: 'btn btn-secondary',
+      onClick: async () => {
+        const sel = document.querySelector('input[name="storagemode"]:checked')?.value || 'local'
+        StorageAdapter.setMode(sel)
+        showLoading('연결 테스트 중...')
+        try { const r = await StorageAdapter.testConnection(); showToast('연결 성공 (' + (r.mode === 'local' ? '로컬' : '원격') + ')') }
+        catch (e) { showToast('연결 실패: ' + e.message, 'error') }
+        finally { hideLoading() }
+      }
+    }])
+    document.getElementById('modal-save').onclick = () => {
+      const sel = document.querySelector('input[name="storagemode"]:checked')?.value || 'local'
+      StorageAdapter.setMode(sel)
+      closeModal()
+      renderReferences()
+      showToast('저장소: ' + (sel === 'local' ? '로컬' : '원격') + ' 모드로 설정되었습니다.')
+    }
+  }
+
+  // ==================== 보고서 작성기 ====================
+  let _writerDocId = null
+  let _writerSectionId = null
+
+  function renderWriter() {
+    const c = document.getElementById('page-writer')
+    if (!c) return
+    const docs = Store.getReportDocs()
+    if (_writerDocId && !Store.getReportDoc(_writerDocId)) _writerDocId = null
+    if (!_writerDocId && docs.length) _writerDocId = docs[docs.length - 1].id
+    const doc = _writerDocId ? Store.getReportDoc(_writerDocId) : null
+    const sections = doc ? Store.getReportDocSections(doc.id) : []
+    if (_writerSectionId && !sections.find(s => s.id === _writerSectionId)) _writerSectionId = null
+    if (!_writerSectionId && sections.length) _writerSectionId = sections[0].id
+
+    c.innerHTML = ''
+    c.append(el('div', { className: 'card' },
+      el('div', { className: 'card-header' },
+        el('h3', {}, '✍️ 보고서 작성기'),
+        el('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+          el('select', { style: { padding: '7px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }, onChange: e => { _writerDocId = parseInt(e.target.value) || null; _writerSectionId = null; renderWriter() } },
+            docs.length ? docs.map(d => el('option', { value: d.id, selected: d.id === _writerDocId }, d.title || '(제목 없음)')) : el('option', { value: '' }, '문서 없음')
+          ),
+          el('button', { className: 'btn btn-primary', onClick: openNewReportDoc }, '＋ 새 보고서')
+        )
+      )
+    ))
+
+    if (!doc) {
+      c.append(el('div', { className: 'card' }, el('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#888' } },
+        el('div', { style: { fontSize: 36, marginBottom: 12 } }, '✍️'),
+        el('h3', { style: { margin: '0 0 8px' } }, '작성 중인 보고서가 없습니다'),
+        el('p', { style: { margin: 0, fontSize: 13 } }, '새 보고서를 만들고 섹션을 추가해 원고를 작성하세요.'))))
+      return
+    }
+
+    const total = sections.length
+    const written = sections.filter(s => (s.content || '').trim()).length
+    const progress = total ? Math.round(written / total * 100) : 0
+    c.append(el('div', { className: 'card' },
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 } },
+        el('strong', {}, doc.title || '(제목 없음)'),
+        el('span', { style: { fontSize: 13, color: '#666' } }, '진도 ' + progress + '% (' + written + '/' + total + ' 섹션)')),
+      el('div', { style: { height: 8, background: '#eee', borderRadius: 4, overflow: 'hidden' } },
+        el('div', { style: { height: '100%', width: progress + '%', background: '#3b82f6', transition: 'width .3s' } }))))
+
+    const grid = el('div', { style: { display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' } })
+    grid.append(el('div', { className: 'card', style: { padding: 0 } },
+      el('div', { style: { padding: '10px 12px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+        el('strong', { style: { fontSize: 13 } }, '섹션'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openAddSection(doc.id) }, '＋')),
+      el('div', {}, sections.length ? sections.map(s => el('div', {
+        style: { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: s.id === _writerSectionId ? '#eff6ff' : 'transparent' },
+        onClick: () => { _writerSectionId = s.id; renderWriter() }
+      },
+        el('div', { style: { fontSize: 13, fontWeight: 600, color: '#334155' } }, s.title || '(제목 없음)'),
+        el('div', { style: { fontSize: 11, color: (s.content || '').trim() ? '#22c55e' : '#aaa' } }, (s.content || '').trim() ? '작성됨' : '미작성')
+      )) : el('div', { style: { padding: 16, color: '#888', fontSize: 13 } }, '섹션이 없습니다.')))
+    )
+    grid.append(renderWriterEditor(sections.find(s => s.id === _writerSectionId)))
+    c.append(grid)
+  }
+
+  function renderWriterEditor(section) {
+    if (!section) return el('div', { className: 'card' }, el('p', { style: { color: '#888', margin: 0 } }, '왼쪽에서 섹션을 선택하세요.'))
+    const ta = el('textarea', { id: 'writer-input', style: { width: '100%', minHeight: 260, padding: 12, border: '1px solid #ddd', borderRadius: 8, fontSize: 14, lineHeight: 1.6, fontFamily: 'inherit', resize: 'vertical' } })
+    ta.value = section.content || ''
+    const feedback = Store.getFeedback(section.doc_id).filter(f => f.section_id === section.id)
+    return el('div', { className: 'card' },
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' } },
+        el('strong', {}, section.title || '(제목 없음)'),
+        el('div', { style: { display: 'flex', gap: 6 } },
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); showToast('저장되었습니다.') } }, '저장'),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => runWriterFeedback(section, ta.value) }, '🤖 AI 피드백'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteWriterSection(section.id) }, '섹션 삭제')
+        )),
+      ta,
+      feedback.length ? el('div', { style: { marginTop: 16 } },
+        el('div', { style: { fontWeight: 600, marginBottom: 8 } }, '💬 피드백 (' + feedback.length + ')'),
+        feedback.map(f => el('div', { style: { border: '1px solid #eee', borderLeft: '3px solid ' + (f.status === 'applied' ? '#22c55e' : f.status === 'dismissed' ? '#bbb' : '#f59e0b'), borderRadius: 8, padding: '10px 12px', marginBottom: 8 } },
+          el('div', { style: { fontSize: 12, color: '#888', marginBottom: 4 } }, (f.kind === 'direction' ? '진행방향' : f.kind === 'polish' ? '문구 다듬기' : '제안') + (f.reference_title ? ' · 근거: ' + f.reference_title + (f.page ? ' p.' + f.page : '') : '')),
+          el('div', { style: { fontSize: 13, marginBottom: 8 } }, f.message),
+          el('div', { style: { display: 'flex', gap: 6 } },
+            el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'applied' }); renderWriter() } }, '반영'),
+            el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'dismissed' }); renderWriter() } }, '무시')
+          )))
+      ) : el('p', { style: { marginTop: 16, fontSize: 13, color: '#888' } }, 'AI 피드백 버튼을 누르면 참고자료와 대비한 진행방향·문구 제안을 받을 수 있습니다.')
+    )
+  }
+
+  function openNewReportDoc() {
+    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+      el('label', {}, '보고서 제목'), el('input', { id: 'rd-title', type: 'text', placeholder: '예: 2025 지속가능경영보고서' }),
+      el('label', {}, '초기 섹션 (줄바꿈으로 구분)'), el('textarea', { id: 'rd-sections', style: { minHeight: 120, padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' } }, 'CEO 메시지\n지속가능경영 개요\n환경 성과\n사회 성과\n지배구조\n이해관계자 참여\nGRI 부록')
+    )
+    modal('새 보고서', form)
+    document.getElementById('modal-save').onclick = () => {
+      const title = document.getElementById('rd-title').value.trim() || '제목 없는 보고서'
+      const lines = document.getElementById('rd-sections').value.split('\n').map(s => s.trim()).filter(Boolean)
+      const doc = Store.addReportDoc({ title })
+      lines.forEach(t => Store.addReportSection({ doc_id: doc.id, title: t, content: '' }))
+      _writerDocId = doc.id; _writerSectionId = null
+      closeModal(); renderWriter(); showToast('보고서가 생성되었습니다.')
+    }
+  }
+
+  function openAddSection(docId) {
+    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+      el('label', {}, '섹션 제목 (여러 줄 입력 시 일괄 추가)'),
+      el('textarea', { id: 'rd-add-sections', style: { minHeight: 100, padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }, placeholder: '예: 기후변화 대응\n생물다양성' })
+    )
+    modal('섹션 추가', form)
+    document.getElementById('modal-save').onclick = () => {
+      const lines = document.getElementById('rd-add-sections').value.split('\n').map(s => s.trim()).filter(Boolean)
+      if (!lines.length) { showToast('섹션 제목을 입력하세요.', 'error'); return }
+      lines.forEach(t => Store.addReportSection({ doc_id: docId, title: t, content: '' }))
+      closeModal(); renderWriter(); showToast(lines.length + '개 섹션을 추가했습니다.')
+    }
+  }
+
+  function deleteWriterSection(id) {
+    if (!confirm('이 섹션을 삭제할까요?')) return
+    Store.deleteReportSection(id)
+    _writerSectionId = null
+    renderWriter()
+  }
+
+  async function runWriterFeedback(section, content) {
+    if (!content.trim()) { showToast('내용을 먼저 작성하세요.', 'error'); return }
+    Store.updateReportSection(section.id, { content })
+    showLoading('참고자료와 대비하여 분석 중...')
+    try {
+      const refs = Reference.search(section.title || '', 5)
+      const refText = refs.map((r, i) => `[${i + 1}] ${r.source_org || ''} ${r.title || ''} p.${r.page || '-'}: ${(r.snippet || '').trim()}`).join('\n')
+      const messages = [
+        { role: 'system', content: '너는 지속가능경영보고서 작성 코치다. 작성 중인 섹션 원고를 참고자료와 대비하여 진행방향(direction)과 문구 다듬기(polish) 제안을 JSON으로만 답하라. 형식: {"feedback":[{"kind":"direction|polish","message":"...", "suggestion":"..."}]}' },
+        { role: 'user', content: `섹션: ${section.title}\n\n원고:\n${content}\n\n참고자료 발췌:\n${refText || '(없음)'}\n\n위 원고에서 빠진 필수 항목과 개선할 표현을 각각 제안하라.` }
+      ]
+      const raw = await AI._callAI(messages)
+      let parsed = AI._safeParseJson(raw)
+      const items = (parsed && parsed.feedback) || []
+      if (!items.length) {
+        items.push({ kind: 'direction', message: '참고자료와 대비할 근거가 부족합니다. 참고자료를 먼저 등록하세요.' })
+      }
+      items.forEach(it => Store.addFeedbackItem({ doc_id: section.doc_id, section_id: section.id, kind: it.kind || 'suggestion', message: it.message || it.suggestion || '', suggestion: it.suggestion || '', reference_title: refs[0]?.title || '', page: refs[0]?.page || null }))
+      showToast(items.length + '건의 피드백을 받았습니다.')
+    } catch (e) {
+      showToast('피드백 실패: ' + e.message, 'error')
+    } finally {
+      hideLoading(); renderWriter()
+    }
+  }
+
   // ==================== 보고서 편집기 (S-05) ====================
   let _editorAssId = null
   let _editorSelectedIndicator = null
@@ -3954,6 +4335,18 @@
           )
         )) : el('div', { style: 'padding:12px;color:#999;font-size:12px;text-align:center;background:#f9f9f9;border-radius:6px' }, '연결 가능한 증빙이 없습니다. 먼저 증빙을 등록하세요.')
       ),
+      (() => {
+        const refs = (typeof Reference !== 'undefined') ? Reference.getRelevant([indicator], 6) : []
+        if (!refs.length) return null
+        return el('div', { style: 'margin-bottom:16px' },
+          el('h4', { style: 'font-size:13px;margin-bottom:8px;color:#7C3AED' }, '📚 참고 근거 (' + refs.length + '건)'),
+          ...refs.map(r => el('div', { style: 'padding:8px 12px;background:#f8f6ff;border:1px solid #e9e2ff;border-radius:6px;margin-bottom:6px' },
+            el('div', { style: 'font-size:11px;color:#7C3AED;margin-bottom:4px' }, [r.source_org, r.title, r.page ? 'p.' + r.page : ''].filter(Boolean).join(' · ')),
+            el('div', { style: 'font-size:12px;color:#444;line-height:1.5;max-height:72px;overflow:hidden' }, (r.content || '').slice(0, 240) + ((r.content || '').length > 240 ? '…' : '')),
+            el('button', { className: 'btn btn-sm btn-secondary', style: { marginTop: 6 }, onClick: () => navigator.clipboard.writeText(r.content || '').then(() => showToast('근거를 복사했습니다.')).catch(() => showToast('복사 실패', 'error')) }, '근거 복사')
+          ))
+        )
+      })(),
       el('div', { style: 'padding:12px;background:#f8f9fa;border-radius:8px;font-size:12px;color:#666;line-height:1.6' },
         el('strong', {}, '📌 연결 규칙:'),
         el('br'),
@@ -5451,6 +5844,8 @@
   window.renderSubmit = renderSubmit
   window.renderAPI = renderAPI
   window.renderReportEditor = renderReportEditor
+  window.renderReferences = renderReferences
+  window.renderWriter = renderWriter
   window.renderKSSB = renderKSSB
   window.renderAIHistory = renderAIHistory
   window.renderBudget = renderBudget
