@@ -247,7 +247,77 @@
     return String(ka).localeCompare(String(kb), 'ko')
   }
 
+  let _modalDragReady = false
+  let _suppressOverlayClose = 0
+  function _initModalDrag() {
+    if (_modalDragReady) return
+    const overlay = document.getElementById('modal-overlay')
+    const panel = document.getElementById('modal')
+    const header = document.getElementById('modal-header')
+    if (!overlay || !panel || !header) return
+    _modalDragReady = true
+    let dragging = false, moved = false, startX = 0, startY = 0, origLeft = 0, origTop = 0
+
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+    const begin = (clientX, clientY, target, preventDefault) => {
+      if (target.closest('.btn-close') || target.closest('button')) return
+      const rect = panel.getBoundingClientRect()
+      panel.style.animation = 'none'
+      panel.style.position = 'fixed'
+      panel.style.margin = '0'
+      panel.style.transform = 'none'
+      panel.style.left = rect.left + 'px'
+      panel.style.top = rect.top + 'px'
+      panel.style.maxHeight = Math.min(rect.height, window.innerHeight - 20) + 'px'
+      startX = clientX; startY = clientY; origLeft = rect.left; origTop = rect.top
+      dragging = true; moved = false
+      _suppressOverlayClose = 0
+      document.body.style.userSelect = 'none'
+      document.body.style.cursor = 'move'
+      if (preventDefault) preventDefault()
+    }
+    const move = (clientX, clientY) => {
+      if (!dragging) return
+      if (Math.abs(clientX - startX) > 3 || Math.abs(clientY - startY) > 3) moved = true
+      const w = panel.offsetWidth
+      const nl = clamp(origLeft + (clientX - startX), -w + 60, window.innerWidth - 60)
+      const nt = clamp(origTop + (clientY - startY), 0, window.innerHeight - 40)
+      panel.style.left = nl + 'px'
+      panel.style.top = nt + 'px'
+    }
+    const end = () => {
+      if (dragging && moved) _suppressOverlayClose = Date.now() + 300
+      dragging = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+
+    header.addEventListener('mousedown', e => begin(e.clientX, e.clientY, e.target, () => e.preventDefault()))
+    document.addEventListener('mousemove', e => move(e.clientX, e.clientY))
+    document.addEventListener('mouseup', end)
+    header.addEventListener('touchstart', e => { const t = e.touches[0]; if (t) begin(t.clientX, t.clientY, e.target, () => e.preventDefault()) }, { passive: false })
+    document.addEventListener('touchmove', e => { const t = e.touches[0]; if (t) { if (dragging) e.preventDefault(); move(t.clientX, t.clientY) } }, { passive: false })
+    document.addEventListener('touchend', end)
+    header.addEventListener('dblclick', () => _resetModalPosition())
+  }
+
+  function _resetModalPosition() {
+    const panel = document.getElementById('modal')
+    if (!panel) return
+    panel.style.animation = ''
+    panel.style.position = ''
+    panel.style.left = ''
+    panel.style.top = ''
+    panel.style.margin = ''
+    panel.style.transform = ''
+    panel.style.maxHeight = ''
+    document.body.style.userSelect = ''
+    document.body.style.cursor = ''
+  }
+
   const modal = (title, body, extra) => {
+    _initModalDrag()
+    _resetModalPosition()
     document.getElementById('modal-title').textContent = title
     document.getElementById('modal-body').innerHTML = ''
     if (typeof body === 'string') document.getElementById('modal-body').innerHTML = body
@@ -255,6 +325,7 @@
     const saveBtn = document.getElementById('modal-save')
     const footer = saveBtn?.parentElement
     if (footer) { footer.querySelectorAll('.modal-extra-btn').forEach(b => b.remove()) }
+    if (saveBtn) { saveBtn.style.display = ''; saveBtn.onclick = null }
     if (Array.isArray(extra)) {
       saveBtn.textContent = '저장'
       extra.forEach(opt => {
@@ -3965,7 +4036,7 @@
   }
 
   function openReferenceUpload(preset) {
-    let file = preset || null
+    let file = (preset instanceof File || preset instanceof Blob) ? preset : null
     const fileInput = el('input', { type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.json' })
     fileInput.style.display = 'none'
     const dropzone = el('div', { className: 'ref-dropzone' })
@@ -5915,6 +5986,7 @@
 
   // ==================== Modal System ====================
   function closeModal(e) {
+    if (_suppressOverlayClose && Date.now() < _suppressOverlayClose) return
     if (e && e.target !== document.getElementById('modal-overlay') && !e.target.closest('#modal')) return
     document.getElementById('modal-overlay').classList.add('hidden')
   }
