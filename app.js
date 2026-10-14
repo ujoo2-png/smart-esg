@@ -367,10 +367,53 @@
 • 전체마스킹/부분마스킹/집계치만허용 3가지 유형을 지원합니다.`
   }
 
+  function _supabaseReady() {
+    return typeof SUPABASE_CONFIG !== 'undefined' && !!SUPABASE_CONFIG.url &&
+      !SUPABASE_CONFIG.url.includes('your-project') &&
+      !!SUPABASE_CONFIG.anonKey && SUPABASE_CONFIG.anonKey !== 'your-anon-key'
+  }
+
+  async function renderSupabaseStatus() {
+    const box = document.getElementById('supabase-status')
+    if (!box) return
+    const dot = box.querySelector('.supa-dot')
+    const txt = box.querySelector('.supa-text')
+    if (!_supabaseReady()) {
+      box.className = 'supa-status is-off'
+      box.title = 'Supabase 미설정 — 로컬 저장(localStorage) 모드로 동작 중입니다. supabase.js에 URL/키를 입력하세요.'
+      if (txt) txt.textContent = '로컬 모드'
+      return
+    }
+    if (!dot || dot.dataset.checking) return
+    dot.dataset.checking = '1'
+    if (txt) txt.textContent = '연결 확인 중…'
+    let ok = false
+    try {
+      const sb = (typeof getSupabase === 'function') ? getSupabase() : null
+      if (sb) {
+        const { error } = await sb.from('tb_company').select('id', { head: true, count: 'exact' }).limit(1)
+        ok = !error
+      }
+    } catch (e) { ok = false }
+    delete dot.dataset.checking
+    const remote = (typeof StorageAdapter !== 'undefined' && StorageAdapter.isRemote)
+    if (ok) {
+      box.className = 'supa-status is-on'
+      box.title = 'Supabase 연결됨 · 저장소 모드: ' + (remote ? '원격' : '로컬(IndexedDB)')
+      if (txt) txt.textContent = 'Supabase 연결됨'
+    } else {
+      box.className = 'supa-status is-err'
+      box.title = 'Supabase에 연결할 수 없습니다. 네트워크/키/RLS를 확인하세요.'
+      if (txt) txt.textContent = 'Supabase 오류'
+    }
+  }
+  window.renderSupabaseStatus = renderSupabaseStatus
+
   function init() {
     document.getElementById('version-label').textContent = '지속가능경영보고서 시스템 ' + Store.version
     const vb = document.getElementById('version-badge')
     if (vb) vb.textContent = Store.version
+    renderSupabaseStatus()
     ensureAdmin()
     GHG.init()
     checkAuth().then(user => {
@@ -3843,6 +3886,21 @@
     const totalPages = docs.reduce((s, d) => s + (d.page_count || 0), 0)
 
     c.innerHTML = ''
+    if (!_supabaseReady()) {
+      c.append(el('div', { className: 'ref-banner warn' },
+        el('span', { style: { fontSize: 16 } }, '⚠️'),
+        el('div', {}, el('b', {}, 'Supabase 미연결(로컬 모드)'), el('div', {}, 'PDF·PPT·Word 등 이진문서는 변환 서버(Edge Function)가 필요합니다. supabase.js에 프로젝트 URL/키를 입력하면 서버 변환과 원격 저장을 사용할 수 있습니다. (TXT·MD는 즉시 변환)'))
+      ))
+    }
+    if (!c.dataset.dropBound) {
+      c.dataset.dropBound = '1'
+      c.addEventListener('dragover', e => e.preventDefault())
+      c.addEventListener('drop', e => {
+        e.preventDefault()
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]
+        if (f) openReferenceUpload(f)
+      })
+    }
     c.append(el('div', { className: 'card' },
       el('div', { className: 'card-header' },
         el('h3', {}, '📚 참고자료 라이브러리'),
@@ -3906,27 +3964,81 @@
     )
   }
 
-  function openReferenceUpload() {
+  function openReferenceUpload(preset) {
+    let file = preset || null
     const fileInput = el('input', { type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.json' })
-    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-      el('label', {}, '제목'), el('input', { id: 'ref-title', type: 'text', placeholder: '예: 2024 지속가능경영보고서' }),
-      el('label', {}, '출처 기관'), el('input', { id: 'ref-org', type: 'text', placeholder: '예: 삼성전자 / GRI / KSSB' }),
-      el('label', {}, '업종'), el('input', { id: 'ref-industry', type: 'text', placeholder: '예: 전기전자' }),
-      el('label', {}, '발간연도'), el('input', { id: 'ref-year', type: 'number', placeholder: '2024' }),
-      el('label', {}, '태그 (쉼표 구분)'), el('input', { id: 'ref-tags', type: 'text', placeholder: '환경, 온실가스, GRI' }),
-      el('label', {}, '파일'), fileInput,
-      el('p', { style: { fontSize: 12, color: '#888', margin: 0 } }, '변환은 저장된 원본을 기반으로 서버에서 수행됩니다. 텍스트 파일은 브라우저에서 즉시 변환됩니다.')
+    fileInput.style.display = 'none'
+    const dropzone = el('div', { className: 'ref-dropzone' })
+    const titleInput = el('input', { id: 'ref-title', type: 'text', placeholder: '예: 2024 지속가능경영보고서' })
+    const orgInput = el('input', { id: 'ref-org', type: 'text', placeholder: '예: GRI / KSSB / 벤치마크 기업' })
+    const industryInput = el('input', { id: 'ref-industry', type: 'text', placeholder: '예: 전기전자' })
+    const yearInput = el('input', { id: 'ref-year', type: 'text', placeholder: '예: 2024' })
+    const tagsInput = el('input', { id: 'ref-tags', type: 'text', placeholder: '쉼표로 구분 · 예: 기후, GRI' })
+
+    const _fileSub = (f) => {
+      const kb = f.size < 1048576 ? Math.max(1, Math.round(f.size / 1024)) + ' KB' : (f.size / 1048576).toFixed(1) + ' MB'
+      const ext = (f.name.split('.').pop() || '').toUpperCase()
+      return ext + ' · ' + kb
+    }
+    const renderDrop = () => {
+      dropzone.innerHTML = ''
+      if (!file) {
+        dropzone.classList.remove('has-file')
+        dropzone.append(
+          el('div', { className: 'ref-drop-icon' }, '📄'),
+          el('div', { className: 'ref-drop-title' }, '파일을 여기로 끌어다 놓으세요'),
+          el('div', { className: 'ref-drop-sub' }, '또는 클릭하여 선택 · PDF, PPT, Word, Excel, TXT, MD')
+        )
+      } else {
+        dropzone.classList.add('has-file')
+        dropzone.append(el('div', { className: 'ref-file-chip' },
+          el('span', { className: 'ref-file-ico' }, '📄'),
+          el('div', { className: 'ref-file-meta' },
+            el('div', { className: 'ref-file-name', title: file.name }, file.name),
+            el('div', { className: 'ref-file-sub' }, _fileSub(file))
+          ),
+          el('button', { type: 'button', className: 'ref-file-remove', onClick: e => { e.stopPropagation(); file = null; fileInput.value = ''; renderDrop() } }, '✕ 제거')
+        ))
+      }
+    }
+    renderDrop()
+
+    dropzone.addEventListener('click', () => fileInput.click())
+    ;['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('drag') }))
+    ;['dragleave', 'dragend'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('drag') }))
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('drag')
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]
+      if (f) { file = f; renderDrop() }
+    })
+    fileInput.addEventListener('change', () => { if (fileInput.files[0]) { file = fileInput.files[0]; renderDrop() } })
+
+    const field = (label, input, full) => el('div', { className: 'ref-field' + (full ? ' full' : '') }, el('label', {}, label), input)
+
+    const form = el('div', {},
+      dropzone, fileInput,
+      el('div', { style: { height: 16 } }),
+      el('div', { className: 'ref-upload-grid' },
+        field('제목', titleInput, true),
+        field('출처 기관', orgInput),
+        field('발간연도', yearInput),
+        field('업종', industryInput),
+        field('태그', tagsInput)
+      ),
+      el('div', { style: { marginTop: 14, fontSize: 12, lineHeight: 1.6, color: _supabaseReady() ? '#8b8ba7' : '#9a5b00' } },
+        _supabaseReady()
+          ? '업로드한 문서는 Markdown으로 변환되어 검색·인용에 활용됩니다.'
+          : '⚠ Supabase 미연결(로컬 모드): PDF·PPT·Word 등 이진문서는 변환 서버(Edge Function)가 필요합니다. TXT·MD는 즉시 변환됩니다.')
     )
     modal('참고자료 업로드', form)
     document.getElementById('modal-save').onclick = async () => {
-      const file = fileInput.files[0]
       if (!file) { showToast('파일을 선택하세요.', 'error'); return }
       const payload = {
-        title: document.getElementById('ref-title').value.trim(),
-        source_org: document.getElementById('ref-org').value.trim(),
-        industry: document.getElementById('ref-industry').value.trim(),
-        year: parseInt(document.getElementById('ref-year').value) || null,
-        tags: document.getElementById('ref-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+        title: titleInput.value.trim(),
+        source_org: orgInput.value.trim(),
+        industry: industryInput.value.trim(),
+        year: parseInt(yearInput.value) || null,
+        tags: tagsInput.value.split(',').map(s => s.trim()).filter(Boolean),
         file
       }
       closeModal()

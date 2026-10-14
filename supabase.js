@@ -1,7 +1,7 @@
 const SUPABASE_CONFIG = {
-  url: 'https://your-project.supabase.co',
-  anonKey: 'your-anon-key',
-  jwtKey: '',
+  url: 'https://pyesmylwuzaftieqzokn.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5ZXNteWx3dXphZnRpZXF6b2tuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5Mzk4MzUsImV4cCI6MjEwNzUxNTgzNX0.PUbzZTvmtfkcq5GB6SYjYhIFkqV94rQj6HiLObLUWUQ',
+  jwtKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5ZXNteWx3dXphZnRpZXF6b2tuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5Mzk4MzUsImV4cCI6MjEwNzUxNTgzNX0.PUbzZTvmtfkcq5GB6SYjYhIFkqV94rQj6HiLObLUWUQ',
 }
 
 let supabaseClient = null

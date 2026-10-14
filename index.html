@@ -112,6 +112,9 @@
             <button class="profile-menu-item" onclick="document.getElementById('profile-menu').classList.remove('show');doLogoutUI()" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#e74c3c;display:flex;align-items:center;gap:8px">🚪 로그아웃</button>
           </div>
         </div>
+        <div id="supabase-status" class="supa-status is-off" title="확인 중…" style="cursor:pointer" onclick="if(typeof renderSupabaseStatus==='function')renderSupabaseStatus()">
+          <span class="supa-dot"></span><span class="supa-text">확인 중…</span>
+        </div>
         <button id="login-btn-top" onclick="showAuthModal('login')" style="display:none">로그인</button>
         <button id="logout-btn-top" onclick="doLogoutUI()" style="display:none;display:none">로그아웃</button>
         <div id="notif-wrapper" style="position:relative;display:none">
