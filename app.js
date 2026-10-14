@@ -4098,9 +4098,14 @@
   function openStorageSettings() {
     const mode = StorageAdapter.mode
     const remoteReady = typeof SUPABASE_CONFIG !== 'undefined' && !!SUPABASE_CONFIG.url && !SUPABASE_CONFIG.url.includes('your-project')
-    const note = el('div', { id: 'storage-remote-note', style: { display: mode !== 'local' ? 'block' : 'none', whiteSpace: 'pre-line', fontSize: 12, lineHeight: 1.5, color: remoteReady ? '#666' : '#e74c3c', background: '#f8fafc', padding: '8px 12px', borderRadius: 8 } },
+    const policySql = 'insert into storage.buckets (id, name, public)\nvalues (\'references\', \'references\', false)\non conflict (id) do nothing;\n\ncreate policy "references_all" on storage.objects\n  for all to anon, authenticated\n  using (bucket_id = \'references\')\n  with check (bucket_id = \'references\');'
+    const note = el('div', { id: 'storage-remote-note', style: { display: mode !== 'local' ? 'block' : 'none', fontSize: 12, lineHeight: 1.6, color: remoteReady ? '#555' : '#e74c3c', background: '#f8fafc', padding: '10px 12px', borderRadius: 8 } },
       remoteReady
-        ? ('Supabase: ' + SUPABASE_CONFIG.url + '\n저장 백엔드(S3/R2/Supabase)는 배포된 Edge Function의 환경변수로 결정됩니다.')
+        ? el('div', {},
+            el('div', {}, '백엔드: Supabase Storage · 버킷: ' + StorageAdapter._bucket),
+            el('div', { style: { marginTop: 4, color: '#777' } }, 'Supabase 대시보드 → Storage에서 "' + StorageAdapter._bucket + '" 버킷을 생성하고, 아래 정책 SQL을 SQL Editor에서 실행하세요.'),
+            el('button', { type: 'button', className: 'btn btn-secondary', style: 'margin-top: 8px; font-size: 12px; padding: 5px 10px', onClick: e => { navigator.clipboard.writeText(policySql).then(() => showToast('정책 SQL을 복사했습니다.')).catch(() => showToast('복사 실패', 'error')) } }, '정책 SQL 복사')
+          )
         : '⚠ supabase.js의 URL/anonKey가 placeholder입니다. 원격 저장을 사용하려면 실제 값을 설정하세요.')
     const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 } },
       el('p', { style: { margin: 0, color: '#666' } }, '참고자료 원본 파일의 저장 위치를 선택합니다. DB·Markdown·메타데이터는 항상 Supabase에 저장됩니다.'),
@@ -4109,7 +4114,7 @@
         el('span', {}, '로컬 저장 (IndexedDB · 이 브라우저에만 저장)')),
       el('label', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
         el('input', { type: 'radio', name: 'storagemode', value: 'remote', checked: mode !== 'local', onChange: e => { if (e.target.checked) document.getElementById('storage-remote-note').style.display = 'block' } }),
-        el('span', {}, '원격 저장 (S3/R2/Supabase · Edge Function presigned 경유)')),
+        el('span', {}, '원격 저장 (Supabase Storage · 버킷: references)')),
       note
     )
     modal('⚙ 저장소 설정', form, [{

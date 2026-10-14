@@ -57,19 +57,19 @@ const StorageAdapter = {
     })
   },
 
-  _fnUrl(name) {
-    const base = (typeof SUPABASE_CONFIG !== 'undefined' && SUPABASE_CONFIG.url) || ''
-    return base.replace(/\/$/, '') + '/functions/v1/' + name
+  _client() {
+    const sb = (typeof getSupabase === 'function') ? getSupabase() : null
+    if (!sb) throw new Error('Supabase 클라이언트를 만들 수 없습니다. supabase.js의 URL/anonKey를 확인하세요.')
+    return sb
   },
 
-  async _authHeader() {
-    let token = (typeof SUPABASE_CONFIG !== 'undefined' && (SUPABASE_CONFIG.jwtKey || SUPABASE_CONFIG.anonKey)) || ''
-    try {
-      const sb = (typeof getSupabase === 'function') ? getSupabase() : null
-      const s = sb ? await sb.auth.getSession() : null
-      if (s?.data?.session?.access_token) token = s.data.session.access_token
-    } catch (e) {}
-    return 'Bearer ' + token
+  _err(error, action) {
+    const msg = (error && error.message) ? error.message : String(error)
+    const low = msg.toLowerCase()
+    if (low.includes('bucket not found')) return `저장소 버킷 '${this._bucket}'이(가) 없습니다. Supabase 대시보드 → Storage에서 '${this._bucket}' 버킷을 생성하세요.`
+    if (low.includes('row-level security') || low.includes('policy') || low.includes('unauthorized') || low.includes('permission') || low.includes('violates')) return `버킷 접근 권한이 없습니다. '${this._bucket}' 버킷에 Storage 정책을 추가하세요. (${msg})`
+    if (low.includes('failed to fetch') || low.includes('network')) return `네트워크 오류: Supabase에 연결할 수 없습니다. (${msg})`
+    return action + ' 실패: ' + msg
   },
 
   async upload(path, file) {
@@ -77,15 +77,9 @@ const StorageAdapter = {
       await this._idbPut(path, file)
       return { path, mode: 'local' }
     }
-    const res = await fetch(this._fnUrl('sign-upload'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: await this._authHeader() },
-      body: JSON.stringify({ bucket: this._bucket, path, contentType: file.type || 'application/octet-stream', size: file.size })
-    })
-    if (!res.ok) throw new Error('업로드 서명 발급 실패 (' + res.status + ')')
-    const { uploadUrl, method } = await res.json()
-    const put = await fetch(uploadUrl, { method: method || 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } })
-    if (!put.ok) throw new Error('저장소 업로드 실패 (' + put.status + ')')
+    const sb = this._client()
+    const { error } = await sb.storage.from(this._bucket).upload(path, file, { upsert: true, contentType: file.type || 'application/octet-stream' })
+    if (error) throw new Error(this._err(error, '업로드'))
     return { path, mode: this.mode }
   },
 
@@ -95,26 +89,16 @@ const StorageAdapter = {
       if (!blob) throw new Error('파일을 찾을 수 없습니다.')
       return blob
     }
-    const res = await fetch(this._fnUrl('sign-download'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: await this._authHeader() },
-      body: JSON.stringify({ bucket: this._bucket, path })
-    })
-    if (!res.ok) throw new Error('다운로드 서명 발급 실패 (' + res.status + ')')
-    const { url } = await res.json()
-    const file = await fetch(url)
-    if (!file.ok) throw new Error('저장소 다운로드 실패 (' + file.status + ')')
-    return file.blob()
+    const { data, error } = await this._client().storage.from(this._bucket).download(path)
+    if (error) throw new Error(this._err(error, '다운로드'))
+    return data
   },
 
   async remove(path) {
     if (!this.isRemote) return this._idbDel(path)
-    const res = await fetch(this._fnUrl('remove-object'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: await this._authHeader() },
-      body: JSON.stringify({ bucket: this._bucket, path })
-    })
-    return res.ok
+    const { error } = await this._client().storage.from(this._bucket).remove([path])
+    if (error) throw new Error(this._err(error, '삭제'))
+    return true
   },
 
   async testConnection() {
@@ -127,11 +111,13 @@ const StorageAdapter = {
     if (typeof SUPABASE_CONFIG === 'undefined' || !SUPABASE_CONFIG.url || SUPABASE_CONFIG.url.includes('your-project')) {
       throw new Error('Supabase URL이 설정되지 않았습니다 (supabase.js).')
     }
+    const sb = this._client()
     const path = `_healthcheck/${Date.now()}.txt`
     const file = new Blob(['health-check'], { type: 'text/plain' })
-    await this.upload(path, file)
-    await this.remove(path)
+    const up = await sb.storage.from(this._bucket).upload(path, file, { upsert: true, contentType: 'text/plain' })
+    if (up.error) throw new Error(this._err(up.error, '업로드'))
+    const rm = await sb.storage.from(this._bucket).remove([path])
+    if (rm.error) throw new Error(this._err(rm.error, '삭제'))
     return { ok: true, mode: this.mode }
   }
 }
-
