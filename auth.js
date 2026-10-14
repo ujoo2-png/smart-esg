@@ -195,7 +195,7 @@ function showAuthModal(tab) {
   `
   const orbs = document.createElement('div')
   orbs.innerHTML = `
-    <div style="position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.3) 0%,transparent 70%);top:-100px;left:-100px;animation:orbFloat 8s ease-in-out infinite"></div>
+    <div style="position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(30,58,95,.3) 0%,transparent 70%);top:-100px;left:-100px;animation:orbFloat 8s ease-in-out infinite"></div>
     <div style="position:absolute;width:350px;height:350px;border-radius:50%;background:radial-gradient(circle,rgba(236,72,153,.25) 0%,transparent 70%);bottom:-80px;right:-80px;animation:orbFloat 10s ease-in-out infinite reverse"></div>
     <div style="position:absolute;width:250px;height:250px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,.2) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);animation:orbFloat 12s ease-in-out infinite 2s"></div>
     <style>
@@ -230,22 +230,22 @@ function switchAuthTab(tab) {
     login: `
       <div style="background:rgba(255,255,255,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:36px 32px 28px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1);max-height:90vh;overflow-y:auto">
         <div style="text-align:center;margin-bottom:24px">
-          <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:28px;color:#fff;box-shadow:0 4px 16px rgba(124,58,237,.4)">SE</div>
+          <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#1E3A5F,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:28px;color:#fff;box-shadow:0 4px 16px rgba(30,58,95,.4)">SE</div>
           <h1 style="margin:0;font-size:20px;font-weight:700;color:#1a1a2e;letter-spacing:-.3px">Smart ESG</h1>
           <p style="margin:4px 0 0;font-size:11px;color:#999;letter-spacing:.5px">지속가능경영보고서 시스템 ${Store.version}</p>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <input id="af-id" type="text" placeholder="아이디" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'" onkeydown="if(event.key==='Enter') document.getElementById('af-pw').focus()">
-          <input id="af-pw" type="password" placeholder="비밀번호" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'" onkeydown="capsCheck(event);if(event.key==='Enter') doLogin()" onkeyup="capsCheck(event)">
+          <input id="af-id" type="text" placeholder="아이디" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'" onkeydown="if(event.key==='Enter') document.getElementById('af-pw').focus()">
+          <input id="af-pw" type="password" placeholder="비밀번호" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'" onkeydown="capsCheck(event);if(event.key==='Enter') doLogin()" onkeyup="capsCheck(event)">
           <p id="af-caps-warn" style="color:#e67e22;font-size:12px;margin:0;display:none;text-align:center;padding:2px 0">⇧ Caps Lock이 켜져 있습니다</p>
-          <button onclick="doLogin()" style="padding:12px;background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(124,58,237,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(124,58,237,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(124,58,237,.3)'">로그인</button>
+          <button onclick="doLogin()" style="padding:12px;background:linear-gradient(135deg,#1E3A5F,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(30,58,95,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(30,58,95,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(30,58,95,.3)'">로그인</button>
           <p id="af-err" style="color:#d32f2f;font-size:13px;margin:0;display:none;text-align:center;padding:4px 0"></p>
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:6px">
-            <a href="#" onclick="switchAuthTab('register');return false" style="color:#7C3AED;text-decoration:none;font-weight:500">회원가입</a>
+            <a href="#" onclick="switchAuthTab('register');return false" style="color:#1E3A5F;text-decoration:none;font-weight:500">회원가입</a>
             <span>
-              <a href="#" onclick="switchAuthTab('findId');return false" style="color:#7C3AED;text-decoration:none;font-weight:500">아이디찾기</a>
+              <a href="#" onclick="switchAuthTab('findId');return false" style="color:#1E3A5F;text-decoration:none;font-weight:500">아이디찾기</a>
               <span style="color:#ddd;margin:0 6px">|</span>
-              <a href="#" onclick="switchAuthTab('findPw');return false" style="color:#7C3AED;text-decoration:none;font-weight:500">비밀번호찾기</a>
+              <a href="#" onclick="switchAuthTab('findPw');return false" style="color:#1E3A5F;text-decoration:none;font-weight:500">비밀번호찾기</a>
             </span>
           </div>
         </div>
@@ -253,23 +253,23 @@ function switchAuthTab(tab) {
     register: `
       <div style="background:rgba(255,255,255,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:32px;width:420px;box-shadow:0 8px 40px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1);max-height:90vh;overflow-y:auto">
         <div style="text-align:center;margin-bottom:20px">
-          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;color:#fff;box-shadow:0 4px 16px rgba(124,58,237,.4)">+</div>
+          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#1E3A5F,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;color:#fff;box-shadow:0 4px 16px rgba(30,58,95,.4)">+</div>
           <h2 style="margin:0;font-size:18px;font-weight:700;color:#1a1a2e;letter-spacing:-.3px">회원가입</h2>
           <p style="margin:4px 0 0;font-size:12px;color:#999">관리자 승인 후 로그인이 가능합니다</p>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">아이디 *</label>
             <div style="display:flex;gap:6px">
-              <input id="af-reg-id" type="text" style="flex:1;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'">
-              <button onclick="checkIdDup()" style="padding:8px 12px;background:#f3f0ff;color:#7C3AED;border:1px solid #d4c8f0;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">중복확인</button>
+              <input id="af-reg-id" type="text" style="flex:1;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'">
+              <button onclick="checkIdDup()" style="padding:8px 12px;background:#f3f0ff;color:#1E3A5F;border:1px solid #d4c8f0;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">중복확인</button>
             </div>
             <p id="af-reg-id-msg" style="font-size:11px;margin:3px 0 0;display:none"></p>
           </div>
-          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">비밀번호 *</label><input id="af-reg-pw" type="password" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'"></div>
-          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">비밀번호 확인 *</label><input id="af-reg-pw2" type="password" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'"></div>
-          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">이름 *</label><input id="af-reg-name" type="text" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'"></div>
-          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">이메일 * <span style="font-weight:400;color:#999">(아이디/비번 찾기)</span></label><input id="af-reg-email" type="email" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'"></div>
-          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">연락처</label><input id="af-reg-phone" type="text" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">비밀번호 *</label><input id="af-reg-pw" type="password" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">비밀번호 확인 *</label><input id="af-reg-pw2" type="password" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">이름 *</label><input id="af-reg-name" type="text" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">이메일 * <span style="font-weight:400;color:#999">(아이디/비번 찾기)</span></label><input id="af-reg-email" type="email" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">연락처</label><input id="af-reg-phone" type="text" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'"></div>
           <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">회사</label>
             <select id="af-reg-company" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;background:#fff">
               <option value="">선택</option>
@@ -281,40 +281,40 @@ function switchAuthTab(tab) {
                 <option value="">선택</option>
               </select>
             </div>
-            <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">직급</label><input id="af-reg-position" type="text" placeholder="예: 과장" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'"></div>
+            <div><label style="font-size:11px;font-weight:600;color:#666;margin-bottom:4px;display:block">직급</label><input id="af-reg-position" type="text" placeholder="예: 과장" style="width:100%;padding:10px 12px;border:2px solid #e8e8ec;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'"></div>
           </div>
-          <button onclick="doRegister()" style="margin-top:4px;padding:12px;background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(124,58,237,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(124,58,237,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(124,58,237,.3)'">가입 신청</button>
+          <button onclick="doRegister()" style="margin-top:4px;padding:12px;background:linear-gradient(135deg,#1E3A5F,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(30,58,95,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(30,58,95,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(30,58,95,.3)'">가입 신청</button>
           <p id="af-reg-err" style="color:#d32f2f;font-size:13px;margin:0;display:none;text-align:center;padding:4px 0"></p>
-          <div style="text-align:center;font-size:12px;color:#888">이미 계정이 있으신가요? <a href="#" onclick="switchAuthTab('login');return false" style="color:#7C3AED;text-decoration:none;font-weight:600">로그인</a></div>
+          <div style="text-align:center;font-size:12px;color:#888">이미 계정이 있으신가요? <a href="#" onclick="switchAuthTab('login');return false" style="color:#1E3A5F;text-decoration:none;font-weight:600">로그인</a></div>
         </div>
       </div>`,
     findId: `
       <div style="background:rgba(255,255,255,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:32px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1)">
         <div style="text-align:center;margin-bottom:20px">
-          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;color:#fff;box-shadow:0 4px 16px rgba(124,58,237,.4)">?</div>
+          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#1E3A5F,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;color:#fff;box-shadow:0 4px 16px rgba(30,58,95,.4)">?</div>
           <h2 style="margin:0;font-size:18px;font-weight:700;color:#1a1a2e;letter-spacing:-.3px">아이디 찾기</h2>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <p style="font-size:13px;color:#888;margin:0;text-align:center">가입 시 등록한 이메일을 입력하세요.</p>
-          <input id="af-findid-email" type="email" placeholder="example@email.com" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'">
-          <button onclick="doFindId()" style="padding:12px;background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(124,58,237,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(124,58,237,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(124,58,237,.3)'">아이디 찾기</button>
+          <input id="af-findid-email" type="email" placeholder="example@email.com" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'">
+          <button onclick="doFindId()" style="padding:12px;background:linear-gradient(135deg,#1E3A5F,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(30,58,95,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(30,58,95,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(30,58,95,.3)'">아이디 찾기</button>
           <p id="af-findid-rs" style="font-size:13px;margin:0;display:none;text-align:center;padding:6px 10px;border-radius:8px"></p>
-          <div style="text-align:center;font-size:12px"><a href="#" onclick="switchAuthTab('login');return false" style="color:#7C3AED;text-decoration:none;font-weight:600">로그인으로 돌아가기</a></div>
+          <div style="text-align:center;font-size:12px"><a href="#" onclick="switchAuthTab('login');return false" style="color:#1E3A5F;text-decoration:none;font-weight:600">로그인으로 돌아가기</a></div>
         </div>
       </div>`,
     findPw: `
       <div style="background:rgba(255,255,255,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:32px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1)">
         <div style="text-align:center;margin-bottom:20px">
-          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;color:#fff;box-shadow:0 4px 16px rgba(124,58,237,.4)">!</div>
+          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#1E3A5F,#EC4899);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;color:#fff;box-shadow:0 4px 16px rgba(30,58,95,.4)">!</div>
           <h2 style="margin:0;font-size:18px;font-weight:700;color:#1a1a2e;letter-spacing:-.3px">비밀번호 찾기</h2>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <p style="font-size:13px;color:#888;margin:0;text-align:center">가입 시 등록한 이름과 이메일을 입력하세요.</p>
-          <input id="af-findpw-name" type="text" placeholder="이름" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'">
-          <input id="af-findpw-email" type="email" placeholder="example@email.com" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#7C3AED'" onblur="this.style.borderColor='#e8e8ec'">
-          <button onclick="doFindPw()" style="padding:12px;background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(124,58,237,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(124,58,237,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(124,58,237,.3)'">확인</button>
+          <input id="af-findpw-name" type="text" placeholder="이름" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'">
+          <input id="af-findpw-email" type="email" placeholder="example@email.com" style="width:100%;padding:12px 14px;border:2px solid #e8e8ec;border-radius:12px;font-size:14px;outline:none;transition:border-color .2s;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#e8e8ec'">
+          <button onclick="doFindPw()" style="padding:12px;background:linear-gradient(135deg,#1E3A5F,#EC4899);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 16px rgba(30,58,95,.3)" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(30,58,95,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(30,58,95,.3)'">확인</button>
           <div id="af-findpw-rs" style="font-size:13px;margin:0;display:none;padding:10px;background:#f5f5f5;border-radius:8px;word-break:break-all;text-align:center"></div>
-          <div style="text-align:center;font-size:12px"><a href="#" onclick="switchAuthTab('login');return false" style="color:#7C3AED;text-decoration:none;font-weight:600">로그인으로 돌아가기</a></div>
+          <div style="text-align:center;font-size:12px"><a href="#" onclick="switchAuthTab('login');return false" style="color:#1E3A5F;text-decoration:none;font-weight:600">로그인으로 돌아가기</a></div>
         </div>
       </div>`,
   }[tab]

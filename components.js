@@ -5,13 +5,13 @@ const ESGComponents = {
     const logs = Store.getChangeLogs(tableName, recordId)
     if (!logs.length) return '<div style="padding:12px;color:#888;font-size:12px">변경이력이 없습니다.</div>'
     const actionIcons = { CREATE: '🆕', UPDATE: '✏️', DELETE: '🗑️', APPROVE: '✅', REJECT: '❌', SHARE: '🔗' }
-    const actionColors = { CREATE: '#22c55e', UPDATE: '#3b82f6', DELETE: '#ef4444', APPROVE: '#10b981', REJECT: '#ef4444', SHARE: '#8b5cf6' }
+    const actionColors = { CREATE: '#22c55e', UPDATE: '#3b82f6', DELETE: '#ef4444', APPROVE: '#10b981', REJECT: '#ef4444', SHARE: '#2563EB' }
     return '<div style="padding:12px;max-height:300px;overflow-y:auto">' +
       logs.map(log => {
         const icon = actionIcons[log.action_type] || '📝'
         const color = actionColors[log.action_type] || '#666'
         const time = new Date(log.changed_at).toLocaleString('ko-KR')
-        const field = log.field_name ? `<span style="color:#7C3AED;font-weight:500">${log.field_name}</span>` : ''
+        const field = log.field_name ? `<span style="color:#1E3A5F;font-weight:500">${log.field_name}</span>` : ''
         const change = log.old_value && log.new_value ? `<span style="text-decoration:line-through;color:#999">${log.old_value}</span> → <span style="color:#333;font-weight:500">${log.new_value}</span>` : log.new_value || log.old_value || ''
         return `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
           <span style="flex-shrink:0;width:20px;text-align:center;color:${color}">${icon}</span>
@@ -113,7 +113,7 @@ const ESGComponents = {
         <button onclick="ESGComponents.closeSlidePanel()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#666;padding:0 4px">✕</button>
       </div>
       <div style="display:flex;border-bottom:1px solid #e5e7eb;flex-shrink:0">
-        ${tabs.map(t => `<button data-tab="${t.id}" class="esg-tab-btn" style="flex:1;padding:8px;font-size:12px;border:none;background:${t.id === activeTab ? '#f0f6ff' : '#fff'};color:${t.id === activeTab ? '#7C3AED' : '#666'};font-weight:${t.id === activeTab ? '600' : '400'};cursor:pointer;border-bottom:2px solid ${t.id === activeTab ? '#7C3AED' : 'transparent'}">${t.label}</button>`).join('')}
+        ${tabs.map(t => `<button data-tab="${t.id}" class="esg-tab-btn" style="flex:1;padding:8px;font-size:12px;border:none;background:${t.id === activeTab ? '#f0f6ff' : '#fff'};color:${t.id === activeTab ? '#1E3A5F' : '#666'};font-weight:${t.id === activeTab ? '600' : '400'};cursor:pointer;border-bottom:2px solid ${t.id === activeTab ? '#1E3A5F' : 'transparent'}">${t.label}</button>`).join('')}
       </div>
       <div id="esg-slide-content" style="flex:1;overflow-y:auto"></div>
     `
@@ -122,7 +122,7 @@ const ESGComponents = {
     panel.querySelectorAll('.esg-tab-btn').forEach(btn => {
       btn.onclick = () => {
         panel.querySelectorAll('.esg-tab-btn').forEach(b => { b.style.background = '#fff'; b.style.color = '#666'; b.style.fontWeight = '400'; b.style.borderBottom = '2px solid transparent' })
-        btn.style.background = '#f0f6ff'; btn.style.color = '#7C3AED'; btn.style.fontWeight = '600'; btn.style.borderBottom = '2px solid #7C3AED'
+        btn.style.background = '#f0f6ff'; btn.style.color = '#1E3A5F'; btn.style.fontWeight = '600'; btn.style.borderBottom = '2px solid #1E3A5F'
         const tab = tabs.find(t => t.id === btn.dataset.tab)
         if (tab) document.getElementById('esg-slide-content').innerHTML = tab.content
       }

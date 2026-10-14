@@ -62,7 +62,7 @@ const Evidence = {
     const colors = {
       pending: '#f59e0b',
       self: '#3b82f6',
-      internal_reviewed: '#8b5cf6',
+      internal_reviewed: '#2563EB',
       externally_verified: '#10b981',
       confirmed: '#10b981',
       expired: '#ef4444',
