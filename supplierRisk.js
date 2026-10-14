@@ -2,6 +2,9 @@
 // 5축 구조: 기본정보 / 국가·산업 / ESG실사 / 증빙 / 개선조치
 
 const SupplierRisk = {
+  ANSWER_VALUES: { yes: 1, partial: 0.5, no: 0 },
+  ANSWER_LABELS: { yes: '예', partial: '부분', no: '아니오' },
+
   RISK_LEVELS: [
     { value: 'high', label: '고위험', color: '#e74c3c' },
     { value: 'medium', label: '중위험', color: '#f39c12' },
@@ -113,11 +116,78 @@ const SupplierRisk = {
     return '미흡'
   },
 
+  scoreAnswers(answerMap) {
+    const axes = { E: null, S: null, G: null }
+    const totals = { E: { earned: 0, max: 0 }, S: { earned: 0, max: 0 }, G: { earned: 0, max: 0 } }
+    let answered = 0
+    let total = 0
+    ;['E', 'S', 'G'].forEach(axis => {
+      this.ESG_QUESTIONS[axis].forEach(q => {
+        total++
+        const ans = answerMap[q.id]
+        totals[axis].max += q.weight
+        if (ans != null) {
+          answered++
+          totals[axis].earned += q.weight * (this.ANSWER_VALUES[ans] ?? 0)
+        }
+      })
+    })
+    if (answered === 0) return { E: null, S: null, G: null, overall: null, answered: 0, total }
+    ;['E', 'S', 'G'].forEach(axis => {
+      axes[axis] = totals[axis].max ? Math.round(totals[axis].earned / totals[axis].max * 100) : null
+    })
+    const earned = totals.E.earned + totals.S.earned + totals.G.earned
+    const max = totals.E.max + totals.S.max + totals.G.max
+    return { ...axes, overall: max ? Math.round(earned / max * 100) : null, answered, total }
+  },
+
+  getSupplierScores(supplierId) {
+    const items = Store.getSupplierRiskItems(supplierId)
+    if (!items.length || items.every(i => i.answer == null)) return null
+    const map = {}
+    items.forEach(i => { if (i.answer != null) map[i.question_id] = i.answer })
+    return this.scoreAnswers(map)
+  },
+
+  getSupplierRiskLevel(supplierId) {
+    const s = this.getSupplierScores(supplierId)
+    if (!s || s.overall == null) return 'pending'
+    if (s.overall >= 80) return 'low'
+    if (s.overall >= 50) return 'medium'
+    return 'high'
+  },
+
+  saveAssessment(supplierId, answers) {
+    const existing = Store.getSupplierRiskItems(supplierId)
+    ;['E', 'S', 'G'].forEach(axis => {
+      this.ESG_QUESTIONS[axis].forEach(q => {
+        const payload = { supplier_id: supplierId, axis, question_id: q.id, question: q.question, weight: q.weight, answer: answers[q.id] ?? null, assessed_at: new Date().toISOString() }
+        const found = existing.find(i => i.question_id === q.id)
+        if (found) Store.updateSupplierRiskItem(found.id, payload)
+        else Store.addSupplierRiskItem(payload)
+      })
+    })
+    return this.getSupplierScores(supplierId)
+  },
+
+  getAggregateScores() {
+    const suppliers = Store.getSuppliers()
+    const acc = { E: [], S: [], G: [], overall: [] }
+    suppliers.forEach(s => {
+      const sc = this.getSupplierScores(s.id)
+      if (!sc) return
+      ;['E', 'S', 'G', 'overall'].forEach(k => { if (sc[k] != null) acc[k].push(sc[k]) })
+    })
+    const avg = arr => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null
+    const assessed = acc.overall.length
+    return { E: avg(acc.E), S: avg(acc.S), G: avg(acc.G), overall: avg(acc.overall), assessed, total: suppliers.length, unassessed: suppliers.length - assessed }
+  },
+
   getProgress(riskId) {
     const items = Store.getSupplierRiskItems(riskId)
     const actions = Store.getSupplierRiskActions(riskId)
     const totalQuestions = Object.values(this.ESG_QUESTIONS).flat().length
-    const answered = items.length
+    const answered = items.filter(i => i.answer != null).length
     const actionTotal = actions.length
     const actionDone = actions.filter(a => a.status === 'completed').length
     return {

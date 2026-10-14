@@ -149,30 +149,147 @@ const SUBMISSION = {
     return Math.round((done / total) * 100)
   },
 
-  generateCSV(submission) {
-    const agency = SUBMISSION_AGENCIES.find(a => a.code === submission.agency_code)
-    if (!agency) return ''
-    if (agency.format === 'ecovadis_csv') {
-      const headers = ['Indicator Code', 'Indicator Name', 'Pillar', 'Score', 'Evidence Reference', 'Comment']
-      const items = Store.getAssessmentItems().filter(i => {
-        const assessment = Store.getAssessments().find(a => a.id === i.assessment_id)
-        return assessment && assessment.assessment_year == submission.year
-      })
-      const rows = items.map(item => {
-        const indicator = Store.getIndicators().find(ind => ind.id === item.indicator_id)
-        const evidences = Store.getEvidences().filter(e => e.indicator_id === item.indicator_id)
-        return [
-          indicator?.indicator_code || '',
-          indicator?.indicator_name || '',
-          indicator?.pillar || '',
-          item.score || 0,
-          evidences.map(e => e.id).join('; '),
-          item.comment || ''
-        ]
-      })
-      return [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+  collectYearData(submission) {
+    const year = submission.year
+    const assessmentIds = Store.getAssessments().filter(a => a.assessment_year == year).map(a => a.id)
+    const items = Store.getAssessmentItems().filter(i => assessmentIds.includes(i.assessment_id))
+    return items.map(item => {
+      const indicator = Store.getIndicators().find(ind => ind.id === item.indicator_id)
+      const evidenceIds = this.getEvidenceRefs(item.indicator_id)
+      return {
+        code: indicator?.indicator_code || '',
+        name: indicator?.indicator_name || '',
+        pillar: indicator?.pillar || '',
+        authority: indicator?.authority_code || '',
+        scope2: indicator?.scope2_split_required === true,
+        materialityOptional: indicator?.materiality_optional === true,
+        score: item.score ?? 0,
+        status: item.status || 'pending',
+        evidences: evidenceIds,
+        comment: item.comment || ''
+      }
+    }).filter(r => r.materialityOptional !== true)
+  },
+
+  getEvidenceRefs(indicatorId) {
+    const direct = Store.getEvidences().filter(e => e.indicator_id === indicatorId).map(e => e.id)
+    if (direct.length) return direct
+    const tags = Store.getEvidenceTags().filter(t => t.indicator_id === indicatorId)
+    return tags.map(t => t.evidence_id)
+  },
+
+  toCSV(headers, rows) {
+    const escape = v => {
+      let val = v === null || v === undefined ? '' : String(v)
+      return '"' + val.replace(/"/g, '""') + '"'
     }
-    return 'Format not yet implemented'
+    return [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n')
+  },
+
+  buildEcovadisCSV(rows) {
+    const headers = ['Indicator Code', 'Indicator Name', 'Pillar', 'Score', 'Evidence Reference', 'Comment']
+    return this.toCSV(headers, rows.map(r => [r.code, r.name, r.pillar, r.score, r.evidences.join('; '), r.comment]))
+  },
+
+  buildCdpCSV(rows) {
+    const moduleMap = { POLICY: 'Governance', ACTION: 'Risks & Opportunities', RESULT: 'Emissions', GOVERNANCE: 'Governance', STRATEGY: 'Business Strategy', RISK_MGMT: 'Risk Management', METRICS: 'Metrics & Targets' }
+    const headers = ['Module', 'Question Code', 'Question', 'Response Score', 'Evidence', 'Comment']
+    return this.toCSV(headers, rows.map(r => [moduleMap[r.pillar] || 'General', r.code, r.name, r.score, r.evidences.join('; '), r.comment]))
+  },
+
+  buildSbtiCSV(rows) {
+    const headers = ['Category', 'Indicator Code', 'Indicator', 'Progress', 'Evidence Reference', 'Note']
+    return this.toCSV(headers, rows.map(r => [r.pillar, r.code, r.name, r.score, r.evidences.join('; '), r.comment]))
+  },
+
+  buildGriXML(submission) {
+    const rows = this.collectYearData(submission)
+    const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    const disclosures = rows.map(r => `      <disclosure>
+        <disclosureCode>${esc(r.code)}</disclosureCode>
+        <title>${esc(r.name)}</title>
+        <topicStandard>${esc(r.pillar)}</topicStandard>
+        <score>${esc(r.score)}</score>
+        <evidenceReferences>${esc(r.evidences.join('; '))}</evidenceReferences>
+        <comment>${esc(r.comment)}</comment>
+      </disclosure>`).join('\n')
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<gri:report xmlns:gri="https://www.globalreporting.org/gri" reportingYear="${esc(submission.year)}" agency="${esc(submission.agency_name)}">
+  <organization>${esc(Store.getCompanies()[0]?.name || '')}</organization>
+  <contentIndex>
+${disclosures}
+  </contentIndex>
+</gri:report>`
+  },
+
+  buildTcfdJSON(submission) {
+    const rows = this.collectYearData(submission)
+    const group = { GOVERNANCE: [], STRATEGY: [], RISK_MGMT: [], METRICS: [] }
+    const map = { POLICY: 'GOVERNANCE', GOVERNANCE: 'GOVERNANCE', STRATEGY: 'STRATEGY', ACTION: 'STRATEGY', RISK_MGMT: 'RISK_MGMT', RESULT: 'METRICS', METRICS: 'METRICS' }
+    rows.forEach(r => { (group[map[r.pillar]] || group.METRICS).push({ code: r.code, indicator: r.name, progress: r.score, evidence: r.evidences, comment: r.comment }) })
+    return JSON.stringify({
+      reportingYear: submission.year,
+      agency: submission.agency_name,
+      framework: 'TCFD',
+      pillars: {
+        governance: group.GOVERNANCE,
+        strategy: group.STRATEGY,
+        riskManagement: group.RISK_MGMT,
+        metricsAndTargets: group.METRICS
+      }
+    }, null, 2)
+  },
+
+  buildSdgJSON(submission) {
+    const rows = this.collectYearData(submission)
+    return JSON.stringify({
+      reportingYear: submission.year,
+      agency: submission.agency_name,
+      framework: 'UN SDGs',
+      goals: rows.map(r => ({ code: r.code, indicator: r.name, category: r.pillar, kpiProgress: r.score, evidence: r.evidences, comment: r.comment }))
+    }, null, 2)
+  },
+
+  generateFile(submission) {
+    const agency = SUBMISSION_AGENCIES.find(a => a.code === submission.agency_code)
+    if (!agency) return null
+    const base = `SmartESG_${agency.code}_${submission.year}`
+    const rows = this.collectYearData(submission)
+    switch (agency.format) {
+      case 'ecovadis_csv':
+        return { filename: base + '.csv', content: this.buildEcovadisCSV(rows), mime: 'text/csv;charset=utf-8' }
+      case 'cdp_xlsx':
+        return { filename: base + '.csv', content: this.buildCdpCSV(rows), mime: 'text/csv;charset=utf-8' }
+      case 'sbti_excel':
+        return { filename: base + '.csv', content: this.buildSbtiCSV(rows), mime: 'text/csv;charset=utf-8' }
+      case 'gri_xml':
+        return { filename: base + '.xml', content: this.buildGriXML(submission), mime: 'application/xml' }
+      case 'tcfd_json':
+        return { filename: base + '.json', content: this.buildTcfdJSON(submission), mime: 'application/json' }
+      case 'sdg_json':
+        return { filename: base + '.json', content: this.buildSdgJSON(submission), mime: 'application/json' }
+      case 'vsme_xlsx':
+        return { filename: base + '.csv', content: this.buildSbtiCSV(rows), mime: 'text/csv;charset=utf-8' }
+      case 'ungc_web':
+      case 'sp_web': {
+        const lines = rows.map(r => `${r.code}\t${r.name}\t${r.pillar}\t${r.score}\t${r.evidences.join('; ')}`)
+        const content = [`# ${agency.name} 설문 응답 데이터 (${submission.year})`, 'Code\tIndicator\tCategory\tScore\tEvidence', ...lines].join('\n')
+        return { filename: base + '.txt', content, mime: 'text/plain;charset=utf-8' }
+      }
+      case 'kcgf_pdf':
+      case 'kess_pdf': {
+        const lines = rows.map(r => `${r.code} | ${r.name} | ${r.pillar} | 점수 ${r.score}`)
+        const content = [`${agency.name} 제출 요약 (${submission.year})`, '-'.repeat(48), ...lines].join('\n')
+        return { filename: base + '_summary.txt', content, mime: 'text/plain;charset=utf-8' }
+      }
+      default:
+        return null
+    }
+  },
+
+  generateCSV(submission) {
+    const file = this.generateFile(submission)
+    return file ? file.content : ''
   },
 
   generateReport(companyId) {

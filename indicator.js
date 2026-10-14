@@ -132,6 +132,12 @@ const Indicator = {
     Store.updateIndicator(indicatorId, { is_active: !indicator.is_active })
   },
 
+  toggleMateriality(indicatorId) {
+    const indicator = this.getIndicatorById(indicatorId)
+    if (!indicator) return
+    Store.updateIndicator(indicatorId, { materiality_optional: indicator.materiality_optional !== true })
+  },
+
   getScore(assessmentId, indicatorId) {
     const items = Store.getAssessmentItems().filter(i => i.assessment_id === assessmentId)
     const item = items.find(i => i.indicator_id === indicatorId)

@@ -713,6 +713,7 @@
   // ==================== 지표 관리 ====================
   let _selectedAuthority = 'ECOVADIS'
   let _materialityFilter = 'all'
+  let _materialityScope = 'all'
   let _indicatorTab = 'list'
   let _indicatorSearch = ''
   let _selectedIndicators = new Set()
@@ -744,15 +745,18 @@
       }
       if (_materialityFilter === 'active' && i.is_active === false) return false
       if (_materialityFilter === 'inactive' && i.is_active !== false) return false
+      if (_materialityScope === 'core' && i.materiality_optional === true) return false
+      if (_materialityScope === 'optional' && i.materiality_optional !== true) return false
       return true
     })
     const activeCount = allIndicators.filter(i => i.is_active !== false).length
+    const optionalCount = allIndicators.filter(i => i.materiality_optional === true).length
 
     const wrapper = el('div')
 
     wrapper.append(
       el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
-        el('select', { id: 'authSelect', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _selectedAuthority = document.getElementById('authSelect').value; _materialityFilter = 'all'; _indicatorSearch = ''; _selectedIndicators.clear(); renderIndicators() } },
+        el('select', { id: 'authSelect', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _selectedAuthority = document.getElementById('authSelect').value; _materialityFilter = 'all'; _materialityScope = 'all'; _indicatorSearch = ''; _selectedIndicators.clear(); renderIndicators() } },
           Store.getAgencyMaster().map(ag => el('option', { value: ag.code, selected: ag.code === _selectedAuthority }, ag.name))
         ),
         el('input', { id: 'indSearch', type: 'text', placeholder: '🔍 지표명 또는 코드 검색...', value: _indicatorSearch, style: 'flex:1;min-width:200px;font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onInput: () => { _indicatorSearch = document.getElementById('indSearch').value; renderIndicators() } }),
@@ -760,6 +764,11 @@
           el('option', { value: 'all', selected: _materialityFilter === 'all' }, '전체'),
           el('option', { value: 'active', selected: _materialityFilter === 'active' }, `활성 (${activeCount})`),
           el('option', { value: 'inactive', selected: _materialityFilter === 'inactive' }, `비활성 (${allIndicators.length - activeCount})`)
+        ),
+        el('select', { id: 'materialityScope', style: 'font-size:13px;padding:6px 10px;border:1px solid #ddd;border-radius:6px', onChange: () => { _materialityScope = document.getElementById('materialityScope').value; renderIndicators() } },
+          el('option', { value: 'all', selected: _materialityScope === 'all' }, '중요성: 전체'),
+          el('option', { value: 'core', selected: _materialityScope === 'core' }, `핵심만 (비핵심 ${optionalCount}개 제외)`),
+          el('option', { value: 'optional', selected: _materialityScope === 'optional' }, `비핵심만 (${optionalCount})`)
         ),
         el('span', { style: 'font-size:12px;color:#888' }, `${filtered.length}개 표시 / ${allIndicators.length}개 전체`)
       )
@@ -771,6 +780,8 @@
           el('span', { style: 'font-size:13px;font-weight:600' }, `${_selectedIndicators.size}개 선택됨`),
           el('button', { className: 'btn btn-sm btn-primary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: true })); _selectedIndicators.clear(); renderIndicators() } }, '활성화'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { is_active: false })); _selectedIndicators.clear(); renderIndicators() } }, '비활성화'),
+          el('button', { className: 'btn btn-sm', style: 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { materiality_optional: true })); _selectedIndicators.clear(); showToast('비핵심 항목으로 지정되었습니다.', 'success'); renderIndicators() } }, '🎯 비핵심 지정'),
+          el('button', { className: 'btn btn-sm', style: 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0', onClick: () => { _selectedIndicators.forEach(id => Store.updateIndicator(id, { materiality_optional: false })); _selectedIndicators.clear(); showToast('핵심 항목으로 지정되었습니다.', 'success'); renderIndicators() } }, '핵심 지정'),
             el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm(`${_selectedIndicators.size}개 지표를 삭제하시겠습니까?`)) { _selectedIndicators.forEach(id => Store.deleteIndicator(id)); _selectedIndicators.clear(); showToast('지표가 삭제되었습니다.', 'success'); renderIndicators() } } }, '삭제'),
           el('button', { className: 'btn btn-sm', style: 'margin-left:auto', onClick: () => { _selectedIndicators.clear(); renderIndicators() } }, '선택 해제')
         )
@@ -830,14 +841,16 @@
     return el('div', { style: `background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:4px solid ${ind.is_active === false ? '#ccc' : pillarColor};${ind.is_active === false ? 'opacity:.5' : ''}${isSelected ? ';outline:2px solid #7C3AED;outline-offset:1px' : ''};cursor:pointer`, onClick: (e) => { if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; openIndicatorSlidePanel(ind) } },
       el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px' },
         el('div', { style: 'flex:1' },
-          el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:4px' },
+          el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap' },
             el('input', { type: 'checkbox', checked: isSelected, onChange: (e) => { e.stopPropagation(); if (isSelected) _selectedIndicators.delete(ind.id); else _selectedIndicators.add(ind.id); renderIndicators() }, onClick: (e) => e.stopPropagation(), style: 'cursor:pointer;margin:0' }),
             el('span', { style: 'font-family:monospace;font-size:11px;font-weight:700;color:#7C3AED;background:#f3f0ff;padding:2px 6px;border-radius:4px' }, ind.indicator_code),
-            el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:' + (ind.pillar === 'POLICY' ? '#f3e8ff;color:#7C3AED' : ind.pillar === 'ACTION' ? '#eff6ff;color:#3B82F6' : ind.pillar === 'RESULT' ? '#ecfdf5;color:#10B981' : '#fef3c7;color:#D97706') }, ind.pillar ? Indicator.getPillarName(ind.pillar) : '-')
+            el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:' + (ind.pillar === 'POLICY' ? '#f3e8ff;color:#7C3AED' : ind.pillar === 'ACTION' ? '#eff6ff;color:#3B82F6' : ind.pillar === 'RESULT' ? '#ecfdf5;color:#10B981' : '#fef3c7;color:#D97706') }, ind.pillar ? Indicator.getPillarName(ind.pillar) : '-'),
+            ind.materiality_optional === true ? el('span', { style: 'font-size:10px;padding:2px 6px;border-radius:4px;background:#fef2f2;color:#dc2626;font-weight:600' }, '🎯 비핵심') : null
           ),
           el('div', { style: 'font-size:13px;font-weight:600;color:#1a1a2e;line-height:1.4' }, Indicator.getDisplayName(ind))
         ),
         el('div', { style: 'display:flex;gap:4px' },
+          el('button', { className: 'btn btn-sm', title: ind.materiality_optional === true ? '핵심 항목으로 지정' : '비핵심 항목으로 지정(중요성)', style: ind.materiality_optional === true ? 'background:#fef2f2;color:#dc2626' : 'background:#f8f9fa;color:#999', onClick: (e) => { e.stopPropagation(); Indicator.toggleMateriality(ind.id); showToast(ind.materiality_optional === true ? '핵심 항목으로 지정되었습니다.' : '비핵심 항목으로 지정되었습니다.', 'success'); renderIndicators() } }, '🎯'),
           el('button', { className: 'btn btn-sm btn-secondary', title: '수정', onClick: (e) => { e.stopPropagation(); _editingIndicator = ind.id; _showQuickForm = true; renderIndicators() } }, '✏'),
           el('button', { className: 'btn btn-sm', title: ind.is_active !== false ? '비활성화' : '활성화', style: ind.is_active !== false ? 'background:#f0fff4;color:#10B981' : 'background:#fff5f5;color:#e74c3c', onClick: (e) => { e.stopPropagation(); Indicator.toggleActive(ind.id); renderIndicators() } }, ind.is_active !== false ? '✓' : '✗')
         )
@@ -888,10 +901,12 @@
             <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">그룹</span><br><strong>${group ? Indicator.getGroupDisplayName(group) : '-'}</strong></div>
             <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">담당부서</span><br><strong>${ind.dept_code || '-'}</strong></div>
             <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">검토주기</span><br><strong>${ind.review_cycle || '-'}</strong></div>
+            <div style="padding:8px;background:#f8f9fa;border-radius:6px"><span style="color:#888">중요성(Materiality)</span><br><strong style="color:${ind.materiality_optional === true ? '#dc2626' : '#16a34a'}">${ind.materiality_optional === true ? '🎯 비핵심' : '핵심'}</strong></div>
           </div>
-          <div style="margin-top:12px;display:flex;gap:6px">
+          <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-sm btn-primary" onclick="ESGComponents.closeSlidePanel();_editingIndicator=${ind.id};_showQuickForm=true;renderIndicators()">수정</button>
             <button class="btn btn-sm ${ind.is_active !== false ? 'btn-danger' : 'btn-success'}" onclick="Indicator.toggleActive(${ind.id});ESGComponents.closeSlidePanel();renderIndicators()">${ind.is_active !== false ? '비활성화' : '활성화'}</button>
+            <button class="btn btn-sm" style="${ind.materiality_optional === true ? 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0' : 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca'}" onclick="Indicator.toggleMateriality(${ind.id});ESGComponents.closeSlidePanel();renderIndicators()">${ind.materiality_optional === true ? '핵심으로 지정' : '🎯 비핵심으로 지정'}</button>
           </div>
           <div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px">
             <div style="font-weight:600;font-size:13px;margin-bottom:8px">📎 연결 증빙 (${evidences.length}건)</div>
@@ -928,6 +943,7 @@
       [['annual', '매년'], ['semi_annual', '반기'], ['quarterly', '분기'], ['monthly', '매월']].map(([v, l]) => el('option', { value: v, selected: ind?.review_cycle === v }, l))
     )
     const scope2Check = el('input', { type: 'checkbox', checked: ind?.scope2_split_required === true, style: 'cursor:pointer' })
+    const materialityCheck = el('input', { type: 'checkbox', checked: ind?.materiality_optional === true, style: 'cursor:pointer' })
 
     const card = el('div', { className: 'card', style: 'border-left:3px solid #7C3AED;background:#fafbff;margin-bottom:12px' },
       el('div', { style: 'padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e0d8f0' },
@@ -958,6 +974,10 @@
         el('div', { style: 'grid-column:1/3;display:flex;align-items:center;gap:8px' },
           scope2Check,
           el('label', { style: 'font-size:12px;color:#555;cursor:pointer' }, '🌍 Scope2 이중보고 대상 (location-based / market-based)')
+        ),
+        el('div', { style: 'grid-column:1/3;display:flex;align-items:center;gap:8px' },
+          materialityCheck,
+          el('label', { style: 'font-size:12px;color:#555;cursor:pointer' }, '🎯 비핵심 항목 (중요성 평가에서 제외 가능)')
         )
       ),
       el('div', { style: 'padding:8px 16px 12px;display:flex;gap:6px;justify-content:flex-end' },
@@ -972,6 +992,7 @@
             dept_code: deptSel.value,
             review_cycle: cycleSel.value,
             scope2_split_required: scope2Check.checked,
+            materiality_optional: materialityCheck.checked,
             is_active: true
           }
           if (isEdit && ind) { Store.updateIndicator(ind.id, data); showToast('지표가 수정되었습니다.', 'success') }
@@ -1232,6 +1253,7 @@
         el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_evidenceViewMode === 'list' ? '#7C3AED' : '#f0f0f0'};color:${_evidenceViewMode === 'list' ? '#fff' : '#666'};border:1px solid ${_evidenceViewMode === 'list' ? '#7C3AED' : '#ddd'}`, onClick: () => { _evidenceViewMode = 'list'; renderEvidenceMgmt() } }, '📋 목록'),
         el('button', { className: 'btn btn-sm', style: `font-size:11px;background:${_evidenceViewMode === 'gantt' ? '#7C3AED' : '#f0f0f0'};color:${_evidenceViewMode === 'gantt' ? '#fff' : '#666'};border:1px solid ${_evidenceViewMode === 'gantt' ? '#7C3AED' : '#ddd'}`, onClick: () => { _evidenceViewMode = 'gantt'; renderEvidenceMgmt() } }, '📊 간트차트'),
         el('button', { className: 'btn btn-primary btn-sm', onClick: openAddEvidence }, '+ 증빙 추가'),
+        el('button', { className: 'btn btn-sm', style: 'font-size:11px;background:#f5f0ff;color:#7C3AED;border:1px solid #ddd6fe', onClick: () => openCameraCapture(file => _handleEvidenceFileDrop([file])) }, '📷 카메라 촬영'),
         el('button', { className: 'btn btn-sm', style: 'font-size:11px;background:#f0f7ff;color:#3b82f6;border:1px solid #bfdbfe', onClick: () => {
           if (!confirm('이전 평가의 증빙을 현재 평가로 복제하시겠습니까?\n(이미 동일 제목의 증빙은 건너뜁니다)')) return
           const otherAssessments = assessments.filter(a => a.id !== _evidenceAssId)
@@ -1427,6 +1449,7 @@
           onDrop: e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = '#d0d5dd'; e.currentTarget.style.background = ''; _handleEvidenceInlineFileDrop(ev.id, e.dataTransfer.files) },
           onClick: () => { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = '.pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.gif,.csv,.txt,.pptx'; inp.onchange = () => _handleEvidenceInlineFileDrop(ev.id, inp.files); inp.click() }
         }, '📎 여기에 파일을 끌어다 놓거나 클릭하여 첨부'),
+        el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px;margin-bottom:8px', onClick: () => openCameraCapture(f => _handleEvidenceInlineFileDrop(ev.id, [f])) }, '📷 카메라로 촬영'),
         files.length ? el('div', { style: 'display:flex;flex-direction:column;gap:4px' },
           ...files.map(f => el('div', { style: 'display:flex;align-items:center;gap:6px;padding:6px 8px;background:#f8f9fa;border-radius:6px;font-size:11px;border:1px solid #eee' },
             el('span', { style: 'font-size:14px;flex-shrink:0' }, fileIcons[f.file_type] || '📁'),
@@ -1626,6 +1649,56 @@
     })
   }
 
+  function openCameraCapture(onCapture) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('이 브라우저에서는 카메라를 사용할 수 없습니다.\n파일 업로드를 이용해주세요.')
+      return
+    }
+    const video = el('video', { autoplay: true, playsinline: true, muted: true, style: 'width:100%;max-height:58vh;border-radius:8px;background:#000' })
+    const statusMsg = el('div', { style: 'font-size:11px;color:#aaa;margin-top:8px;min-height:16px' }, '카메라를 시작하는 중...')
+    let stream = null
+    const stop = () => { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null } }
+    const closeCam = () => { stop(); overlay.remove() }
+    const captureBtn = el('button', {
+      className: 'btn btn-primary',
+      style: 'flex:1',
+      onClick: () => {
+        if (!stream) { overlay.remove(); return }
+        const w = video.videoWidth
+        const h = video.videoHeight
+        if (!w || !h) { alert('카메라 영상이 아직 준비되지 않았습니다.'); return }
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d').drawImage(video, 0, 0, w, h)
+        canvas.toBlob(blob => {
+          if (!blob) { return }
+          const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+          const file = new File([blob], `카메라촬영_${ts}.jpg`, { type: 'image/jpeg' })
+          stop()
+          overlay.remove()
+          onCapture(file)
+        }, 'image/jpeg', 0.85)
+      }
+    }, '📸 촬영')
+    const cancelBtn = el('button', { className: 'btn btn-secondary', style: 'flex:1', onClick: () => { if (stream) stream.getTracks().forEach(t => t.stop()); overlay.remove() } }, '✕ 취소')
+    const overlay = el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px' },
+      el('div', { style: 'background:#fff;border-radius:12px;padding:16px;width:100%;max-width:520px' },
+        el('div', { style: 'font-size:15px;font-weight:700;margin-bottom:10px' }, '📷 카메라 촬영'),
+        video,
+        statusMsg,
+        el('div', { style: 'display:flex;gap:8px;margin-top:12px' }, cancelBtn, captureBtn)
+      )
+    )
+    document.body.appendChild(overlay)
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .then(s => { stream = s; video.srcObject = s; statusMsg.textContent = '카메라를 촬영 대상에 맞춘 뒤 촬영 버튼을 누르세요.' })
+      .catch(err => {
+        statusMsg.style.color = '#e74c3c'
+        statusMsg.textContent = '카메라를 시작할 수 없습니다: ' + (err && err.name ? err.name : '오류') + ' — 권한 허용 및 HTTPS 환경을 확인하세요.'
+      })
+  }
+
   function _previewEvidenceFile(file) {
     const dataUrl = file.file_path || file.file_data
     if (!dataUrl) { alert('파일 데이터를 찾을 수 없습니다.'); return }
@@ -1708,9 +1781,8 @@
       })
     }
 
-    fileInput.onchange = () => {
-      const files = Array.from(fileInput.files || [])
-      files.forEach(file => {
+    function addPendingFile(file) {
+      {
         if (file.size > 10 * 1024 * 1024) { alert(file.name + '은 10MB를 초과합니다.'); return }
         window._pendingFiles.push(file)
         const fname = file.name || ''
@@ -1734,9 +1806,9 @@
         if (extractionInfo.length && !isEdit) {
           Store.addExtraction({ id: Date.now(), file_name: fname, file_hash: fname, extracted_date: dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null, extracted_type: docType || null, evidence_id: null })
         }
-      })
-      fileInput.value = ''
+      }
     }
+    fileInput.onchange = () => { Array.from(fileInput.files || []).forEach(addPendingFile); fileInput.value = '' }
 
     const tagContainer = el('div', { style: 'margin-top:8px' })
     const autoTagBox = el('div', { id: 'auto-tag-box', style: 'margin:8px 0;padding:10px;background:#f0f6ff;border-radius:8px;display:none;font-size:12px' })
@@ -1821,7 +1893,7 @@
       )
     )
 
-    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'font-size:12px' }, sensitiveCheck, ' 민감정보 포함'), autoTagBox, el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, fileListContainer), pmSection, el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
+    form.append(el('label', {}, '제목', title), el('label', {}, '파일 유형', fileType), el('label', {}, '상태', status), el('label', {}, '유효기간', expiryDate), el('label', { style: 'font-size:12px' }, sensitiveCheck, ' 민감정보 포함'), autoTagBox, el('label', {}, '파일 첨부 (다중 선택 가능)', fileInput, el('button', { type: 'button', className: 'btn btn-sm btn-secondary', style: 'font-size:11px;margin-left:6px', onClick: () => openCameraCapture(f => addPendingFile(f)) }, '📷 카메라 촬영'), fileListContainer), pmSection, el('label', { style: 'margin-top:8px;font-weight:500' }, '연결 항목'), tagContainer)
     modal(isEdit ? '증빙 수정' : '증빙 추가', form)
     document.getElementById('modal-save').onclick = function save() {
       const pendingFiles = window._pendingFiles || []
@@ -2219,25 +2291,41 @@
     return container
   }
 
+  function levelMeta(level) {
+    return {
+      high: { label: '고위험', color: '#ef4444' },
+      medium: { label: '중위험', color: '#f59e0b' },
+      low: { label: '저위험', color: '#10b981' },
+      pending: { label: '미진단', color: '#95a5a6' }
+    }[level] || { label: '미진단', color: '#95a5a6' }
+  }
+
+  function scoreColor(score) {
+    if (score == null) return '#95a5a6'
+    if (score >= 80) return '#10b981'
+    if (score >= 50) return '#f59e0b'
+    return '#ef4444'
+  }
+
   function renderSupplierRiskPanel() {
     const suppliers = Supplier.getAll()
     const container = el('div', {})
-    const graded = suppliers.filter(s => s.last_vsme_grade)
-    const highRisk = graded.filter(s => s.last_vsme_grade === 'C' || s.last_vsme_grade === 'D')
-    const medRisk = graded.filter(s => s.last_vsme_grade === 'B')
-    const lowRisk = graded.filter(s => s.last_vsme_grade === 'A')
+    const agg = SupplierRisk.getAggregateScores()
+    const counts = { high: 0, medium: 0, low: 0, pending: 0 }
+    suppliers.forEach(s => { counts[SupplierRisk.getSupplierRiskLevel(s.id)]++ })
 
-    const riskCategories = [
-      { label: '환경 리스크', icon: '🌿', color: '#10b981', desc: '폐기물·배출·인증 관련' },
-      { label: '사회 리스크', icon: '👥', color: '#3b82f6', desc: '인권·안전·근로 관련' },
-      { label: '지배구조 리스크', icon: '🏛', color: '#8b5cf6', desc: '윤리·컴플라이언스 관련' },
-      { label: '공급망 리스크', icon: '🔗', color: '#f59e0b', desc: '이중대응·물량 리스크' }
+    const catDefs = [
+      { axis: 'E', label: '환경 리스크', icon: '🌿', desc: '폐기물·배출·인증 관련' },
+      { axis: 'S', label: '사회 리스크', icon: '👥', desc: '인권·안전·근로 관련' },
+      { axis: 'G', label: '지배구조 리스크', icon: '🏛', desc: '윤리·컴플라이언스 관련' },
+      { axis: 'overall', label: '종합 리스크', icon: '⚠', desc: 'E·S·G 가중 평균' }
     ]
 
-    const riskCards = riskCategories.map(cat => {
-      const score = Math.floor(Math.random() * 40) + 30
-      const level = score < 35 ? '낮음' : score < 55 ? '보통' : score < 75 ? '높음' : '위험'
-      const levelColor = score < 35 ? '#10b981' : score < 55 ? '#f59e0b' : score < 75 ? '#f97316' : '#ef4444'
+    const riskCards = catDefs.map(cat => {
+      const score = agg[cat.axis]
+      const has = score != null
+      const level = !has ? '미진단' : score >= 80 ? '낮음' : score >= 50 ? '보통' : '높음'
+      const levelColor = scoreColor(score)
       return el('div', { style: 'background:#fff;border:1px solid #f0f0f0;border-radius:10px;padding:16px' },
         el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:12px' },
           el('span', { style: 'font-size:24px' }, cat.icon),
@@ -2248,45 +2336,117 @@
         ),
         el('div', { style: 'display:flex;align-items:center;gap:12px' },
           el('div', { style: `width:48px;height:48px;border-radius:10px;background:${levelColor}15;display:flex;align-items:center;justify-content:center` },
-            el('span', { style: `font-size:18px;font-weight:700;color:${levelColor}` }, score)
+            el('span', { style: `font-size:18px;font-weight:700;color:${levelColor}` }, has ? score : '-')
           ),
           el('div', { style: 'flex:1' },
             el('div', { style: `font-size:12px;font-weight:600;color:${levelColor}` }, level),
             el('div', { style: 'background:#f0f0f0;height:6px;border-radius:3px;overflow:hidden;margin-top:4px' },
-              el('div', { style: `background:${levelColor};height:100%;width:${score}%;border-radius:3px` })
+              el('div', { style: `background:${levelColor};height:100%;width:${has ? score : 0}%;border-radius:3px` })
             )
           )
         )
       )
     })
 
+    const rows = suppliers.map(s => {
+      const sc = SupplierRisk.getSupplierScores(s.id)
+      const level = SupplierRisk.getSupplierRiskLevel(s.id)
+      const lm = levelMeta(level)
+      return el('tr', {},
+        el('td', { style: 'font-weight:600' }, s.name),
+        el('td', { style: 'text-align:center;color:' + scoreColor(sc?.E) }, sc ? sc.E : '-'),
+        el('td', { style: 'text-align:center;color:' + scoreColor(sc?.S) }, sc ? sc.S : '-'),
+        el('td', { style: 'text-align:center;color:' + scoreColor(sc?.G) }, sc ? sc.G : '-'),
+        el('td', { style: 'text-align:center;font-weight:700;color:' + scoreColor(sc?.overall) }, sc ? sc.overall : '-'),
+        el('td', { style: 'text-align:center' }, el('span', { style: `background:${lm.color}15;color:${lm.color};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;border:1px solid ${lm.color}30` }, lm.label)),
+        el('td', {}, el('button', { className: 'btn btn-sm btn-primary', onClick: () => openSupplierRiskModal(s.id) }, sc ? '재진단' : '진단'))
+      )
+    })
+
     container.append(
       el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
-        el('h3', { style: 'margin:0;font-size:16px' }, '⚠ 리스크 평가')
+        el('h3', { style: 'margin:0;font-size:16px' }, '⚠ ESG 리스크 진단'),
+        el('span', { style: 'font-size:12px;color:#888' }, `진단 완료 ${agg.assessed}/${agg.total}개사`)
       ),
       el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;background:#f8f9fa;border-bottom:1px solid #eee' },
         el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
           el('div', { style: 'font-size:11px;color:#999' }, '고위험'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#ef4444;margin-top:2px' }, highRisk.length)
+          el('div', { style: 'font-size:22px;font-weight:700;color:#ef4444;margin-top:2px' }, counts.high)
         ),
         el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
           el('div', { style: 'font-size:11px;color:#999' }, '중위험'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#f59e0b;margin-top:2px' }, medRisk.length)
+          el('div', { style: 'font-size:22px;font-weight:700;color:#f59e0b;margin-top:2px' }, counts.medium)
         ),
         el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
           el('div', { style: 'font-size:11px;color:#999' }, '저위험'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#10b981;margin-top:2px' }, lowRisk.length)
+          el('div', { style: 'font-size:22px;font-weight:700;color:#10b981;margin-top:2px' }, counts.low)
         ),
         el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px' },
-          el('div', { style: 'font-size:11px;color:#999' }, '미평가'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#999;margin-top:2px' }, suppliers.length - graded.length)
+          el('div', { style: 'font-size:11px;color:#999' }, '미진단'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#999;margin-top:2px' }, counts.pending)
         )
       ),
       el('div', { style: 'padding:20px' },
-        el('div', { style: 'display:grid;grid-template-columns:repeat(2,1fr);gap:16px' }, ...riskCards)
+        el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:16px' }, ...riskCards)
+      ),
+      el('div', { className: 'card', style: 'margin-top:0' },
+        el('div', { className: 'card-header' }, el('h3', {}, '협력사별 리스크 점수')),
+        suppliers.length ? el('table', { style: 'font-size:12px' },
+          el('thead', {}, el('tr', {},
+            el('th', {}, '회사명'), el('th', { style: 'text-align:center' }, '환경(E)'), el('th', { style: 'text-align:center' }, '사회(S)'), el('th', { style: 'text-align:center' }, '지배구조(G)'), el('th', { style: 'text-align:center' }, '종합'), el('th', { style: 'text-align:center' }, '등급'), el('th', {}, '관리')
+          )),
+          el('tbody', {}, ...rows)
+        ) : el('div', { style: 'text-align:center;padding:24px;color:#ccc;font-size:12px' }, '등록된 협력사가 없습니다')
       )
     )
     return container
+  }
+
+  function openSupplierRiskModal(supplierId) {
+    const supplier = Supplier.getAll().find(s => s.id === supplierId)
+    if (!supplier) return
+    const existing = Store.getSupplierRiskItems(supplierId)
+    const getAns = qid => (existing.find(i => i.question_id === qid)?.answer) ?? ''
+    const selectEls = {}
+    const form = el('form', { onSubmit: e => e.preventDefault() })
+    const axisLabels = { E: '🌿 환경', S: '👥 사회', G: '🏛 지배구조' }
+    ;['E', 'S', 'G'].forEach(axis => {
+      form.append(el('div', { style: 'font-size:12px;font-weight:700;color:#7C3AED;margin:12px 0 4px' }, axisLabels[axis]))
+      SupplierRisk.ESG_QUESTIONS[axis].forEach(q => {
+        const sel = el('select', { style: 'width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px' },
+          el('option', { value: '' }, '미응답'),
+          el('option', { value: 'yes' }, '예'),
+          el('option', { value: 'partial' }, '부분'),
+          el('option', { value: 'no' }, '아니오')
+        )
+        sel.value = getAns(q.id)
+        selectEls[q.id] = sel
+        form.append(el('label', { style: 'display:block;font-size:12px;margin-bottom:8px' },
+          el('span', { style: 'display:block;margin-bottom:3px;color:#555' }, `${q.question} (가중치 ${q.weight})`), sel))
+      })
+    })
+    const preview = el('div', { style: 'margin-top:12px;padding:10px 12px;background:#f8f6ff;border-radius:8px;font-size:12px;color:#555' }, '응답을 선택하면 점수가 미리 계산됩니다.')
+    const collect = () => { const a = {}; Object.entries(selectEls).forEach(([qid, sel]) => { if (sel.value) answers[qid] = sel.value }); return a }
+    const updatePreview = () => {
+      const answers = {}
+      Object.entries(selectEls).forEach(([qid, sel]) => { if (sel.value) answers[qid] = sel.value })
+      const sc = SupplierRisk.scoreAnswers(answers)
+      preview.textContent = sc.overall == null
+        ? '응답을 선택하면 점수가 미리 계산됩니다.'
+        : `환경 ${sc.E ?? '-'} · 사회 ${sc.S ?? '-'} · 지배구조 ${sc.G ?? '-'} → 종합 ${sc.overall}점 (${SupplierRisk.getScoreLabel(sc.overall)})`
+    }
+    Object.values(selectEls).forEach(sel => sel.addEventListener('change', updatePreview))
+    updatePreview()
+    form.append(preview)
+    modal(`ESG 리스크 진단 — ${supplier.name}`, form)
+    document.getElementById('modal-save').onclick = () => {
+      const answers = {}
+      Object.entries(selectEls).forEach(([qid, sel]) => { if (sel.value) answers[qid] = sel.value })
+      SupplierRisk.saveAssessment(supplierId, answers)
+      showToast('리스크 진단이 저장되었습니다.', 'success')
+      closeModal()
+      renderSupplier()
+    }
   }
 
   function renderSupplyChainPanel() {
@@ -3022,6 +3182,11 @@
     }).join('')
 
     c.append(
+      benchmarks.is_demo ? el('div', { style: 'display:flex;gap:8px;align-items:center;padding:10px 16px;margin-bottom:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#b45309' },
+        el('span', { style: 'font-size:16px' }, '⚠'),
+        el('span', {}, '현재 벤치마크는 데모 기준값입니다. 실제 비교에는 공인 외부 자료를 입력하세요.'),
+        el('button', { className: 'btn btn-sm btn-secondary', style: 'margin-left:auto', onClick: () => _openBenchmarkEditor() }, '기준값 편집')
+      ) : null,
       el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;background:#fff;border-radius:12px 12px 0 0' },
         el('h3', { style: 'margin:0;font-size:16px' }, '📈 벤치마크 모니터링'),
         el('div', { style: 'display:flex;gap:8px;align-items:center' },
@@ -3034,11 +3199,12 @@
           el('button', { className: 'btn btn-primary', onClick: () => { renderMonitor() } }, '비교 실행')
         )
       ),
-      el('div', { style: 'padding:12px 20px;background:#f8f9fa;border-bottom:1px solid #eee;font-size:12px;color:#888;display:flex;gap:16px' },
+      el('div', { style: 'padding:12px 20px;background:#f8f9fa;border-bottom:1px solid #eee;font-size:12px;color:#888;display:flex;gap:16px;align-items:center;flex-wrap:wrap' },
         el('span', {}, `글로벌 평균: ${benchmarks.global_avg}점`),
-        el('span', {}, `출처: ${benchmarks.sample_source}`),
-        el('span', {}, `갱신: ${benchmarks.last_updated}`),
-        el('span', { style: `font-weight:600;color:${companyScore > benchmarks.global_avg ? '#27ae60' : '#e74c3c'}` }, `자사: ${companyScore}점`)
+        el('span', { style: benchmarks.is_demo ? 'color:#b45309;font-weight:600' : '' }, `출처: ${benchmarks.sample_source}${benchmarks.is_demo ? ' ⚠ 확인 필요' : ''}`),
+        el('span', {}, `갱신: ${benchmarks.last_updated || '미입력'}`),
+        el('span', { style: `font-weight:600;color:${companyScore > benchmarks.global_avg ? '#27ae60' : '#e74c3c'}` }, `자사: ${companyScore}점`),
+        el('button', { className: 'btn btn-sm btn-secondary', style: 'margin-left:auto', onClick: () => _openBenchmarkEditor() }, '⚙ 기준값 편집')
       ),
       el('div', { style: 'display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:20px;overflow-x:auto' },
         el('div', { style: 'background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:0;overflow:hidden' },
@@ -3058,6 +3224,70 @@
       ),
       el('div', { id: 'monitorResult', style: 'padding:0 20px 20px' })
     )
+  }
+
+  function _openBenchmarkEditor() {
+    const meta = MONITORING.getBenchmarks()
+    let rows = MONITORING.getIndustries().map(i => ({ ...i }))
+    const fieldStyle = 'width:100%;font-size:13px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box'
+    const labelStyle = 'font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px'
+
+    const rowsC = el('div', { style: 'display:flex;flex-direction:column;gap:6px' })
+    const renderRows = () => {
+      rowsC.innerHTML = ''
+      if (!rows.length) rowsC.append(el('div', { style: 'font-size:12px;color:#999;padding:8px 0' }, '등록된 업종이 없습니다.'))
+      rows.forEach((r, idx) => {
+        rowsC.append(el('div', { style: 'display:flex;gap:6px;align-items:center' },
+          el('input', { value: r.label, placeholder: '업종명', style: 'flex:2;min-width:0;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px', onInput: e => { rows[idx].label = e.target.value } }),
+          el('input', { type: 'number', value: r.avg_score, placeholder: '평균', style: 'flex:1;min-width:0;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px', onInput: e => { rows[idx].avg_score = e.target.value } }),
+          el('input', { type: 'number', value: r.sample_size, placeholder: '표본', style: 'flex:1;min-width:0;font-size:12px;padding:6px 8px;border:1px solid #ddd;border-radius:6px', onInput: e => { rows[idx].sample_size = e.target.value } }),
+          el('button', { className: 'btn btn-sm btn-danger', title: '삭제', onClick: () => { rows.splice(idx, 1); renderRows() } }, '✕')
+        ))
+      })
+    }
+    renderRows()
+
+    const sourceInput = el('input', { value: meta.sample_source || '', style: fieldStyle })
+    const typeSel = el('select', { style: fieldStyle },
+      el('option', { value: 'internal_demo', selected: meta.source_type === 'internal_demo' }, '내부 기준값 (데모)'),
+      el('option', { value: 'external', selected: meta.source_type === 'external' }, '외부 공개 자료'),
+      el('option', { value: 'manual', selected: meta.source_type === 'manual' }, '수동 입력')
+    )
+    const dateInput = el('input', { type: 'date', value: meta.last_updated || '', style: fieldStyle })
+
+    const form = el('div', { style: 'display:flex;flex-direction:column;gap:12px' },
+      el('div', {}, el('label', { style: labelStyle }, '출처'), sourceInput),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+        el('div', {}, el('label', { style: labelStyle }, '출처 유형'), typeSel),
+        el('div', {}, el('label', { style: labelStyle }, '갱신일'), dateInput)
+      ),
+      el('div', {},
+        el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px' },
+          el('label', { style: labelStyle + ';margin:0' }, '업종별 평균 점수 / 표본 수'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { rows.push({ code: 'ind_' + Date.now(), label: '', avg_score: 0, sample_size: 0 }); renderRows() } }, '+ 업종 추가')
+        ),
+        el('div', { style: 'display:flex;gap:6px;font-size:10px;color:#999;margin-bottom:4px' },
+          el('span', { style: 'flex:2' }, '업종명'), el('span', { style: 'flex:1' }, '평균'), el('span', { style: 'flex:1' }, '표본수'), el('span', { style: 'width:28px' }, '')
+        ),
+        rowsC
+      ),
+      el('p', { style: 'margin:0;font-size:11px;color:#999' }, '입력값은 로컬에 저장되며, 출처 유형을 "내부 기준값(데모)"에서 변경하면 경고 표시가 사라집니다.')
+    )
+    modal('📊 벤치마크 기준값 편집', form)
+    document.getElementById('modal-save').onclick = () => {
+      const existing = MONITORING.getIndustries().map(i => i.code)
+      const keepCodes = new Set(rows.map(r => r.code))
+      existing.forEach(code => { if (!keepCodes.has(code)) Store.deleteBenchmarkIndustry(code) })
+      rows.forEach(r => {
+        const payload = { label: String(r.label || '').trim() || '업종', avg_score: Number(r.avg_score) || 0, sample_size: Number(r.sample_size) || 0 }
+        if (existing.includes(r.code)) Store.updateBenchmarkIndustry(r.code, payload)
+        else Store.addBenchmarkIndustry({ code: r.code, ...payload })
+      })
+      Store.setBenchmarkMeta({ source: sourceInput.value.trim() || '수동 입력', source_type: typeSel.value, last_updated: dateInput.value || null })
+      closeModal()
+      showToast('벤치마크 기준값이 저장되었습니다.', 'success')
+      renderMonitor()
+    }
   }
 
   // ==================== ISSA 5000 감사 보증 ====================
@@ -3187,6 +3417,22 @@
   }
 
   // ==================== 평가기관 제출 ====================
+  function _downloadSubmission(submissionId) {
+    const companyId = (Store.getCompanies()[0]?.id) || 'default'
+    const submission = SUBMISSION.getSubmissions(companyId).find(s => s.id === submissionId)
+    if (!submission) return
+    const file = SUBMISSION.generateFile(submission)
+    if (!file) return alert('이 평가기관은 파일 제출을 지원하지 않습니다.')
+    const blob = new Blob(['\uFEFF' + file.content], { type: file.mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = file.filename
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast(`${file.filename} 파일이 생성되었습니다.`, 'success')
+  }
+
   function renderSubmit() {
     const c = document.getElementById('page-submit')
     if (!c) return
@@ -3225,7 +3471,10 @@
               el('td', {}, a.format),
               el('td', { style: `color:${statusColors[a.status]};font-weight:600` }, { available: '사용가능', pending: '준비중', not_available: '미지원' }[a.status]),
               el('td', { style: 'font-size:11px;color:#888' }, a.description),
-              el('td', {}, sub ? el('span', { style: 'color:#27ae60;font-size:11px' }, `✓ 등록됨 (준비율 ${SUBMISSION.calcReadiness(sub)}%)`) : null)
+              el('td', {}, sub ? el('div', { style: 'display:flex;align-items:center;gap:8px' },
+                el('span', { style: 'color:#27ae60;font-size:11px;white-space:nowrap' }, `✓ 등록됨 (준비율 ${SUBMISSION.calcReadiness(sub)}%)`),
+                a.status === 'available' ? el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _downloadSubmission(sub.id) }, '⬇ 제출 파일') : null
+              ) : null)
             )
           }))
         )
@@ -3354,8 +3603,31 @@
   }
 
   // ==================== ERP/API 연동 ====================
+  async function _testApiEndpoint(id, btn) {
+    const original = btn.textContent
+    btn.disabled = true
+    btn.textContent = '테스트 중...'
+    const res = await API.testConnection(id)
+    btn.disabled = false
+    btn.textContent = original
+    if (res.ok) showToast(`연결 성공 (HTTP ${res.status}, ${res.latency}ms)`, 'success')
+    else showToast(`연결 실패: ${res.error || 'ERROR'}${res.message ? ' — ' + res.message : ''}`, 'error')
+    renderAPI()
+  }
+
+  async function _pullApiEndpoint(id, btn) {
+    const original = btn.textContent
+    btn.disabled = true
+    btn.textContent = '수집 중...'
+    const res = await API.pullData(id)
+    btn.disabled = false
+    btn.textContent = original
+    if (res.ok) showToast(`데이터 수집 완료: ${res.imported}건`, 'success')
+    else showToast(`수집 실패: ${res.error || 'ERROR'}${res.message ? ' — ' + res.message : ''}`, 'error')
+    renderAPI()
+  }
+
   function renderAPI() {
-    const c = document.getElementById('page-api')
     if (!c) return
     const endpoints = API.getEndpoints() || []
     const status = API.getSyncStatus()
@@ -3371,20 +3643,47 @@
       ),
       el('div', { className: 'card' },
         el('div', { className: 'card-header' }, el('h3', {}, '엔드포인트 목록')),
+        el('div', { style: 'padding:10px 20px;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:11px;color:#92400e' },
+          '⚠ 실제 연동을 위해서는 각 엔드포인트의 Base URL을 입력하고 연결 테스트를 실행하세요. (인증 토큰 사용 시 Bearer 형식)'
+        ),
         el('table', { style: 'font-size:12px' },
-          el('thead', {}, el('tr', {}, el('th', {}, 'ID'), el('th', {}, '이름'), el('th', {}, '소스'), el('th', {}, '카테고리'), el('th', {}, '방식'), el('th', {}, '상태'), el('th', {}, '마지막동기화'), el('th', {}, '레코드수'), el('th', {}, '관리'))),
+          el('thead', {}, el('tr', {}, el('th', {}, 'ID'), el('th', {}, '이름'), el('th', {}, '소스'), el('th', {}, '카테고리'), el('th', {}, '방식'), el('th', {}, 'Base URL'), el('th', {}, '상태'), el('th', {}, '마지막동기화'), el('th', {}, '레코드'), el('th', {}, '관리'))),
           el('tbody', {}, ...endpoints.map(ep => el('tr', {},
             el('td', { style: 'font-family:monospace;font-size:11px' }, ep.id),
             el('td', {}, ep.name),
             el('td', {}, ep.source),
             el('td', {}, ep.category),
             el('td', {}, ep.method),
+            el('td', {}, el('input', { id: 'apiBase_' + ep.id, value: ep.base_url || '', placeholder: 'https://erp.company.com', style: 'width:190px;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:11px', onChange: e => API.setEndpointConfig(ep.id, { base_url: e.target.value.trim() }) })),
             el('td', { style: ep.status === 'active' ? 'color:#27ae60;font-weight:600' : 'color:#999' }, ep.status === 'active' ? '활성' : '비활성'),
             el('td', {}, ep.last_sync ? new Date(ep.last_sync).toLocaleString('ko-KR') : '-'),
-            el('td', { style: 'text-align:center' }, ep.record_count),
-            el('td', {}, el('button', { className: 'btn btn-sm' + (ep.status === 'active' ? ' btn-danger' : ' btn-success'), onClick: () => { API.toggleEndpoint(ep.id); renderAPI() } }, ep.status === 'active' ? '비활성화' : '활성화'))
+            el('td', { style: 'text-align:center' }, ep.record_count || 0),
+            el('td', { style: 'white-space:nowrap' },
+              el('button', { className: 'btn btn-sm', style: 'background:#eef2ff;color:#4f46e5;border:1px solid #c7d2fe;font-size:11px', onClick: e => _testApiEndpoint(ep.id, e.target) }, '연결 테스트'),
+              el('button', { className: 'btn btn-sm', style: 'background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;font-size:11px;margin-left:4px', onClick: e => _pullApiEndpoint(ep.id, e.target) }, '수집'),
+              el('button', { className: 'btn btn-sm' + (ep.status === 'active' ? ' btn-danger' : ' btn-success'), style: 'font-size:11px;margin-left:4px', onClick: () => { API.toggleEndpoint(ep.id); renderAPI() } }, ep.status === 'active' ? '비활성화' : '활성화')
+            )
           )))
         )
+      ),
+      el('div', { className: 'card' },
+        el('div', { className: 'card-header' }, el('h3', {}, '📡 연동 로그')),
+        (() => {
+          const logs = Store.getApiDataLogs().slice(-8).reverse()
+          if (!logs.length) return el('div', { style: 'padding:16px 20px;color:#aaa;font-size:12px' }, '연동 이력이 없습니다')
+          return el('table', { style: 'font-size:11px' },
+            el('thead', {}, el('tr', {}, el('th', {}, '시각'), el('th', {}, '엔드포인트'), el('th', {}, '유형'), el('th', {}, '결과'), el('th', {}, '상태코드'), el('th', {}, '지연(ms)'), el('th', {}, '비고'))),
+            el('tbody', {}, ...logs.map(l => el('tr', {},
+              el('td', {}, new Date(l.created_at).toLocaleString('ko-KR')),
+              el('td', { style: 'font-family:monospace' }, l.endpoint_id),
+              el('td', {}, l.type === 'test' ? '연결 테스트' : '데이터 수집'),
+              el('td', { style: l.ok ? 'color:#16a34a;font-weight:600' : 'color:#ef4444;font-weight:600' }, l.ok ? '성공' : '실패'),
+              el('td', {}, l.status_code != null ? l.status_code : '-'),
+              el('td', {}, l.latency_ms != null ? l.latency_ms + 'ms' : '-'),
+              el('td', {}, l.error ? l.error : (l.imported != null ? `${l.imported}건 수집` : ''))
+            )))
+          )
+        })()
       ),
       el('div', { className: 'card' },
         el('div', { className: 'card-header' },

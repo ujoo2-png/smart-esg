@@ -1,4 +1,4 @@
-const API_ENDPOINTS = [
+const API_DEFAULT_ENDPOINTS = [
   { id: 'erp_ghg', name: 'ERP - 온실가스 배출량', source: 'ERP', category: 'ghg', method: 'POST', path: '/api/v1/ghg', format: 'json', status: 'inactive', last_sync: null, record_count: 0 },
   { id: 'erp_energy', name: 'ERP - 에너지 사용량', source: 'ERP', category: 'energy', method: 'POST', path: '/api/v1/energy', format: 'json', status: 'inactive', last_sync: null, record_count: 0 },
   { id: 'erp_water', name: 'ERP - 용수 사용량', source: 'ERP', category: 'water', method: 'POST', path: '/api/v1/water', format: 'json', status: 'inactive', last_sync: null, record_count: 0 },
@@ -25,20 +25,104 @@ const DATA_SCHEMAS = {
 
 const API = {
   getEndpoints() {
-    return API_ENDPOINTS
+    return Store.getApiEndpoints()
   },
 
   getEndpoint(id) {
-    return API_ENDPOINTS.find(e => e.id === id)
+    return Store.getApiEndpoint(id)
   },
 
   toggleEndpoint(id) {
-    const ep = API_ENDPOINTS.find(e => e.id === id)
-    if (ep) {
-      ep.status = ep.status === 'active' ? 'inactive' : 'active'
-      Store._save()
-    }
+    const ep = Store.getApiEndpoint(id)
+    if (!ep) return null
+    const status = ep.status === 'active' ? 'inactive' : 'active'
+    Store.updateApiEndpoint(id, { status })
     return ep
+  },
+
+  setEndpointConfig(id, config) {
+    return Store.updateApiEndpoint(id, config)
+  },
+
+  buildUrl(ep) {
+    const base = (ep.base_url || '').replace(/\/+$/, '')
+    if (!base) return null
+    if (ep.method === 'CSV' || !ep.path || ep.path === '-') return base
+    return base + (ep.path.startsWith('/') ? ep.path : '/' + ep.path)
+  },
+
+  async _request(ep, { signal, body } = {}) {
+    const url = this.buildUrl(ep)
+    if (!url) return { ok: false, error: 'BASE_URL_MISSING', message: '엔드포인트 URL이 설정되지 않았습니다.' }
+    const method = ep.method === 'CSV' ? 'GET' : ep.method
+    const headers = { 'Content-Type': 'application/json', ...(ep.headers || {}) }
+    if (ep.auth_token) headers['Authorization'] = ep.auth_token.startsWith('Bearer ') ? ep.auth_token : 'Bearer ' + ep.auth_token
+    const started = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    try {
+      const res = await fetch(url, {
+        method,
+        headers,
+        body: method === 'POST' ? JSON.stringify(body ?? {}) : undefined,
+        signal
+      })
+      const latency = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started)
+      return { ok: res.ok, status: res.status, latency, response: res }
+    } catch (e) {
+      const latency = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started)
+      const aborted = e && e.name === 'AbortError'
+      return { ok: false, error: aborted ? 'TIMEOUT' : 'FETCH_ERROR', message: aborted ? '응답 시간 초과' : (e && e.message) || '네트워크 오류', latency }
+    }
+  },
+
+  async testConnection(id) {
+    const ep = Store.getApiEndpoint(id)
+    if (!ep) return { ok: false, error: 'NOT_FOUND' }
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const timeout = setTimeout(() => controller && controller.abort(), ep.timeout_ms || 8000)
+    const result = await this._request(ep, { signal: controller ? controller.signal : undefined, body: this.generatePayloadExample(ep.category) })
+    clearTimeout(timeout)
+    const patch = {
+      last_test_at: new Date().toISOString(),
+      last_test_ok: result.ok,
+      last_status_code: result.status ?? null,
+      last_latency_ms: result.latency ?? null,
+      last_error: result.ok ? null : (result.error || 'ERROR'),
+      status: result.ok ? 'active' : ep.status
+    }
+    Store.updateApiEndpoint(id, patch)
+    Store.addApiDataLog({ endpoint_id: id, type: 'test', ok: result.ok, status_code: result.status ?? null, latency_ms: result.latency ?? null, error: result.ok ? null : (result.error || result.message || 'ERROR') })
+    return { ...result, ...patch }
+  },
+
+  async pullData(id) {
+    const ep = Store.getApiEndpoint(id)
+    if (!ep) return { ok: false, error: 'NOT_FOUND' }
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const timeout = setTimeout(() => controller && controller.abort(), ep.timeout_ms || 8000)
+    const result = await this._request(ep, { signal: controller ? controller.signal : undefined, body: this.generatePayloadExample(ep.category) })
+    clearTimeout(timeout)
+    if (!result.ok) {
+      Store.addApiDataLog({ endpoint_id: id, type: 'pull', ok: false, status_code: result.status ?? null, error: result.error || result.message || 'ERROR' })
+      return { ok: false, imported: 0, error: result.error, message: result.message, status: result.status }
+    }
+    let rows = []
+    try {
+      const payload = await result.response.json()
+      if (Array.isArray(payload)) rows = payload
+      else if (Array.isArray(payload.data)) rows = payload.data
+      else if (Array.isArray(payload.records)) rows = payload.records
+      else if (payload && typeof payload === 'object') rows = [payload]
+    } catch (e) {
+      Store.addApiDataLog({ endpoint_id: id, type: 'pull', ok: false, error: 'PARSE_ERROR', message: e.message })
+      return { ok: false, imported: 0, error: 'PARSE_ERROR', message: '응답을 JSON으로 해석할 수 없습니다.' }
+    }
+    const imported = rows.length ? this.importData(ep.category, rows) : { imported: 0, errors: [], total: 0 }
+    Store.updateApiEndpoint(id, {
+      last_sync: new Date().toISOString(),
+      record_count: (ep.record_count || 0) + imported.imported
+    })
+    Store.addApiDataLog({ endpoint_id: id, type: 'pull', ok: true, status_code: result.status ?? null, latency_ms: result.latency ?? null, imported: imported.imported, total: imported.total })
+    return { ok: true, imported: imported.imported, errors: imported.errors || [], total: imported.total, status: result.status }
   },
 
   getSchema(category) {
@@ -126,13 +210,14 @@ const API = {
   },
 
   getSyncStatus() {
-    const endpoints = API_ENDPOINTS.filter(e => e.status === 'active')
-    const totalRecords = endpoints.reduce((s, e) => s + e.record_count, 0)
+    const all = this.getEndpoints()
+    const endpoints = all.filter(e => e.status === 'active')
+    const totalRecords = endpoints.reduce((s, e) => s + (e.record_count || 0), 0)
     const lastSyncs = endpoints.filter(e => e.last_sync).map(e => new Date(e.last_sync).getTime())
     const latestSync = lastSyncs.length ? new Date(Math.max(...lastSyncs)) : null
     return {
       active_endpoints: endpoints.length,
-      total_endpoints: API_ENDPOINTS.length,
+      total_endpoints: all.length,
       total_records: totalRecords,
       latest_sync: latestSync ? latestSync.toISOString() : '연동 이력 없음'
     }

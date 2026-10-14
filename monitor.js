@@ -1,4 +1,4 @@
-const BENCHMARK_DATA = {
+const BENCHMARK_FALLBACK = {
   industries: [
     { code: 'mfg', label: '제조업', avg_score: 52, sample_size: 156 },
     { code: 'ict', label: 'ICT', avg_score: 61, sample_size: 89 },
@@ -9,18 +9,38 @@ const BENCHMARK_DATA = {
     { code: 'retail', label: '유통', avg_score: 47, sample_size: 78 },
     { code: 'pharma', label: '제약/바이오', avg_score: 55, sample_size: 36 }
   ],
-  global_avg: 51,
-  sample_source: 'EcoVadis 2024 Industry Reports',
-  last_updated: '2024-12-31'
+  source: '내부 기준값 (데모 데이터)',
+  source_type: 'internal_demo',
+  last_updated: null
 }
 
 const MONITORING = {
+  getIndustries() {
+    const stored = (typeof Store !== 'undefined' && Store.getBenchmarkIndustries) ? Store.getBenchmarkIndustries() : null
+    return (stored && stored.length) ? stored : BENCHMARK_FALLBACK.industries
+  },
+
+  getMeta() {
+    const meta = (typeof Store !== 'undefined' && Store.getBenchmarkMeta) ? Store.getBenchmarkMeta() : null
+    return meta || { source: BENCHMARK_FALLBACK.source, source_type: BENCHMARK_FALLBACK.source_type, last_updated: BENCHMARK_FALLBACK.last_updated }
+  },
+
   getBenchmarks() {
-    return BENCHMARK_DATA
+    const industries = this.getIndustries()
+    const sum = industries.reduce((acc, i) => acc + (Number(i.avg_score) || 0), 0)
+    const meta = this.getMeta()
+    return {
+      industries,
+      global_avg: industries.length ? Math.round(sum / industries.length) : 0,
+      sample_source: meta.source,
+      source_type: meta.source_type,
+      last_updated: meta.last_updated,
+      is_demo: meta.source_type === 'internal_demo'
+    }
   },
 
   getIndustryBenchmark(industryCode) {
-    return BENCHMARK_DATA.industries.find(i => i.code === industryCode)
+    return this.getIndustries().find(i => i.code === industryCode)
   },
 
   compareToIndustry(assessmentId, industryCode) {
@@ -28,6 +48,7 @@ const MONITORING = {
     if (!assessment) return null
     const benchmark = this.getIndustryBenchmark(industryCode)
     if (!benchmark) return null
+    const benchmarks = this.getBenchmarks()
     const companyScore = assessment.total_score || 0
     const diff = companyScore - benchmark.avg_score
     const percentile = diff > 0
@@ -43,8 +64,8 @@ const MONITORING = {
       status: diff > 10 ? 'above' : diff > 0 ? 'slightly_above' : diff > -10 ? 'slightly_below' : 'below',
       statusLabel: diff > 10 ? '상위' : diff > 0 ? '평균 이상' : diff > -10 ? '평균 이하' : '하위',
       sample_size: benchmark.sample_size,
-      global_avg: BENCHMARK_DATA.global_avg,
-      global_diff: companyScore - BENCHMARK_DATA.global_avg
+      global_avg: benchmarks.global_avg,
+      global_diff: companyScore - benchmarks.global_avg
     }
   },
 
@@ -52,7 +73,7 @@ const MONITORING = {
     const assessment = Store.getAssessments().find(a => a.id === assessmentId)
     if (!assessment) return null
     const companyScore = assessment.total_score || 0
-    return BENCHMARK_DATA.industries.map(ind => {
+    return this.getIndustries().map(ind => {
       const diff = companyScore - ind.avg_score
       return {
         industry: ind.label,

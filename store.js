@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.9.8'
+const APP_VERSION = 'v1.9.9'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -77,11 +77,11 @@ const Store = {
       Object.keys(empty).forEach(k => {
         if (this._data[k] == null) this._data[k] = empty[k]
       })
-      this._ensureSeeds()
-      if (savedVer !== APP_VERSION) {
-        localStorage.setItem(STORE_KEY + '_ver', APP_VERSION)
-        this._save()
-      }
+    }
+    this._ensureSeeds()
+    if (savedVer !== APP_VERSION) {
+      localStorage.setItem(STORE_KEY + '_ver', APP_VERSION)
+      this._save()
     }
   },
 
@@ -184,7 +184,56 @@ const Store = {
         { id: 3, field_name: '직원명', masking_type: '부분마스킹', applies_to_ai_api: true }
       ]
     }
+    if (!d.supplierRiskItems?.length && d.suppliers?.length && typeof SupplierRisk !== 'undefined') {
+      this._seedSupplierRisk()
+    }
+    this._seedApiEndpoints()
+    this._seedBenchmarks()
     this._save()
+  },
+
+  _seedBenchmarks() {
+    if (this.data.benchmarks) return
+    this.data.benchmarks = {
+      industries: [
+        { code: 'mfg', label: '제조업', avg_score: 52, sample_size: 156 },
+        { code: 'ict', label: 'ICT', avg_score: 61, sample_size: 89 },
+        { code: 'finance', label: '금융', avg_score: 58, sample_size: 67 },
+        { code: 'energy', label: '에너지', avg_score: 45, sample_size: 43 },
+        { code: 'service', label: '서비스', avg_score: 49, sample_size: 112 },
+        { code: 'construction', label: '건설', avg_score: 41, sample_size: 54 },
+        { code: 'retail', label: '유통', avg_score: 47, sample_size: 78 },
+        { code: 'pharma', label: '제약/바이오', avg_score: 55, sample_size: 36 }
+      ],
+      source: '내부 기준값 (데모 데이터)',
+      source_type: 'internal_demo',
+      last_updated: null
+    }
+  },
+
+  _seedSupplierRisk() {
+    const _ts = () => Date.now() + Math.random()
+    const patterns = {
+      '에코솔루션': { e1: 'yes', e2: 'yes', e3: 'partial', e4: 'no', e5: 'yes', s1: 'yes', s2: 'yes', s3: 'yes', s4: 'yes', s5: 'yes', g1: 'yes', g2: 'yes', g3: 'yes' },
+      '그린텍(주)': { e1: 'yes', e2: 'yes', e3: 'no', e4: 'partial', e5: 'partial', s1: 'yes', s2: 'yes', s3: 'partial', s4: 'yes', s5: 'no', g1: 'yes', g2: 'partial', g3: 'yes' },
+      '스마트물산': { e1: 'partial', e2: 'no', e3: 'no', e4: 'no', e5: 'partial', s1: 'yes', s2: 'no', s3: 'no', s4: 'no', s5: 'partial', g1: 'no', g2: 'no', g3: 'yes' }
+    }
+    const qMeta = {}
+    Object.entries(SupplierRisk.ESG_QUESTIONS).forEach(([axis, arr]) => arr.forEach(q => { qMeta[q.id] = { axis, question: q.question, weight: q.weight } }))
+    this.data.suppliers.forEach(s => {
+      const pat = patterns[s.name]
+      if (!pat) return
+      Object.entries(pat).forEach(([qid, answer]) => {
+        const m = qMeta[qid]
+        if (!m) return
+        this.data.supplierRiskItems.push({ id: _ts(), supplier_id: s.id, question_id: qid, axis: m.axis, question: m.question, weight: m.weight, answer, assessed_at: new Date().toISOString() })
+      })
+    })
+    const target = this.data.suppliers.find(s => s.name === '스마트물산')
+    if (target) {
+      this.data.supplierRiskActions.push({ id: _ts(), supplier_id: target.id, description: 'ISO 14001 환경경영시스템 인증 취득', owner: '구매팀', due_date: '2026-12-31', status: 'in_progress', priority: '높음', progress: 40, created_at: new Date().toISOString() })
+      this.data.supplierRiskActions.push({ id: _ts(), supplier_id: target.id, description: '산업안전보건 교육 프로그램 도입', owner: '안전팀', due_date: '2026-09-30', status: 'not_started', priority: '높음', progress: 0, created_at: new Date().toISOString() })
+    }
   },
 
   _seedIndicatorMappings() {
@@ -340,6 +389,8 @@ const Store = {
       weightParams: [],
       ratingThresholds: [],
       suppliers: [],
+      supplierRiskItems: [],
+      supplierRiskActions: [],
       vsmeAssessments: [],
       maskingRules: [],
       projectBudget: [],
@@ -355,7 +406,10 @@ const Store = {
       capaItems: [],
       projectTasks: [],
       projectTaskLogs: [],
-      auditLogs: []
+      auditLogs: [],
+      apiEndpoints: [],
+      apiDataLogs: [],
+      benchmarks: null
     }
   },
 
@@ -882,11 +936,103 @@ const Store = {
     this._save()
   },
 
+  // ==== API Endpoints (F-18) ====
+  getApiEndpoints() { return this.data.apiEndpoints || [] },
+  getApiEndpoint(id) { return (this.data.apiEndpoints || []).find(e => e.id === id) },
+  updateApiEndpoint(id, updates) {
+    const ep = (this.data.apiEndpoints || []).find(e => e.id === id)
+    if (ep) { Object.assign(ep, updates, { updated_at: new Date().toISOString() }); this._save() }
+    return ep
+  },
+  getApiDataLogs(endpointId) {
+    const logs = this.data.apiDataLogs || []
+    return endpointId == null ? logs : logs.filter(l => l.endpoint_id === endpointId)
+  },
+  addApiDataLog(log) {
+    if (!this.data.apiDataLogs) this.data.apiDataLogs = []
+    this.data.apiDataLogs.push({ id: Date.now() + Math.random(), created_at: new Date().toISOString(), ...log })
+    if (this.data.apiDataLogs.length > 200) this.data.apiDataLogs = this.data.apiDataLogs.slice(-200)
+    this._save()
+  },
+  _seedApiEndpoints() {
+    if (this.data.apiEndpoints?.length) return
+    if (typeof API_DEFAULT_ENDPOINTS === 'undefined') return
+    this.data.apiEndpoints = API_DEFAULT_ENDPOINTS.map(e => ({ ...e, base_url: '', headers: {}, timeout_ms: 8000 }))
+  },
+
+  // ==== Benchmarks (업종 벤치마크) ====
+  getBenchmarkIndustries() { return this.data.benchmarks?.industries || [] },
+  getBenchmarkMeta() {
+    const b = this.data.benchmarks
+    return b ? { source: b.source, source_type: b.source_type, last_updated: b.last_updated } : null
+  },
+  addBenchmarkIndustry(data) {
+    if (!this.data.benchmarks) this._seedBenchmarks()
+    const industry = {
+      code: data.code || ('ind_' + Date.now()),
+      label: data.label || '신규 업종',
+      avg_score: Number(data.avg_score) || 0,
+      sample_size: Number(data.sample_size) || 0
+    }
+    this.data.benchmarks.industries.push(industry)
+    this._save()
+    return industry
+  },
+  updateBenchmarkIndustry(code, updates) {
+    const industry = (this.data.benchmarks?.industries || []).find(i => i.code === code)
+    if (industry) {
+      Object.assign(industry, updates)
+      if (updates.avg_score != null) industry.avg_score = Number(updates.avg_score) || 0
+      if (updates.sample_size != null) industry.sample_size = Number(updates.sample_size) || 0
+      this._save()
+    }
+    return industry
+  },
+  deleteBenchmarkIndustry(code) {
+    if (!this.data.benchmarks) return
+    this.data.benchmarks.industries = this.data.benchmarks.industries.filter(i => i.code !== code)
+    this._save()
+  },
+  setBenchmarkMeta(updates) {
+    if (!this.data.benchmarks) this._seedBenchmarks()
+    const b = this.data.benchmarks
+    if (updates.source != null) b.source = updates.source
+    if (updates.source_type != null) b.source_type = updates.source_type
+    if ('last_updated' in updates) b.last_updated = updates.last_updated || null
+    this._save()
+  },
+
   // ==== Suppliers ====
   getSuppliers() { return this.data.suppliers },
   addSupplier(s) { this.data.suppliers.push({ id: Date.now(), ...s, created_at: new Date().toISOString() }); this._save(); return s },
   updateSupplier(id, updates) { const i = this.data.suppliers.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.suppliers[i], updates); this._save() } },
-  deleteSupplier(id) { this.data.suppliers = this.data.suppliers.filter(x => x.id !== id); this._addDeletedId('suppliers', id); this._save() },
+  deleteSupplier(id) {
+    this.data.suppliers = this.data.suppliers.filter(x => x.id !== id)
+    this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.supplier_id !== id)
+    this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.supplier_id !== id)
+    this._addDeletedId('suppliers', id)
+    this._save()
+  },
+
+  // ==== Supplier Risk Items (5축 진단) ====
+  getSupplierRiskItems(supplierId) {
+    const items = this.data.supplierRiskItems || []
+    return supplierId == null ? items : items.filter(x => x.supplier_id === supplierId)
+  },
+  addSupplierRiskItem(item) { this.data.supplierRiskItems.push({ id: Date.now() + Math.random(), answer: null, created_at: new Date().toISOString(), ...item }); this._save(); return item },
+  updateSupplierRiskItem(id, updates) { const i = (this.data.supplierRiskItems || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.supplierRiskItems[i], updates, { updated_at: new Date().toISOString() }); this._save() } },
+  deleteSupplierRiskItem(id) { this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.id !== id); this._save() },
+  deleteSupplierRiskItemsBySupplier(supplierId) { this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.supplier_id !== supplierId); this._save() },
+
+  // ==== Supplier Risk Actions (개선조치) ====
+  getSupplierRiskActions(supplierId) {
+    const actions = this.data.supplierRiskActions || []
+    return supplierId == null ? actions : actions.filter(x => x.supplier_id === supplierId)
+  },
+  addSupplierRiskAction(a) { this.data.supplierRiskActions.push({ id: Date.now() + Math.random(), status: 'not_started', priority: '보통', progress: 0, created_at: new Date().toISOString(), ...a }); this._save(); return a },
+  updateSupplierRiskAction(id, updates) { const i = (this.data.supplierRiskActions || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.supplierRiskActions[i], updates, { updated_at: new Date().toISOString() }); this._save() } },
+  deleteSupplierRiskAction(id) { this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.id !== id); this._save() },
+  deleteSupplierRiskActionsBySupplier(supplierId) { this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.supplier_id !== supplierId); this._save() },
 
   // ==== VSME Assessments ====
   getVSMEAssessments() { return this.data.vsmeAssessments },
