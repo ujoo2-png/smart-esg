@@ -115,6 +115,65 @@ ${evidenceExcerpts}
 }`
   },
 
+  _formatRefChunksForPrompt(chunks) {
+    if (!chunks || !chunks.length) return '(참고자료 없음)'
+    return chunks.map((c, i) => {
+      const tag = 'REF-' + (c.reference_id != null ? c.reference_id : i + 1) + (c.page ? ' p.' + c.page : '') + (c.section_title ? ' · ' + c.section_title : '')
+      return `[${tag}]\n${(c.content || '').trim()}`
+    }).join('\n\n')
+  },
+
+  _buildRefineUserPrompt(title, draft, evidence) {
+    return `<item>
+항목명: ${title || '(제목 없음)'}
+</item>
+
+<draft_text>
+${draft || '(내용 없음)'}
+</draft_text>
+
+<evidence>
+${evidence}
+</evidence>
+
+위 항목의 원고를, <evidence>의 참고자료에 근거해 문장과 구성을 다듬고 미완성 문장을 완성하십시오.
+- 원고의 사실·수치·의도는 유지하되 표현과 문장 구성을 개선하십시오.
+- <evidence>에 없는 새로운 수치·사실·고유명사는 절대 만들지 마십시오.
+- 근거가 부족해 완성할 수 없는 부분은 "[확인 필요]"로 남기십시오.
+
+출력은 반드시 다음 JSON 스키마를 따르십시오:
+{
+  "draft_text": "다듬어 완성한 문장",
+  "pillar_coverage": { "policy": true/false, "action": true/false, "result": true/false },
+  "missing_pillars": ["policy", ...],
+  "cited_evidence_ids": ["REF-...", ...],
+  "unsupported_claims_flagged": ["...", ...],
+  "confidence": "HIGH" | "MEDIUM" | "LOW"
+}` 
+  },
+
+  async refineReportItem({ title, draft, refChunks }) {
+    const evidence = this._formatRefChunksForPrompt(refChunks)
+    const messages = [
+      { role: 'system', content: this._buildDraftSystemPrompt() },
+      { role: 'user', content: this._buildRefineUserPrompt(title, draft, evidence) }
+    ]
+    try {
+      const raw = await this._callAI(messages)
+      const parsed = this._safeParseJson(raw)
+      return {
+        draft_text: parsed?.draft_text || raw || '',
+        pillar_coverage: parsed?.pillar_coverage || null,
+        missing_pillars: parsed?.missing_pillars || [],
+        cited_evidence_ids: parsed?.cited_evidence_ids || [],
+        unsupported_claims_flagged: parsed?.unsupported_claims_flagged || [],
+        confidence: parsed?.confidence || 'LOW'
+      }
+    } catch (err) {
+      return { error: err.message }
+    }
+  },
+
   _buildVerifySystemPrompt() {
     return `당신은 ESG 보고서 초안의 사실관계를 증빙 문서와 대조하여 검증하는 팩트체커입니다.
 초안을 작성한 것은 당신이 아니라고 가정하고, 회의적인 제3자의 입장에서 검토하십시오.

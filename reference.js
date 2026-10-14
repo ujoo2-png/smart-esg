@@ -123,6 +123,26 @@ const Reference = {
     return matches
   },
 
+  searchTerms(terms, limit = 8) {
+    const kws = (Array.isArray(terms) ? terms : [terms]).map(s => String(s || '').toLowerCase().trim()).filter(s => s.length >= 2)
+    if (!kws.length) return []
+    const out = []
+    const seen = new Set()
+    for (const c of Store.getReferenceChunks()) {
+      const text = (c.content || '').toLowerCase()
+      let score = 0
+      kws.forEach(k => { if (text.includes(k)) score += 1 })
+      if (!score) continue
+      const key = c.reference_id + ':' + c.page
+      if (seen.has(key)) continue
+      seen.add(key)
+      const doc = Store.getReferenceDoc(c.reference_id)
+      if (!doc) continue
+      out.push({ reference_id: c.reference_id, source_org: doc.source_org, title: doc.title, year: doc.year, page: c.page, section_title: c.section_title, content: c.content, score })
+    }
+    return out.sort((a, b) => b.score - a.score).slice(0, limit)
+  },
+
   getRelevant(indicators, limit = 8) {
     const kws = (indicators || []).map(i => i.indicator_name).filter(Boolean).map(s => s.toLowerCase())
     if (!kws.length) return []

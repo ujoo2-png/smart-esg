@@ -4265,6 +4265,7 @@
           el('select', { style: { padding: '7px 12px', border: '1px solid #e4e7eb', borderRadius: 6, fontSize: 13 }, onChange: e => { _writerDocId = parseInt(e.target.value) || null; _writerSectionId = null; renderWriter() } },
             docs.length ? docs.map(d => el('option', { value: d.id, selected: d.id === _writerDocId }, d.title || '(제목 없음)')) : el('option', { value: '' }, '문서 없음')
           ),
+          el('button', { className: 'btn btn-secondary', onClick: openImportDoc }, '📥 자료 불러오기'),
           el('button', { className: 'btn btn-primary', onClick: openNewReportDoc }, '＋ 새 보고서')
         )
       )
@@ -4282,9 +4283,14 @@
     const written = sections.filter(s => (s.content || '').trim()).length
     const progress = total ? Math.round(written / total * 100) : 0
     c.append(el('div', { className: 'card' },
-      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 } },
-        el('strong', {}, doc.title || '(제목 없음)'),
-        el('span', { style: { fontSize: 13, color: '#6b7280' } }, '진도 ' + progress + '% (' + written + '/' + total + ' 섹션)')),
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' } },
+        el('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+          el('strong', {}, doc.title || '(제목 없음)'),
+          el('span', { style: { fontSize: 11, color: '#1E3A5F', background: '#eef4fa', border: '1px solid #dbe3ec', borderRadius: 99, padding: '2px 8px', fontWeight: 600, whiteSpace: 'nowrap' } }, 'v' + (doc.version || 1))),
+        el('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          el('span', { style: { fontSize: 13, color: '#6b7280' } }, '진도 ' + progress + '% (' + written + '/' + total + ' 섹션)'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: exportWriterPptx }, '📤 PPTX'),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: saveWriterDoc }, '💾 저장(버전)'))),
       el('div', { style: { height: 8, background: '#eef1f4', borderRadius: 4, overflow: 'hidden' } },
         el('div', { style: { height: '100%', width: progress + '%', background: '#2563EB', transition: 'width .3s' } }))))
 
@@ -4309,16 +4315,39 @@
     if (!section) return el('div', { className: 'card' }, el('p', { style: { color: '#9ca3af', margin: 0 } }, '왼쪽에서 섹션을 선택하세요.'))
     const ta = el('textarea', { id: 'writer-input', style: { width: '100%', minHeight: 260, padding: 12, border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 14, lineHeight: 1.6, fontFamily: 'inherit', resize: 'vertical' } })
     ta.value = section.content || ''
-    const feedback = Store.getFeedback(section.doc_id).filter(f => f.section_id === section.id)
+    const all = Store.getFeedback(section.doc_id).filter(f => f.section_id === section.id)
+    const proposals = all.filter(f => f.kind === 'polish_full').sort((a, b) => b.id - a.id)
+    const feedback = all.filter(f => f.kind !== 'polish_full')
     return el('div', { className: 'card' },
       el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' } },
         el('strong', {}, section.title || '(제목 없음)'),
-        el('div', { style: { display: 'flex', gap: 6 } },
+        el('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); showToast('저장되었습니다.') } }, '저장'),
-          el('button', { className: 'btn btn-sm btn-primary', onClick: () => runWriterFeedback(section, ta.value) }, '🤖 AI 피드백'),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => runWriterPolish(section, ta.value) }, '🤖 참고자료로 다듬기'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => runWriterFeedback(section, ta.value) }, '💬 AI 피드백'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteWriterSection(section.id) }, '섹션 삭제')
         )),
       ta,
+      proposals.length ? el('div', { style: { marginTop: 16, border: '1px solid #dbe3ec', borderRadius: 10, overflow: 'hidden' } },
+        el('div', { style: { padding: '10px 12px', background: '#eef4fa', fontSize: 12, fontWeight: 600, color: '#1E3A5F' } }, '🤖 AI 다듬기 제안 (' + proposals.length + ')'),
+        proposals.map(p => {
+          const open = p.status === 'open'
+          const meta = (p.reference_title ? '근거: ' + p.reference_title + (p.page ? ' p.' + p.page : '') : '근거: 참고자료')
+            + (p.confidence ? ' · 신뢰도 ' + p.confidence : '')
+            + (p.missing && p.missing.length ? ' · 보완 필요: ' + p.missing.join(', ') : '')
+          return el('div', { style: { padding: 12, borderTop: '1px solid #eef1f4' } },
+            el('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 8 } }, meta),
+            el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+              el('div', {},
+                el('div', { style: { fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 4 } }, '원문'),
+                el('div', { style: { fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', background: '#F8FAFC', border: '1px solid #eef1f4', borderRadius: 8, padding: 10, maxHeight: 220, overflow: 'auto', color: '#6b7280' } }, p.original || '(원문 없음)')),
+              el('div', {},
+                el('div', { style: { fontSize: 11, fontWeight: 600, color: '#059669', marginBottom: 4 } }, 'AI 제안'),
+                el('div', { style: { fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', background: '#f0fdf6', border: '1px solid #cceae0', borderRadius: 8, padding: 10, maxHeight: 220, overflow: 'auto', color: '#1f2937' } }, p.suggestion || ''))),
+            el('div', { style: { display: 'flex', gap: 6, marginTop: 8 } },
+              el('button', { className: 'btn btn-sm btn-primary', disabled: !open, onClick: () => applyWriterPolish(section, p) }, p.status === 'applied' ? '✓ 적용됨' : '이 제안 적용'),
+              el('button', { className: 'btn btn-sm btn-secondary', disabled: !open, onClick: () => { Store.updateFeedbackItem(p.id, { status: 'dismissed' }); renderWriter() } }, '무시')))
+        })) : null,
       feedback.length ? el('div', { style: { marginTop: 16 } },
         el('div', { style: { fontWeight: 600, marginBottom: 8 } }, '💬 피드백 (' + feedback.length + ')'),
         feedback.map(f => el('div', { style: { border: '1px solid #eef1f4', borderLeft: '3px solid ' + (f.status === 'applied' ? '#059669' : f.status === 'dismissed' ? '#9CA3AF' : '#d97706'), borderRadius: 8, padding: '10px 12px', marginBottom: 8 } },
@@ -4328,70 +4357,82 @@
             el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'applied' }); renderWriter() } }, '반영'),
             el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'dismissed' }); renderWriter() } }, '무시')
           )))
-      ) : el('p', { style: { marginTop: 16, fontSize: 13, color: '#9ca3af' } }, 'AI 피드백 버튼을 누르면 참고자료와 대비한 진행방향·문구 제안을 받을 수 있습니다.')
+      ) : null
     )
   }
 
   function openNewReportDoc() {
     const refs = Reference.getAll()
     const docs = Store.getReportDocs()
-    const mode = { start: 'new' }
-    const srcMode = { val: 'report' }
+    const state = { start: 'new', src: 'report' }
 
-    const titleInput = el('input', { id: 'rd-title', type: 'text', placeholder: '예: 2025 지속가능경영보고서' })
-    const sectionsArea = el('textarea', { id: 'rd-sections', style: { minHeight: 120, padding: 10, border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' } }, 'CEO 메시지\n지속가능경영 개요\n환경 성과\n사회 성과\n지배구조\n이해관계자 참여\nGRI 부록')
-    const newBlock = el('div', { id: 'rd-new-block', style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-      el('label', {}, '초기 섹션 (줄바꿈으로 구분)'), sectionsArea)
+    const titleInput = el('input', { id: 'rd-title', type: 'text', placeholder: '예: 2025 지속가능경영보고서', style: { padding: '10px 12px', border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 14, width: '100%' } })
+    const sectionsArea = el('textarea', { id: 'rd-sections', style: { minHeight: 120, padding: 10, border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', width: '100%' } }, 'CEO 메시지\n지속가능경영 개요\n환경 성과\n사회 성과\n지배구조\n이해관계자 참여\nGRI 부록')
 
-    const srcReportBlock = el('div', { id: 'rd-src-report', style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-      el('label', {}, '복사할 이전 보고서'),
-      docs.length
-        ? el('select', { id: 'rd-src-doc', style: { padding: '8px 10px', border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 13 } },
-            docs.map(d => el('option', { value: String(d.id) }, d.title || '(제목 없음)')))
-        : el('div', { style: { color: '#9ca3af', fontSize: 13 } }, '복사할 이전 보고서가 없습니다.'),
-      el('label', { style: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 } },
-        el('input', { type: 'checkbox', id: 'rd-src-content' }), el('span', {}, '섹션 본문(내용)까지 함께 복사')))
+    const srcDocSelect = docs.length
+      ? el('select', { id: 'rd-src-doc', style: { padding: '9px 10px', border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 13, width: '100%' } }, docs.map(d => el('option', { value: String(d.id) }, d.title || '(제목 없음)')))
+      : null
 
-    const srcRefBlock = el('div', { id: 'rd-src-ref', style: { display: 'none', flexDirection: 'column', gap: 8 } },
-      el('label', {}, '불러올 참고자료 (문서 1개 = 섹션 1개)'),
-      refs.length
-        ? el('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflow: 'auto', border: '1px solid #e4e7eb', borderRadius: 8, padding: '8px 10px' } },
-            refs.map(d => el('label', { style: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 } },
-              el('input', { type: 'checkbox', className: 'rd-ref', value: String(d.id) }),
-              el('span', {}, (d.title || d.file_name || '(제목 없음)') + (d.page_count ? ' · ' + d.page_count + 'p' : '')))))
-        : el('div', { style: { color: '#9ca3af', fontSize: 13 } }, '등록된 참고자료가 없습니다. 먼저 참고자료를 업로드하세요.'),
-      el('label', { style: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 } },
-        el('input', { type: 'checkbox', id: 'rd-ref-content', checked: true }), el('span', {}, '문서 본문을 섹션 내용으로 채우기')))
+    const refList = refs.length
+      ? el('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 170, overflow: 'auto' } },
+          refs.map(d => el('label', { className: 'rd-ref-item' },
+            el('input', { type: 'checkbox', className: 'rd-ref', value: String(d.id) }),
+            el('span', { className: 'rd-ref-title' }, d.title || d.file_name || '(제목 없음)'),
+            el('span', { className: 'rd-ref-meta' }, d.page_count ? d.page_count + 'p' : (Reference.statusLabel ? Reference.statusLabel(d.status) : '')))))
+      : el('div', { className: 'rd-empty' }, '등록된 참고자료가 없습니다. 먼저 참고자료를 업로드하세요.')
 
-    const srcBlock = el('div', { id: 'rd-src-block', style: { display: 'none', flexDirection: 'column', gap: 8 } },
-      el('label', {}, '불러올 자료 종류'),
-      el('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap' } },
-        el('label', { style: { display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 } },
-          el('input', { type: 'radio', name: 'rd-src', value: 'report', checked: true, onChange: () => { srcMode.val = 'report'; const a = document.getElementById('rd-src-report'), b = document.getElementById('rd-src-ref'); if (a) a.style.display = 'flex'; if (b) b.style.display = 'none' } }), el('span', {}, '이전 보고서 복사')),
-        el('label', { style: { display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 } },
-          el('input', { type: 'radio', name: 'rd-src', value: 'ref', onChange: () => { srcMode.val = 'ref'; const a = document.getElementById('rd-src-report'), b = document.getElementById('rd-src-ref'); if (a) a.style.display = 'none'; if (b) b.style.display = 'flex' } }), el('span', {}, '참고자료에서 불러오기'))),
-      srcReportBlock, srcRefBlock)
+    const startOptions = el('div', { className: 'rd-opts' })
+    const srcOptions = el('div', { className: 'rd-opts rd-opts-sm' })
+    const dynamic = el('div', { style: { marginTop: 10 } })
 
-    const startBlock = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-      el('label', {}, '시작 방식'),
-      el('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap' } },
-        el('label', { style: { display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 } },
-          el('input', { type: 'radio', name: 'rd-start', value: 'new', checked: true, onChange: () => { mode.start = 'new'; const a = document.getElementById('rd-new-block'), b = document.getElementById('rd-src-block'); if (a) a.style.display = 'flex'; if (b) b.style.display = 'none' } }), el('span', {}, '처음부터 새로 작성')),
-        el('label', { style: { display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 } },
-          el('input', { type: 'radio', name: 'rd-start', value: 'src', onChange: () => { mode.start = 'src'; const a = document.getElementById('rd-new-block'), b = document.getElementById('rd-src-block'); if (a) a.style.display = 'none'; if (b) b.style.display = 'flex' } }), el('span', {}, '기존 자료 불러와서 작성'))))
+    const card = (icon, title, desc, active, onClick) => el('div', { className: 'rd-opt' + (active ? ' selected' : ''), onClick },
+      el('div', { className: 'rd-opt-ico' }, icon),
+      el('div', {}, el('div', { className: 'rd-opt-title' }, title), el('div', { className: 'rd-opt-desc' }, desc)))
 
-    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
-      el('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }, el('label', {}, '보고서 제목'), titleInput),
-      startBlock, newBlock, srcBlock)
+    const paint = () => {
+      startOptions.innerHTML = ''
+      startOptions.append(
+        card('📝', '처음부터 새로 작성', '빈 섹션으로 시작합니다', state.start === 'new', () => { state.start = 'new'; paint() }),
+        card('📥', '기존 자료 불러와서', '이전 보고서·참고자료로 시작', state.start === 'src', () => { state.start = 'src'; paint() }))
+
+      dynamic.innerHTML = ''
+      if (state.start === 'new') {
+        dynamic.append(el('div', { className: 'rd-field-label' }, '초기 섹션 (줄바꿈으로 구분)'), sectionsArea)
+      } else {
+        srcOptions.innerHTML = ''
+        srcOptions.append(
+          card('🗂️', '이전 보고서 복사', '작성했던 문서의 섹션 구조·내용', state.src === 'report', () => { state.src = 'report'; paint() }),
+          card('📚', '참고자료에서 불러오기', '등록한 문서를 섹션으로', state.src === 'ref', () => { state.src = 'ref'; paint() }))
+        dynamic.append(el('div', { className: 'rd-field-label' }, '불러올 자료 종류'), srcOptions)
+        if (state.src === 'report') {
+          dynamic.append(
+            el('div', { className: 'rd-field-label', style: { marginTop: 12 } }, '복사할 이전 보고서'),
+            srcDocSelect || el('div', { className: 'rd-empty' }, '복사할 이전 보고서가 없습니다.'),
+            el('label', { className: 'rd-ref-item', style: { marginTop: 8 } },
+              el('input', { type: 'checkbox', id: 'rd-src-content' }), el('span', {}, '섹션 본문(내용)까지 함께 복사')))
+        } else {
+          dynamic.append(
+            el('div', { className: 'rd-field-label', style: { marginTop: 12 } }, '불러올 참고자료 (문서 1개 = 섹션 1개)'),
+            refList,
+            el('label', { className: 'rd-ref-item', style: { marginTop: 8 } },
+              el('input', { type: 'checkbox', id: 'rd-ref-content', checked: true }), el('span', {}, '문서 본문을 섹션 내용으로 채우기')))
+        }
+      }
+    }
+    paint()
+
+    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 14 } },
+      el('div', {}, el('div', { className: 'rd-field-label' }, '보고서 제목'), titleInput),
+      el('div', {}, el('div', { className: 'rd-field-label' }, '시작 방식'), startOptions),
+      dynamic)
     modal('새 보고서', form)
     document.getElementById('modal-save').onclick = () => {
       const title = titleInput.value.trim() || '제목 없는 보고서'
       const doc = Store.addReportDoc({ title })
-      if (mode.start === 'new') {
+      if (state.start === 'new') {
         sectionsArea.value.split('\n').map(s => s.trim()).filter(Boolean).forEach(t => Store.addReportSection({ doc_id: doc.id, title: t, content: '' }))
-      } else if (srcMode.val === 'report') {
-        const sel = document.getElementById('rd-src-doc')
-        const srcId = sel ? sel.value : null
+      } else if (state.src === 'report') {
+        const srcId = srcDocSelect ? srcDocSelect.value : null
         const withContent = document.getElementById('rd-src-content')?.checked
         const srcSections = srcId != null ? Store.getReportDocSections(isNaN(Number(srcId)) ? srcId : Number(srcId)) : []
         srcSections.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).forEach(s => Store.addReportSection({ doc_id: doc.id, title: s.title, content: withContent ? (s.content || '') : '' }))
@@ -4399,11 +4440,7 @@
         const all = Store.getReferenceDocs()
         const ids = [...document.querySelectorAll('.rd-ref:checked')].map(c => c.value)
         const withContent = document.getElementById('rd-ref-content')?.checked
-        ids.forEach(id => {
-          const r = all.find(d => String(d.id) === String(id))
-          if (!r) return
-          Store.addReportSection({ doc_id: doc.id, title: (r.title || r.file_name || '(제목 없음)'), content: withContent ? (r.markdown || '') : '' })
-        })
+        ids.forEach(id => { const r = all.find(d => String(d.id) === String(id)); if (r) Store.addReportSection({ doc_id: doc.id, title: (r.title || r.file_name || '(제목 없음)'), content: withContent ? (r.markdown || '') : '' }) })
       }
       _writerDocId = doc.id; _writerSectionId = null
       closeModal(); renderWriter(); showToast('보고서가 생성되었습니다.')
@@ -4455,6 +4492,145 @@
     } finally {
       hideLoading(); renderWriter()
     }
+  }
+
+  function findRefsForSection(title, draft, limit) {
+    const stop = { '그리고': 1, '있습니다': 1, '합니다': 1, '대한': 1, '위해': 1, '통해': 1, '있는': 1, '하는': 1, '되는': 1, '으로': 1, '에서': 1, '하여': 1, '대해': 1, '또한': 1 }
+    const terms = []
+    const push = t => { const s = String(t || '').trim(); if (s.length >= 2 && !stop[s] && terms.indexOf(s) < 0) terms.push(s) }
+    String(title || '').split(/[^0-9A-Za-z가-힣]+/).forEach(push)
+    String(draft || '').split(/[^0-9A-Za-z가-힣]+/).slice(0, 150).forEach(push)
+    if (!terms.length && title) terms.push(title)
+    return Reference.searchTerms(terms.slice(0, 24), limit || 6)
+  }
+
+  async function runWriterPolish(section, draft) {
+    const content = (draft != null ? draft : section.content || '').trim()
+    if (!content) { showToast('내용을 먼저 작성하거나 자료를 불러오세요.', 'error'); return }
+    showLoading('참고자료에서 근거를 찾아 다듬는 중...')
+    try {
+      Store.updateReportSection(section.id, { content })
+      const refs = findRefsForSection(section.title, content, 6)
+      const chunks = refs.map(r => ({ reference_id: r.reference_id, page: r.page, section_title: r.section_title, content: r.content }))
+      const res = await AI.refineReportItem({ title: section.title, draft: content.slice(0, 4000), refChunks: chunks })
+      if (res.error) throw new Error(res.error)
+      const text = (res.draft_text || '').trim()
+      if (!text) throw new Error('AI 응답이 비어 있습니다.')
+      Store.addFeedbackItem({
+        doc_id: section.doc_id, section_id: section.id, kind: 'polish_full',
+        message: 'AI 다듬기 제안', suggestion: text, original: content,
+        reference_title: refs[0]?.title || '', page: refs[0]?.page || null,
+        confidence: res.confidence || '', missing: res.missing_pillars || []
+      })
+      showToast(refs.length ? refs.length + '개 참고 근거로 제안을 생성했습니다.' : '참고 근거 없이 일반 다듬기 제안을 생성했습니다.')
+    } catch (e) {
+      showToast('AI 다듬기 실패: ' + e.message, 'error')
+    } finally {
+      hideLoading(); renderWriter()
+    }
+  }
+
+  function applyWriterPolish(section, item) {
+    Store.updateReportSection(section.id, { content: item.suggestion || '' })
+    Store.updateFeedbackItem(item.id, { status: 'applied' })
+    renderWriter()
+    showToast('제안을 반영했습니다.')
+  }
+
+  function _splitDocIntoItems(result) {
+    const md = (result && result.markdown) || ''
+    if (!md.trim()) return []
+    const hasHeading = /^#{1,6}\s/m.test(md)
+    const items = []
+    if (hasHeading) {
+      let cur = null
+      const flush = () => { if (cur && (cur.title || cur.lines.join('').trim())) items.push({ title: cur.title, content: cur.lines.join('\n').trim() }) }
+      md.split('\n').forEach(line => {
+        if (/^#{1,6}\s/.test(line)) { flush(); cur = { title: line.replace(/^#{1,6}\s*/, '').trim(), lines: [] } }
+        else { if (!cur) cur = { title: '', lines: [] }; cur.lines.push(line) }
+      })
+      flush()
+    } else {
+      md.split(/\n{2,}/).map(s => s.trim()).filter(Boolean).forEach((p, i) => {
+        const first = p.split('\n')[0].trim()
+        items.push({ title: first.length <= 40 ? first : ('항목 ' + (i + 1)), content: p })
+      })
+    }
+    return items.map((it, i) => ({ title: (it.title || ('항목 ' + (i + 1))).slice(0, 80), content: it.content }))
+  }
+
+  function openImportDoc() {
+    const titleInput = el('input', { type: 'text', style: { padding: '10px 12px', border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 14, width: '100%' }, placeholder: '예: 2025 지속가능경영보고서' })
+    const fileInput = el('input', { type: 'file', accept: '.docx,.doc,.pptx,.ppt,.pdf,.txt,.md,.csv,.json', style: { fontSize: 13 } })
+    const status = el('div', { style: { fontSize: 12, color: '#6b7280', minHeight: 18 } })
+    const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+      el('div', {}, el('div', { className: 'rd-field-label' }, '보고서 제목'), titleInput),
+      el('div', {}, el('div', { className: 'rd-field-label' }, '작성 중인 자료 업로드 (docx / pptx / pdf / txt / md)'), fileInput),
+      el('div', { style: { fontSize: 12, color: '#9ca3af', lineHeight: 1.6 } }, '업로드한 문서를 항목(제목·헤딩)별로 나누어 섹션으로 만듭니다. 변환·처리는 브라우저에서 이뤄지며, 각 항목은 참고자료로 다듬을 수 있습니다.'),
+      status)
+    modal('📥 기존 자료 불러오기', form)
+    document.getElementById('modal-save').textContent = '불러오기'
+    document.getElementById('modal-save').onclick = async () => {
+      const f = fileInput.files && fileInput.files[0]
+      if (!f) { showToast('파일을 선택하세요.', 'error'); return }
+      const title = titleInput.value.trim() || f.name.replace(/\.[^.]+$/, '')
+      status.textContent = '문서 변환 중...'; showLoading('문서 변환 중...')
+      try {
+        const result = await MdConvert.convertLocal(f)
+        const items = _splitDocIntoItems(result)
+        if (!items.length) throw new Error('문서에서 내용을 추출하지 못했습니다.')
+        const doc = Store.addReportDoc({ title, status: 'draft', progress: 0, version: 1, source_file: f.name, source_type: Reference.detectType(f.name) })
+        items.forEach((it, i) => Store.addReportSection({ doc_id: doc.id, title: it.title, content: it.content, sort_order: i, status: it.content ? 'draft' : 'empty' }))
+        Store.addReportDocVersion(doc.id, { version: 1, title, section_count: items.length, note: '자료 불러오기 (' + f.name + ')' })
+        _writerDocId = doc.id; _writerSectionId = null
+        closeModal(); renderWriter()
+        showToast(items.length + '개 항목을 불러왔습니다. 각 항목에서 "참고자료로 다듬기"를 실행하세요.')
+      } catch (e) {
+        status.textContent = '오류: ' + e.message
+        showToast('불러오기 실패: ' + e.message, 'error')
+      } finally { hideLoading() }
+    }
+  }
+
+  function _collectWriterSections(docId) {
+    const ta = document.getElementById('writer-input')
+    if (ta && _writerSectionId) Store.updateReportSection(_writerSectionId, { content: ta.value })
+    return Store.getReportDocSections(docId).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  }
+
+  function _writerProgress(sections) {
+    const written = sections.filter(s => (s.content || '').trim()).length
+    return sections.length ? Math.round(written / sections.length * 100) : 0
+  }
+
+  async function exportWriterPptx() {
+    const doc = _writerDocId ? Store.getReportDoc(_writerDocId) : null
+    if (!doc) { showToast('문서가 없습니다.', 'error'); return }
+    const sections = _collectWriterSections(doc.id)
+    showLoading('PPTX 생성 중...')
+    try {
+      const fn = await PptxExport.export(doc, sections, { version: doc.version || 1 })
+      hideLoading()
+      showToast(fn + ' 을(를) 내려받았습니다.')
+    } catch (e) {
+      hideLoading(); showToast('PPTX 생성 실패: ' + e.message, 'error')
+    }
+  }
+
+  async function saveWriterDoc() {
+    const doc = _writerDocId ? Store.getReportDoc(_writerDocId) : null
+    if (!doc) { showToast('문서가 없습니다.', 'error'); return }
+    const sections = _collectWriterSections(doc.id)
+    if (!sections.length) { showToast('저장할 섹션이 없습니다.', 'error'); return }
+    const nextVersion = (doc.version || 1) + 1
+    Store.updateReportDoc(doc.id, { version: nextVersion, progress: _writerProgress(sections), status: 'draft' })
+    Store.addReportDocVersion(doc.id, { version: nextVersion, title: doc.title, section_count: sections.length, note: '' })
+    showLoading('v' + nextVersion + ' 저장 중 · PPTX 생성...')
+    let fn = null
+    try { fn = await PptxExport.export({ ...doc, version: nextVersion }, sections, { version: nextVersion }) }
+    catch (e) { hideLoading(); renderWriter(); showToast('v' + nextVersion + ' 저장됨 · PPTX 생성 실패: ' + e.message, 'error'); return }
+    hideLoading(); renderWriter()
+    showToast('v' + nextVersion + ' 버전으로 저장하고 ' + fn + ' 을(를) 내려받았습니다.')
   }
 
   // ==================== 보고서 편집기 (S-05) ====================
@@ -5036,6 +5212,7 @@
     let filtered = _pmFilter === 'all' ? tasks : _pmFilter === 'mine' ? myTasks : tasks.filter(t => t.status === _pmFilter)
     const statusCounts = { all: tasks.length, mine: myTasks.length, '대기': tasks.filter(t => t.status === '대기').length, '진행중': tasks.filter(t => t.status === '진행중').length, '검토': tasks.filter(t => t.status === '검토').length, '완료': tasks.filter(t => t.status === '완료').length, '지연': tasks.filter(t => t.status === '지연').length }
     const today = new Date()
+    const wbs = Store.wbsStats()
 
     const headerCard = el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
       el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '📅 프로젝트 관리'),
@@ -5050,6 +5227,14 @@
     )
     c.innerHTML = ''
     c.append(headerCard)
+    c.append(el('div', { className: 'card', style: 'padding:12px 16px' },
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px' },
+        el('div', { style: 'display:flex;align-items:center;gap:8px' },
+          el('strong', { style: 'font-size:13px;color:#1E3A5F' }, '📊 전체 진도율 (단순 완료율)'),
+          el('span', { style: 'font-size:11px;color:#9ca3af' }, 'WBS 소공정 기준 완료 개수')),
+        el('span', { style: 'font-size:13px;font-weight:700;color:' + (wbs.percent >= 100 ? '#059669' : '#2563EB') }, wbs.percent + '%  ' + wbs.done + '/' + wbs.total)),
+      el('div', { style: 'height:10px;background:#e5e7eb;border-radius:5px;overflow:hidden' },
+        el('div', { style: `width:${wbs.percent}%;height:100%;background:linear-gradient(90deg,#2563EB,#059669);border-radius:5px` }))))
 
     if (_pmView === 'gantt') { c.append(_renderPmGantt(filtered)); return }
     if (_pmView === 'calendar') { c.append(_renderPmCalendar(filtered)); return }
@@ -5064,30 +5249,42 @@
     const statusColors2 = { '대기': '#d97706', '진행중': '#2563EB', '검토': '#2563EB', '완료': '#059669', '지연': '#dc2626' }
 
     const listCard = el('div', { className: 'card', style: 'padding:0;overflow:hidden' })
-    filtered.sort((a, b) => { const o = { '높음': 0, '보통': 1, '낮음': 2 }; return (o[a.priority] || 1) - (o[b.priority] || 1) }).forEach((task, idx) => {
-      const isOverdue = task.due_date && new Date(task.due_date) < today && task.status !== '완료'
-      const row = el('div', { style: `border-bottom:1px solid #EEF1F4;display:flex;align-items:center;gap:12px;padding:12px 16px;${idx === filtered.length - 1 ? 'border-bottom:none' : ''}` },
-        el('span', { style: `width:4px;height:32px;border-radius:2px;background:${priorityColors[task.priority] || '#9CA3AF'};flex-shrink:0` }),
-        el('div', { style: 'flex:1;min-width:0' },
-          el('div', { style: 'font-size:13px;font-weight:600;color:#14213D' }, task.title || '제목 없음'),
-          el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;font-size:11px' },
-            el('span', { style: `padding:2px 6px;border-radius:8px;background:${statusColors2[task.status] || '#9CA3AF'}20;color:${statusColors2[task.status] || '#9CA3AF'};font-weight:500` }, task.status || '대기'),
-            task.assignee ? el('span', { style: 'color:#9ca3af' }, `👤 ${task.assignee}`) : null,
-            task.department ? el('span', { style: 'color:#9ca3af' }, `🏢 ${task.department}`) : null,
-            task.category && task.category !== '일반' ? el('span', { style: `padding:1px 5px;border-radius:4px;background:${_catColors[task.category] || '#6b7280'}18;color:${_catColors[task.category] || '#6b7280'};font-weight:500` }, task.category) : null,
-            task.linked_type ? el('span', { style: 'padding:1px 5px;border-radius:4px;background:#f0f7ff;color:#2563EB' }, `🔗 ${task.linked_type}`) : null
-          )
-        ),
-        task.due_date ? el('span', { style: `font-size:11px;${isOverdue ? 'color:#dc2626;font-weight:600' : 'color:#9ca3af'}` }, isOverdue ? '⏰ 지연' : `📅 ${task.due_date}`) : null,
-        task.progress > 0 ? el('div', { style: 'width:60px;display:flex;align-items:center;gap:4px' },
-          el('div', { style: 'flex:1;height:4px;background:#e5e7eb;border-radius:2px;overflow:hidden' }, el('div', { style: `width:${task.progress}%;height:100%;background:${task.progress >= 100 ? '#059669' : '#2563EB'};border-radius:2px` })),
-          el('span', { style: 'font-size:9px;color:#9ca3af' }, `${task.progress}%`)
-        ) : null,
-        el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: () => _openProjectTaskModal(task) }, '수정'),
-        el('button', { className: 'btn btn-sm', style: 'font-size:11px;color:#dc2626', onClick: () => { if (confirm('삭제?')) { Store.deleteProjectTask(task.id); showToast('삭제되었습니다.', 'success'); renderProjectManagement() } } }, '✕')
-      )
-      listCard.append(row)
+    const levelColor = { '대': '#1E3A5F', '중': '#2563EB', '소': '#6b7280' }
+    const visibleIds = new Set(filtered.map(t => String(t.id)))
+    const kids = {}
+    filtered.forEach(t => {
+      const pid = (t.parent_id != null && visibleIds.has(String(t.parent_id))) ? String(t.parent_id) : '__root'
+      ;(kids[pid] = kids[pid] || []).push(t)
     })
+    const pOrder = { '높음': 0, '보통': 1, '낮음': 2 }
+    Object.keys(kids).forEach(k => kids[k].sort((a, b) => (pOrder[a.priority] || 1) - (pOrder[b.priority] || 1)))
+    const nextLevel = { '대': '중', '중': '소' }
+    const walkPm = (parentKey, depth) => {
+      (kids[parentKey] || []).forEach(task => {
+        const st = wbs.nodeStat(task.id)
+        const isOverdue = task.due_date && new Date(task.due_date) < today && task.status !== '완료'
+        listCard.append(el('div', { style: `border-bottom:1px solid #EEF1F4;display:flex;align-items:center;gap:10px;padding:10px 16px 10px ${16 + depth * 22}px` },
+          el('span', { style: `font-size:10px;font-weight:700;color:#fff;background:${levelColor[task.level] || '#9CA3AF'};border-radius:4px;padding:2px 7px;flex-shrink:0` }, task.level || '소'),
+          el('span', { style: `width:4px;height:30px;border-radius:2px;background:${priorityColors[task.priority] || '#9CA3AF'};flex-shrink:0` }),
+          el('div', { style: 'flex:1;min-width:0' },
+            el('div', { style: 'font-size:13px;font-weight:600;color:#14213D' }, task.title || '제목 없음'),
+            el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;font-size:11px' },
+              el('span', { style: `padding:2px 6px;border-radius:8px;background:${statusColors2[task.status] || '#9CA3AF'}20;color:${statusColors2[task.status] || '#9CA3AF'};font-weight:500` }, task.status || '대기'),
+              task.assignee ? el('span', { style: 'color:#9ca3af' }, `👤 ${task.assignee}`) : null,
+              task.department ? el('span', { style: 'color:#9ca3af' }, `🏢 ${task.department}`) : null,
+              (task.planned_start || task.planned_end) ? el('span', { style: 'color:#9ca3af' }, `계획 ${task.planned_start || '?'}~${task.planned_end || '?'}`) : null,
+              (task.actual_start || task.actual_end) ? el('span', { style: 'color:#047857' }, `실적 ${task.actual_start || '?'}~${task.actual_end || '?'}`) : (isOverdue ? el('span', { style: 'color:#dc2626;font-weight:600' }, '⏰ 지연') : null)
+            )),
+          el('div', { style: 'display:flex;align-items:center;gap:6px;min-width:96px' },
+            el('div', { style: 'flex:1;height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden' }, el('div', { style: `width:${st.percent}%;height:100%;background:${st.percent >= 100 ? '#059669' : '#2563EB'}` })),
+            el('span', { style: 'font-size:10px;color:#6b7280;white-space:nowrap' }, `${st.percent}% ${st.done}/${st.total}`)),
+          depth < 2 ? el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px;padding:2px 8px', title: '하위 업무 추가', onClick: () => _openProjectTaskModal(null, { parent_id: task.id, level: nextLevel[task.level] || (depth === 0 ? '중' : '소') }) }, '＋ 하위') : null,
+          el('button', { className: 'btn btn-sm btn-secondary', style: 'font-size:11px', onClick: () => _openProjectTaskModal(task) }, '수정'),
+          el('button', { className: 'btn btn-sm', style: 'font-size:11px;color:#dc2626', onClick: () => { if (confirm('하위 업무도 함께 삭제됩니다. 삭제할까요?')) _deleteProjectTaskCascade(task.id) } }, '✕')))
+        walkPm(String(task.id), depth + 1)
+      })
+    }
+    walkPm('__root', 0)
     c.append(listCard)
   }
 
@@ -5262,8 +5459,44 @@
     })
   }
 
-  function _openProjectTaskModal(task) {
+  function _pmParentOptions(all, excludeId) {
+    const exclude = new Set()
+    if (excludeId != null) {
+      exclude.add(String(excludeId))
+      const stack = [excludeId]
+      while (stack.length) {
+        const cur = stack.pop()
+        all.forEach(t => { if (String(t.parent_id) === String(cur) && !exclude.has(String(t.id))) { exclude.add(String(t.id)); stack.push(t.id) } })
+      }
+    }
+    const childrenOf = {}
+    all.forEach(t => { const p = t.parent_id == null || t.parent_id === '' ? '__root' : String(t.parent_id); (childrenOf[p] = childrenOf[p] || []).push(t) })
+    const out = []
+    const walk = (key, depth) => (childrenOf[key] || []).forEach(t => {
+      if (!exclude.has(String(t.id))) out.push({ id: t.id, label: '　'.repeat(depth) + '[' + (t.level || '소') + '] ' + (t.title || '(제목 없음)') })
+      walk(String(t.id), depth + 1)
+    })
+    walk('__root', 0)
+    return out
+  }
+
+  function _deleteProjectTaskCascade(id) {
+    const all = Store.getProjectTasks()
+    const ids = new Set([String(id)])
+    let changed = true
+    while (changed) {
+      changed = false
+      all.forEach(t => { if (t.parent_id != null && ids.has(String(t.parent_id)) && !ids.has(String(t.id))) { ids.add(String(t.id)); changed = true } })
+    }
+    all.filter(t => ids.has(String(t.id))).forEach(t => Store.deleteProjectTask(t.id))
+    showToast('삭제되었습니다.', 'success')
+    renderProjectManagement()
+  }
+
+  function _openProjectTaskModal(task, preset) {
     const isEdit = !!task
+    const presetLevel = preset?.level || (task && task.level) || '대'
+    const presetParent = task ? task.parent_id : (preset ? preset.parent_id : null)
     const categories = ['일반', '평가', '증빙', '온실가스', '보고서', '협력사', '교육', '개선', '기타']
     const priorities = ['높음', '보통', '낮음']
     const statuses = ['대기', '진행중', '검토', '완료', '지연']
@@ -5276,6 +5509,11 @@
     const users = (Store.getUsers() || []).filter(u => u.status === 'active')
     const depts = (Store.getDepartments() || []).filter(d => d.is_active !== false)
     const tasks = Store.getProjectTasks().filter(t => !task || t.id !== task.id)
+    const allTasks = Store.getProjectTasks()
+    const levels = ['대', '중', '소']
+    const parentOpts = _pmParentOptions(allTasks, task ? task.id : null)
+    const curLevel = task?.level || preset?.level || '대'
+    const curParent = task ? task.parent_id : (preset ? preset.parent_id : null)
     const logs = task ? Store.getProjectTaskLogs(task.id) : []
     const comments = task?.comments || []
 
@@ -5284,6 +5522,8 @@
 
     const form = el('form', { onSubmit: e => e.preventDefault() },
       el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+        el('label', { style: 'font-size:12px' }, '단계(WBS)', el('select', { id: 'pmLevel', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...levels.map(l => el('option', { value: l, selected: curLevel === l }, l === '대' ? '대공정' : l === '중' ? '중공정' : '소공정')))),
+        el('label', { style: 'font-size:12px' }, '상위 업무', el('select', { id: 'pmParent', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }, el('option', { value: '' }, '— 최상위 —'), ...parentOpts.map(o => el('option', { value: o.id, selected: String(curParent ?? '') === String(o.id) }, o.label)))),
         el('label', { style: 'font-size:12px' }, '제목 *', el('input', { id: 'pmTitle', value: task?.title || '', required: true, style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })),
         el('label', { style: 'font-size:12px' }, '카테고리', el('select', { id: 'pmCategory', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...categories.map(c => el('option', { value: c, selected: (task?.category || '일반') === c }, c)))),
         el('label', { style: 'font-size:12px' }, '담당자', el('select', { id: 'pmAssignee', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box', onChange: () => { const uid = document.getElementById('pmAssignee').value; const u = userMap[uid]; if (u) { const ds = document.getElementById('pmDept'); const dOpt = [...ds.options].find(o => o.value === u.dept_code); if (dOpt) ds.value = u.dept_code } } }, el('option', { value: '' }, '미지정'), ...users.map(u => el('option', { value: u.id, selected: String(task?.assignee_id) === String(u.id) }, `${u.name} (${u.position || ''})`)))),
@@ -5296,6 +5536,12 @@
       el('div', { style: 'margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px' },
         el('label', { style: 'font-size:12px' }, '반복', el('select', { id: 'pmRepeat', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }, ...repeats.map(r => el('option', { value: r.value, selected: (task?.repeat || 'none') === r.value }, r.label)))),
         el('label', { style: 'font-size:12px' }, '반복 종료일', el('input', { id: 'pmRepeatUntil', type: 'date', value: task?.repeat_until || '', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }))
+      ),
+      el('div', { style: 'margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+        el('label', { style: 'font-size:12px' }, '계획 시작일', el('input', { id: 'pmPlanStart', type: 'date', value: task?.planned_start || '', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '계획 종료일', el('input', { id: 'pmPlanEnd', type: 'date', value: task?.planned_end || '', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '실적 시작일', el('input', { id: 'pmActStart', type: 'date', value: task?.actual_start || '', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '실적 종료일', el('input', { id: 'pmActEnd', type: 'date', value: task?.actual_end || '', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }))
       ),
       el('label', { style: 'font-size:12px;margin-top:8px;display:block' }, '설명 (@"이름"으로 담당자 태그 가능)', el('textarea', { id: 'pmDesc', value: task?.description || '', rows: '3', style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px;box-sizing:border-box;resize:vertical', onInput: (e) => _handleMentionInput(e, users) })),
       el('div', { id: 'pmMentionList', style: 'position:relative' }),
@@ -5344,6 +5590,8 @@
       const data = {
         title: document.getElementById('pmTitle').value,
         category: document.getElementById('pmCategory').value,
+        level: document.getElementById('pmLevel').value,
+        parent_id: document.getElementById('pmParent').value ? document.getElementById('pmParent').value : null,
         assignee_id: document.getElementById('pmAssignee').value || null,
         assignee: document.getElementById('pmAssignee').selectedOptions[0]?.textContent?.replace(/\s*\(.*\)/, '') || '',
         dept_code: document.getElementById('pmDept').value,
@@ -5352,6 +5600,10 @@
         status: document.getElementById('pmStatus').value,
         start_date: document.getElementById('pmStart').value,
         due_date: document.getElementById('pmDue').value,
+        planned_start: document.getElementById('pmPlanStart').value,
+        planned_end: document.getElementById('pmPlanEnd').value,
+        actual_start: document.getElementById('pmActStart').value,
+        actual_end: document.getElementById('pmActEnd').value,
         description: document.getElementById('pmDesc').value,
         progress: parseInt(document.getElementById('pmProgress').value),
         repeat: document.getElementById('pmRepeat').value,

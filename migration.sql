@@ -487,6 +487,23 @@ CREATE TABLE tb_reference_chunk (
 ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS view_count INT DEFAULT 0;
 ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ;
 
+-- 보고서 버전 관리 (v2.2.0)
+ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
+ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS source_file TEXT;
+ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS source_type TEXT;
+
+CREATE TABLE IF NOT EXISTS tb_report_doc_version (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    doc_id TEXT,
+    version INT DEFAULT 1,
+    title TEXT,
+    section_count INT DEFAULT 0,
+    note TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_doc_version_doc ON tb_report_doc_version(doc_id, version);
+
 -- ============================================================
 -- 13. 인덱스
 -- ============================================================

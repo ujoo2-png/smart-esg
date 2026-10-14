@@ -320,3 +320,22 @@ body.viewer-mode #content .upload-area { pointer-events:none; opacity:.5 }
 body.viewer-mode #content select,
 body.viewer-mode #content input:not([type=hidden]):not([type=search]):not([readonly]),
 body.viewer-mode #content textarea { pointer-events:none; opacity:.7 }
+
+/* 리포트 작성기 - 새 보고서 옵션 UI */
+.rd-opts { display:grid; grid-template-columns:1fr 1fr; gap:10px }
+.rd-opts-sm { margin-top:6px }
+.rd-opt { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border:1.5px solid var(--c-border); border-radius:var(--radius-sm); cursor:pointer; background:#fff; transition:border-color .15s, box-shadow .15s, background .15s }
+.rd-opt:hover { border-color:#c3cdda; box-shadow:var(--shadow-card) }
+.rd-opt.selected { border-color:var(--c-primary); background:var(--c-primary-soft); box-shadow:var(--focus-ring) }
+.rd-opt-ico { font-size:20px; line-height:1.2 }
+.rd-opt-title { font-size:13.5px; font-weight:600; color:var(--c-primary) }
+.rd-opt-desc { font-size:11.5px; color:var(--c-text-muted); margin-top:2px }
+.rd-opts-sm .rd-opt { padding:10px 12px }
+.rd-opts-sm .rd-opt-ico { font-size:17px }
+.rd-field-label { font-size:12px; font-weight:600; color:var(--c-text-muted); margin-bottom:6px }
+.rd-ref-item { display:flex; align-items:center; gap:8px; font-size:13px; padding:7px 10px; border:1px solid var(--c-border); border-radius:8px; cursor:pointer }
+.rd-ref-item:hover { background:var(--c-primary-soft) }
+.rd-ref-item input { width:auto; margin:0 }
+.rd-ref-title { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.rd-ref-meta { font-size:11px; color:var(--c-text-faint) }
+.rd-empty { font-size:13px; color:var(--c-text-faint); padding:10px 0 }

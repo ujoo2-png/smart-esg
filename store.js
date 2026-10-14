@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.1.6'
+const APP_VERSION = 'v2.2.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -30,9 +30,10 @@ const SB_SYNC_MAP = {
   agencyMaster: ['tb_agency_master', ['id', 'code', 'name', 'track_type', 'description', 'effective_date', 'website_url', 'is_active', 'created_at']],
   referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'status', 'error', 'tags', 'view_count', 'last_viewed_at', 'created_at', 'updated_at', 'converted_at']],
   referenceChunks: ['tb_reference_chunk', ['id', 'reference_id', 'page', 'section_title', 'content', 'created_at']],
-  reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'created_at', 'updated_at']],
+  reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'version', 'source_file', 'source_type', 'created_at', 'updated_at']],
   reportDocSections: ['tb_report_doc_section', ['id', 'doc_id', 'title', 'content', 'sort_order', 'status', 'indicator_refs', 'created_at', 'updated_at']],
-  reportFeedback: ['tb_report_feedback', ['id', 'doc_id', 'section_id', 'kind', 'message', 'suggestion', 'reference_title', 'page', 'status', 'created_at']]
+  reportFeedback: ['tb_report_feedback', ['id', 'doc_id', 'section_id', 'kind', 'message', 'suggestion', 'reference_title', 'page', 'status', 'created_at']],
+  reportDocVersions: ['tb_report_doc_version', ['id', 'doc_id', 'version', 'title', 'section_count', 'note', 'created_at']]
 }
 
 async function _sha256(str) {
@@ -447,7 +448,8 @@ const Store = {
       referenceChunks: [],
       reportDocs: [],
       reportDocSections: [],
-      reportFeedback: []
+      reportFeedback: [],
+      reportDocVersions: []
     }
   },
 
@@ -1032,11 +1034,37 @@ const Store = {
 
   // ==== Project Tasks ====
   getProjectTasks() { return this.data.projectTasks || [] },
-  addProjectTask(t) { const task = { id: Date.now(), title: '', description: '', category: '일반', assignee: '', assignee_id: null, department: '', dept_code: '', priority: '보통', status: '대기', start_date: '', due_date: '', progress: 0, tags: [], linked_type: '', linked_id: null, repeat: 'none', repeat_until: '', depends_on: [], comments: [], created_at: new Date().toISOString(), ...t }; this.data.projectTasks.push(task); this._logProjectTask(task.id, '생성', '', '', task.title); this._save(); return task },
+  addProjectTask(t) { const task = { id: Date.now() + Math.random(), title: '', description: '', category: '일반', assignee: '', assignee_id: null, department: '', dept_code: '', priority: '보통', status: '대기', level: '대', parent_id: null, start_date: '', due_date: '', planned_start: '', planned_end: '', actual_start: '', actual_end: '', progress: 0, sort_order: 0, tags: [], linked_type: '', linked_id: null, repeat: 'none', repeat_until: '', depends_on: [], comments: [], created_at: new Date().toISOString(), ...t }; this.data.projectTasks.push(task); this._logProjectTask(task.id, '생성', '', '', task.title); this._save(); return task },
   updateProjectTask(id, updates) { const i = (this.data.projectTasks || []).findIndex(x => x.id === id); if (i > -1) { const old = { ...this.data.projectTasks[i] }; Object.assign(this.data.projectTasks[i], updates); if (updates.status && updates.status !== old.status) this._logProjectTask(id, '상태변경', old.status, updates.status); if (updates.progress != null && updates.progress !== old.progress) this._logProjectTask(id, '진행률', old.progress + '%', updates.progress + '%'); if (updates.assignee && updates.assignee !== old.assignee) this._logProjectTask(id, '담당자변경', old.assignee, updates.assignee); this._save() } },
   deleteProjectTask(id) { this.data.projectTasks = (this.data.projectTasks || []).filter(x => x.id !== id); this.data.projectTaskLogs = (this.data.projectTaskLogs || []).filter(x => x.task_id !== id); this._save() },
   _logProjectTask(taskId, action, from, to, detail) { if (!this.data.projectTaskLogs) this.data.projectTaskLogs = []; this.data.projectTaskLogs.push({ id: Date.now() + Math.random(), task_id: taskId, user_id: null, action, from_value: String(from), to_value: String(to), detail: detail || '', created_at: new Date().toISOString() }) },
   getProjectTaskLogs(taskId) { return (this.data.projectTaskLogs || []).filter(l => l.task_id === taskId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) },
+  getProjectTaskById(id) { return (this.data.projectTasks || []).find(t => String(t.id) === String(id)) },
+  getChildProjectTasks(parentId) { return (this.data.projectTasks || []).filter(t => String(t.parent_id || '') === String(parentId == null ? '' : parentId)) },
+  getProjectTaskDescendants(id, all) {
+    const list = all || this.data.projectTasks || []
+    const kids = list.filter(t => String(t.parent_id) === String(id))
+    return kids.reduce((acc, k) => acc.concat([k], this.getProjectTaskDescendants(k.id, list)), [])
+  },
+  wbsStats() {
+    const all = this.data.projectTasks || []
+    const childrenOf = {}
+    all.forEach(t => { const p = t.parent_id == null || t.parent_id === '' ? '__root' : String(t.parent_id); (childrenOf[p] = childrenOf[p] || []).push(t) })
+    const memo = new Map()
+    const stat = t => {
+      if (memo.has(t.id)) return memo.get(t.id)
+      const kids = childrenOf[String(t.id)] || []
+      let total, done
+      if (!kids.length) { total = 1; done = t.status === '완료' ? 1 : 0 }
+      else { total = 0; done = 0; kids.forEach(k => { const s = stat(k); total += s.total; done += s.done }) }
+      const res = { total, done, percent: total ? Math.round(done / total * 100) : 0 }
+      memo.set(t.id, res); return res
+    }
+    const roots = childrenOf['__root'] || []
+    let total = 0, done = 0
+    roots.forEach(r => { const s = stat(r); total += s.total; done += s.done })
+    return { total, done, percent: total ? Math.round(done / total * 100) : 0, childrenOf, roots, nodeStat: id => { const t = this.getProjectTaskById(id); return t ? stat(t) : { total: 0, done: 0, percent: 0 } } }
+  },
 
   // ==== Project Task Comments ====
   addProjectTaskComment(taskId, text, userId, userName) { const i = (this.data.projectTasks || []).findIndex(x => x.id === taskId); if (i > -1) { if (!this.data.projectTasks[i].comments) this.data.projectTasks[i].comments = []; this.data.projectTasks[i].comments.push({ id: Date.now(), user_id: userId, user_name: userName, text, created_at: new Date().toISOString() }); this._logProjectTask(taskId, '코멘트', '', text); this._save() } },
@@ -1125,13 +1153,24 @@ const Store = {
   // ==== Report Docs (작성 중 보고서) ====
   getReportDocs() { return this.data.reportDocs || [] },
   getReportDoc(id) { return (this.data.reportDocs || []).find(d => d.id === id) },
-  addReportDoc(doc) { const rec = { id: Date.now(), status: 'draft', progress: 0, created_at: new Date().toISOString(), ...doc }; this.data.reportDocs.push(rec); this._save(); return rec },
+  addReportDoc(doc) { const rec = { id: Date.now(), status: 'draft', progress: 0, version: 1, created_at: new Date().toISOString(), ...doc }; this.data.reportDocs.push(rec); this._save(); return rec },
   updateReportDoc(id, updates) { const i = (this.data.reportDocs || []).findIndex(d => d.id === id); if (i > -1) { Object.assign(this.data.reportDocs[i], updates, { updated_at: new Date().toISOString() }); this._save() } return this.getReportDoc(id) },
-  deleteReportDoc(id) { this.data.reportDocs = (this.data.reportDocs || []).filter(d => d.id !== id); this.data.reportDocSections = (this.data.reportDocSections || []).filter(s => s.doc_id !== id); this.data.reportFeedback = (this.data.reportFeedback || []).filter(f => f.doc_id !== id); this._addDeletedId('reportDocs', id); this._save() },
+  deleteReportDoc(id) { this.data.reportDocs = (this.data.reportDocs || []).filter(d => d.id !== id); this.data.reportDocSections = (this.data.reportDocSections || []).filter(s => s.doc_id !== id); this.data.reportFeedback = (this.data.reportFeedback || []).filter(f => f.doc_id !== id); this.data.reportDocVersions = (this.data.reportDocVersions || []).filter(v => v.doc_id !== id); this._addDeletedId('reportDocs', id); this._save() },
+
+  // ==== Report Doc Versions (버전 이력) ====
+  getReportDocVersions(docId) { return (this.data.reportDocVersions || []).filter(v => docId == null || v.doc_id === docId).sort((a, b) => b.version - a.version) },
+  addReportDocVersion(docId, meta) {
+    if (!this.data.reportDocVersions) this.data.reportDocVersions = []
+    const doc = this.getReportDoc(docId)
+    const prev = (this.data.reportDocVersions || []).filter(v => v.doc_id === docId).reduce((m, v) => Math.max(m, v.version || 0), (doc && doc.version) || 0)
+    const version = (meta && meta.version) || (prev + 1)
+    const rec = { id: Date.now(), doc_id: docId, version, title: '', section_count: 0, note: '', created_at: new Date().toISOString(), ...meta }
+    this.data.reportDocVersions.push(rec); this._save(); return rec
+  },
 
   // ==== Report Doc Sections (보고서 섹션) ====
   getReportDocSections(docId) { const all = this.data.reportDocSections || []; return docId == null ? all : all.filter(s => s.doc_id === docId) },
-  addReportSection(sec) { this.data.reportDocSections.push({ id: Date.now(), status: 'empty', indicator_ids: [], sort_order: this.data.reportDocSections.length + 1, created_at: new Date().toISOString(), ...sec }); this._save(); return sec },
+  addReportSection(sec) { const rec = { id: Date.now() + Math.random(), status: 'empty', indicator_ids: [], sort_order: (this.data.reportDocSections || []).length + 1, created_at: new Date().toISOString(), ...sec }; this.data.reportDocSections.push(rec); this._save(); return rec },
   updateReportSection(id, updates) { const i = (this.data.reportDocSections || []).findIndex(s => s.id === id); if (i > -1) { Object.assign(this.data.reportDocSections[i], updates, { updated_at: new Date().toISOString() }); this._save() } },
   deleteReportSection(id) { this.data.reportDocSections = (this.data.reportDocSections || []).filter(s => s.id !== id); this.data.reportFeedback = (this.data.reportFeedback || []).filter(f => f.section_id !== id); this._save() },
 
