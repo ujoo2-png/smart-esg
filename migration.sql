@@ -483,6 +483,10 @@ CREATE TABLE tb_reference_chunk (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 참고자료 열람 통계 (v2.1.6)
+ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS view_count INT DEFAULT 0;
+ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ;
+
 -- ============================================================
 -- 13. 인덱스
 -- ============================================================

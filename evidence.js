@@ -60,12 +60,12 @@ const Evidence = {
 
   getStatusBadge(status) {
     const colors = {
-      pending: '#f59e0b',
-      self: '#3b82f6',
+      pending: '#d97706',
+      self: '#2563EB',
       internal_reviewed: '#2563EB',
-      externally_verified: '#10b981',
-      confirmed: '#10b981',
-      expired: '#ef4444',
+      externally_verified: '#059669',
+      confirmed: '#059669',
+      expired: '#dc2626',
       missing: '#9ca3af'
     }
     const label = this.getStatusLabel(status)

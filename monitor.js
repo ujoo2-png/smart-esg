@@ -125,15 +125,15 @@ const MONITORING = {
     html += '<h4 style="margin:0 0 12px 0;font-size:14px">📊 경쟁사 벤치마크 분석</h4>'
 
     if (comparison) {
-      const statusColors = { above: '#27ae60', slightly_above: '#2ecc71', slightly_below: '#f39c12', below: '#e74c3c' }
+      const statusColors = { above: '#047857', slightly_above: '#059669', slightly_below: '#d97706', below: '#dc2626' }
       html += `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">`
-      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:#f8f9fa;border-radius:6px"><div style="font-size:24px;font-weight:700">${comparison.company_score}</div><div style="font-size:11px;color:#666">자사 점수</div></div>`
-      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:#f8f9fa;border-radius:6px"><div style="font-size:24px;font-weight:700;color:#3498db">${comparison.industry_avg}</div><div style="font-size:11px;color:#666">${comparison.industry} 평균</div></div>`
-      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:#f8f9fa;border-radius:6px"><div style="font-size:24px;font-weight:700;color:#9b59b6">${comparison.global_avg}</div><div style="font-size:11px;color:#666">글로벌 평균</div></div>`
-      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:${statusColors[comparison.status]}15;border:2px solid ${statusColors[comparison.status]};border-radius:6px"><div style="font-size:18px;font-weight:700;color:${statusColors[comparison.status]}">${comparison.statusLabel}</div><div style="font-size:11px;color:#666">${comparison.difference > 0 ? '+' : ''}${comparison.difference}점 차이</div></div>`
+      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:#F8FAFC;border-radius:6px"><div style="font-size:24px;font-weight:700">${comparison.company_score}</div><div style="font-size:11px;color:#6b7280">자사 점수</div></div>`
+      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:#F8FAFC;border-radius:6px"><div style="font-size:24px;font-weight:700;color:#2563EB">${comparison.industry_avg}</div><div style="font-size:11px;color:#6b7280">${comparison.industry} 평균</div></div>`
+      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:#F8FAFC;border-radius:6px"><div style="font-size:24px;font-weight:700;color:#1E3A5F">${comparison.global_avg}</div><div style="font-size:11px;color:#6b7280">글로벌 평균</div></div>`
+      html += `<div style="flex:1;min-width:140px;text-align:center;padding:12px;background:${statusColors[comparison.status]}15;border:2px solid ${statusColors[comparison.status]};border-radius:6px"><div style="font-size:18px;font-weight:700;color:${statusColors[comparison.status]}">${comparison.statusLabel}</div><div style="font-size:11px;color:#6b7280">${comparison.difference > 0 ? '+' : ''}${comparison.difference}점 차이</div></div>`
       html += '</div>'
 
-      html += `<div style="padding:12px;background:#f8f9fa;border-radius:6px;margin-bottom:16px">`
+      html += `<div style="padding:12px;background:#F8FAFC;border-radius:6px;margin-bottom:16px">`
       html += `<strong>상대 위치:</strong> ${comparison.industry} 내 상위 약 ${100 - comparison.percentile}% 이내 (샘플 ${comparison.sample_size}개사 기준)`
       html += `<br><strong>글로벌 대비:</strong> ${comparison.global_diff > 0 ? '+' : ''}${comparison.global_diff}점`
       html += '</div>'
@@ -141,9 +141,9 @@ const MONITORING = {
 
     if (allComparison && allComparison.length) {
       html += '<h4 style="margin:0 0 8px 0;font-size:13px"> 업종별 비교</h4>'
-      html += '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #ddd">업종</th><th style="width:60px;text-align:center;padding:4px 8px;border-bottom:2px solid #ddd">평균</th><th style="width:60px;text-align:center;padding:4px 8px;border-bottom:2px solid #ddd">차이</th><th style="width:40px;text-align:center;padding:4px 8px;border-bottom:2px solid #ddd">상태</th></tr>'
+      html += '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #e4e7eb">업종</th><th style="width:60px;text-align:center;padding:4px 8px;border-bottom:2px solid #e4e7eb">평균</th><th style="width:60px;text-align:center;padding:4px 8px;border-bottom:2px solid #e4e7eb">차이</th><th style="width:40px;text-align:center;padding:4px 8px;border-bottom:2px solid #e4e7eb">상태</th></tr>'
       allComparison.sort((a, b) => b.avg - a.avg).forEach(c => {
-        html += `<tr><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${c.industry}</td><td style="text-align:center;padding:4px 8px;border-bottom:1px solid #f0f0f0">${c.avg}</td><td style="text-align:center;padding:4px 8px;border-bottom:1px solid #f0f0f0;color:${c.above ? '#27ae60' : '#e74c3c'}">${c.diff > 0 ? '+' : ''}${c.diff}</td><td style="text-align:center;padding:4px 8px;border-bottom:1px solid #f0f0f0">${c.above ? '✅' : '⚠️'}</td></tr>`
+        html += `<tr><td style="padding:4px 8px;border-bottom:1px solid #EEF1F4">${c.industry}</td><td style="text-align:center;padding:4px 8px;border-bottom:1px solid #EEF1F4">${c.avg}</td><td style="text-align:center;padding:4px 8px;border-bottom:1px solid #EEF1F4;color:${c.above ? '#047857' : '#dc2626'}">${c.diff > 0 ? '+' : ''}${c.diff}</td><td style="text-align:center;padding:4px 8px;border-bottom:1px solid #EEF1F4">${c.above ? '✅' : '⚠️'}</td></tr>`
       })
       html += '</table>'
     }

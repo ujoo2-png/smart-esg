@@ -99,17 +99,17 @@
   <main id="main">
     <header id="topbar">
       <div class="topbar-left">
-        <button id="sb-toggle-top" title="사이드바 접기/펼치기" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px;margin-right:8px" onclick="toggleSidebar()">☰</button>
+        <button id="sb-toggle-top" title="사이드바 접기/펼치기" style="background:none;border:1px solid #e4e7eb;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px;margin-right:8px" onclick="toggleSidebar()">☰</button>
         <h2 id="page-title">대시보드</h2>
       </div>
       <div class="topbar-right">
         <div id="user-info" class="profile-dropdown" style="display:none;position:relative">
-          <span class="profile-name" onclick="document.getElementById('profile-menu').classList.toggle('show')" style="cursor:pointer;padding:4px 10px;border-radius:8px;border:1px solid #ddd;font-size:12px;color:#555;display:flex;align-items:center;gap:4px">👤 <span id="profile-name-text">-</span> <span style="font-size:8px">▼</span></span>
+          <span class="profile-name" onclick="document.getElementById('profile-menu').classList.toggle('show')" style="cursor:pointer;padding:4px 10px;border-radius:8px;border:1px solid #e4e7eb;font-size:12px;color:#6B7280;display:flex;align-items:center;gap:4px">👤 <span id="profile-name-text">-</span> <span style="font-size:8px">▼</span></span>
           <div id="profile-menu" class="profile-menu" style="position:absolute;top:100%;right:0;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:1000;min-width:160px;margin-top:4px;overflow:hidden">
             <button class="profile-menu-item" onclick="document.getElementById('profile-menu').classList.remove('show');openProfileModal()" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px">👤 내 프로필</button>
             <button class="profile-menu-item" onclick="document.getElementById('profile-menu').classList.remove('show');openPasswordModal()" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px">🔑 비밀번호 변경</button>
-            <div style="height:1px;background:#f0f0f0;margin:2px 0"></div>
-            <button class="profile-menu-item" onclick="document.getElementById('profile-menu').classList.remove('show');doLogoutUI()" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#e74c3c;display:flex;align-items:center;gap:8px">🚪 로그아웃</button>
+            <div style="height:1px;background:#EEF1F4;margin:2px 0"></div>
+            <button class="profile-menu-item" onclick="document.getElementById('profile-menu').classList.remove('show');doLogoutUI()" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;color:#dc2626;display:flex;align-items:center;gap:8px">🚪 로그아웃</button>
           </div>
         </div>
         <div id="supabase-status" class="supa-status is-off" title="확인 중…" style="cursor:pointer" onclick="if(typeof renderSupabaseStatus==='function')renderSupabaseStatus()">
@@ -118,17 +118,17 @@
         <button id="login-btn-top" onclick="showAuthModal('login')" style="display:none">로그인</button>
         <button id="logout-btn-top" onclick="doLogoutUI()" style="display:none;display:none">로그아웃</button>
         <div id="notif-wrapper" style="position:relative;display:none">
-          <button id="notif-btn" title="알림" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px;position:relative" onclick="toggleNotifPanel()">🔔<span id="notif-badge" style="position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 5px;display:none;min-width:16px;text-align:center"></span></button>
+          <button id="notif-btn" title="알림" style="background:none;border:1px solid #e4e7eb;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px;position:relative" onclick="toggleNotifPanel()">🔔<span id="notif-badge" style="position:absolute;top:-4px;right:-4px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 5px;display:none;min-width:16px;text-align:center"></span></button>
           <div id="notif-panel" class="hidden" style="position:absolute;top:100%;right:0;width:360px;max-height:400px;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:1000;overflow-y:auto;margin-top:8px">
-            <div style="padding:12px 16px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">
+            <div style="padding:12px 16px;border-bottom:1px solid #EEF1F4;display:flex;justify-content:space-between;align-items:center">
               <span style="font-weight:600;font-size:13px">알림</span>
               <button onclick="markAllRead()" style="background:none;border:none;color:#1E3A5F;font-size:11px;cursor:pointer">전체 읽음</button>
             </div>
             <div id="notif-list"></div>
           </div>
         </div>
-        <button id="help-btn" title="도움말" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px" onclick="toggleHelp()">❓</button>
-        <button id="export-btn" title="데이터 내보내기" style="background:none;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px" onclick="showExportModal()">📥</button>
+        <button id="help-btn" title="도움말" style="background:none;border:1px solid #e4e7eb;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:16px" onclick="toggleHelp()">❓</button>
+        <button id="export-btn" title="데이터 내보내기" style="background:none;border:1px solid #e4e7eb;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px" onclick="showExportModal()">📥</button>
       </div>
     </header>
     <section id="content">
@@ -174,9 +174,9 @@
             <div class="card-header">
               <h3>사용자 목록</h3>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <button class="btn" style="padding:4px 10px;font-size:12px;background:#e8eaed;color:#555" onclick="switchUserListTab('all')">전체</button>
+                <button class="btn" style="padding:4px 10px;font-size:12px;background:#e8eaed;color:#6B7280" onclick="switchUserListTab('all')">전체</button>
                 <button class="btn" style="padding:4px 10px;font-size:12px;background:#2d5427;color:#fff" onclick="switchUserListTab('pending')">승인대기 <span id="pending-count" style="background:#fff;color:#2d5427;border-radius:99px;padding:0 6px;margin-left:4px;font-size:11px">0</span></button>
-                <input type="text" id="user-search" placeholder="이름 / 아이디 검색..." oninput="renderUsers()" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:200px;outline:none;margin-left:8px">
+                <input type="text" id="user-search" placeholder="이름 / 아이디 검색..." oninput="renderUsers()" style="padding:6px 12px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;width:200px;outline:none;margin-left:8px">
                 <button class="btn btn-primary" onclick="openAddUserModal()" style="font-size:12px">+ 사용자 추가</button>
                 <button class="btn btn-secondary" onclick="cleanupUsers()" style="font-size:12px">미승인 회원 전체삭제</button>
               </div>
@@ -194,21 +194,21 @@
           <div class="card">
             <div class="card-header"><h3>🔋 Supabase 접속 유지</h3></div>
             <div style="padding:20px;max-width:520px">
-              <p style="font-size:13px;color:#555;line-height:1.7">
+              <p style="font-size:13px;color:#6B7280;line-height:1.7">
                 Supabase 무료 요금제는 <strong>7일 동안 API 요청이 없으면 자동으로 일시중지</strong>됩니다.<br>
                 아래 기능을 켜면 일정 간격으로 Supabase에 자동 접속하여 중단을 방지합니다.
               </p>
-              <div style="display:flex;align-items:center;gap:12px;margin:20px 0;padding:16px;background:#f5f8fb;border-radius:12px">
+              <div style="display:flex;align-items:center;gap:12px;margin:20px 0;padding:16px;background:#F8FAFC;border-radius:12px">
                 <div style="flex:1">
                   <div style="font-weight:600;font-size:14px">자동 접속 유지</div>
-                  <div style="font-size:12px;color:#888;margin-top:2px">6일마다 Supabase에 자동으로 접속합니다</div>
+                  <div style="font-size:12px;color:#9ca3af;margin-top:2px">6일마다 Supabase에 자동으로 접속합니다</div>
                 </div>
                 <label style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer">
                   <input type="checkbox" id="keepalive-toggle" onchange="toggleKeepAlive(this.checked)" style="opacity:0;width:0;height:0">
-                  <span id="keepalive-slider" style="position:absolute;inset:0;background:#ccc;border-radius:26px;transition:.3s"></span>
+                  <span id="keepalive-slider" style="position:absolute;inset:0;background:#D0D5DD;border-radius:26px;transition:.3s"></span>
                 </label>
               </div>
-              <div style="font-size:12px;color:#999">
+              <div style="font-size:12px;color:#9CA3AF">
                 <span id="keepalive-status">⏹ 중지됨</span>
               </div>
             </div>
@@ -220,17 +220,17 @@
             <div class="card-header"><h3>📱 모바일 앱 접속</h3></div>
             <div style="padding:20px;display:flex;gap:32px;flex-wrap:wrap">
               <div style="flex:1;min-width:260px">
-                <p style="font-size:13px;color:#555;line-height:1.7">
+                <p style="font-size:13px;color:#6B7280;line-height:1.7">
                   아래 주소를 스마트폰 브라우저에 입력하거나<br>
                   QR코드를 스캔하면 모바일 페이지에 접속할 수 있습니다.<br><br>
                   <strong>주소</strong><br>
-                  <input id="mobile-url" type="url" placeholder="https://..." style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-top:4px" oninput="updateQR()">
+                  <input id="mobile-url" type="url" placeholder="https://..." style="width:100%;padding:8px 12px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;margin-top:4px" oninput="updateQR()">
                 </p>
               </div>
               <div style="text-align:center">
-                <div id="qr-container" style="background:#fff;border:2px dashed #ddd;border-radius:12px;padding:16px;display:inline-block">
+                <div id="qr-container" style="background:#fff;border:2px dashed #e4e7eb;border-radius:12px;padding:16px;display:inline-block">
                   <img id="qr-image" src="" alt="QR코드" style="width:240px;height:240px;display:block">
-                  <p style="font-size:11px;color:#999;margin:8px 0 0">QR코드를 스캔하면 모바일 페이지로 이동합니다</p>
+                  <p style="font-size:11px;color:#9CA3AF;margin:8px 0 0">QR코드를 스캔하면 모바일 페이지로 이동합니다</p>
                 </div>
               </div>
             </div>

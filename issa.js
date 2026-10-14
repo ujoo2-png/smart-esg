@@ -134,30 +134,30 @@ ${openFindings.length > 0 ? `미해결 사항: ${openFindings.length}건 (상세
     const resolvedFindings = assurance.findings?.filter(f => f.status === 'resolved') || []
 
     let html = '<div style="font-size:12px;line-height:1.6">'
-    html += `<div style="display:flex;justify-content:space-between;margin-bottom:16px;padding:12px;background:#f8f9fa;border-radius:6px">`
+    html += `<div style="display:flex;justify-content:space-between;margin-bottom:16px;padding:12px;background:#F8FAFC;border-radius:6px">`
     html += `<div><strong>감사 단계:</strong> ${stageInfo?.icon || ''} ${stageInfo?.label || assurance.stage}</div>`
     html += `<div><strong>보증 수준:</strong> ${levelInfo?.label || assurance.assurance_level}</div>`
     html += `<div><strong>완료율:</strong> ${completion}%</div></div>`
     html += '<table style="width:100%;border-collapse:collapse;margin-bottom:12px"><tbody>'
-    html += `<tr><td style="padding:4px 8px;width:120px;color:#666">감사인</td><td style="padding:4px 8px">${assurance.auditor_name || '-'}</td></tr>`
-    html += `<tr><td style="padding:4px 8px;color:#666">감사기관</td><td style="padding:4px 8px">${assurance.auditor_firm || '-'}</td></tr>`
-    html += `<tr><td style="padding:4px 8px;color:#666">면허번호</td><td style="padding:4px 8px">${assurance.auditor_license || '-'}</td></tr>`
-    html += `<tr><td style="padding:4px 8px;color:#666">감사 범위</td><td style="padding:4px 8px">${assurance.scope_start || '-'} ~ ${assurance.scope_end || '-'}</td></tr>`
-    html += `<tr><td style="padding:4px 8px;color:#666">중대성 기준</td><td style="padding:4px 8px">${assurance.materiality_threshold}%</td></tr>`
-    html += `<tr><td style="padding:4px 8px;color:#666">미해결 지적사항</td><td style="padding:4px 8px">${openFindings.length}건</td></tr>`
-    html += `<tr><td style="padding:4px 8px;color:#666">해결 완료</td><td style="padding:4px 8px">${resolvedFindings.length}건</td></tr>`
+    html += `<tr><td style="padding:4px 8px;width:120px;color:#6b7280">감사인</td><td style="padding:4px 8px">${assurance.auditor_name || '-'}</td></tr>`
+    html += `<tr><td style="padding:4px 8px;color:#6b7280">감사기관</td><td style="padding:4px 8px">${assurance.auditor_firm || '-'}</td></tr>`
+    html += `<tr><td style="padding:4px 8px;color:#6b7280">면허번호</td><td style="padding:4px 8px">${assurance.auditor_license || '-'}</td></tr>`
+    html += `<tr><td style="padding:4px 8px;color:#6b7280">감사 범위</td><td style="padding:4px 8px">${assurance.scope_start || '-'} ~ ${assurance.scope_end || '-'}</td></tr>`
+    html += `<tr><td style="padding:4px 8px;color:#6b7280">중대성 기준</td><td style="padding:4px 8px">${assurance.materiality_threshold}%</td></tr>`
+    html += `<tr><td style="padding:4px 8px;color:#6b7280">미해결 지적사항</td><td style="padding:4px 8px">${openFindings.length}건</td></tr>`
+    html += `<tr><td style="padding:4px 8px;color:#6b7280">해결 완료</td><td style="padding:4px 8px">${resolvedFindings.length}건</td></tr>`
     html += '</tbody></table>'
-    html += '<div style="border:1px solid #ddd;padding:12px;border-radius:6px;margin-bottom:12px"><h4 style="margin:0 0 8px 0;font-size:13px">보증 의견</h4>'
+    html += '<div style="border:1px solid #e4e7eb;padding:12px;border-radius:6px;margin-bottom:12px"><h4 style="margin:0 0 8px 0;font-size:13px">보증 의견</h4>'
     html += `<p style="margin:0;white-space:pre-wrap">${statement.statement}</p></div>`
     if (assurance.findings && assurance.findings.length) {
       html += '<h4 style="margin:0 0 8px 0;font-size:13px">지적사항 상세</h4>'
-      html += '<table style="width:100%;border-collapse:collapse;font-size:11px"><tr><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #ddd">ID</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #ddd">유형</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #ddd">심각도</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #ddd">설명</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #ddd">상태</th></tr>'
+      html += '<table style="width:100%;border-collapse:collapse;font-size:11px"><tr><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #e4e7eb">ID</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #e4e7eb">유형</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #e4e7eb">심각도</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #e4e7eb">설명</th><th style="text-align:left;padding:4px 8px;border-bottom:2px solid #e4e7eb">상태</th></tr>'
       assurance.findings.forEach(f => {
-        const sevColors = { high: '#e74c3c', medium: '#f39c12', low: '#3498db' }
+        const sevColors = { high: '#dc2626', medium: '#d97706', low: '#2563EB' }
         const sevLabels = { high: '높음', medium: '보통', low: '낮음' }
-        const stColors = { open: '#e74c3c', resolved: '#27ae60' }
+        const stColors = { open: '#dc2626', resolved: '#047857' }
         const stLabels = { open: '미해결', resolved: '해결완료' }
-        html += `<tr><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${f.id}</td><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${f.category}</td><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0"><span style="color:${sevColors[f.severity]};font-weight:600">${sevLabels[f.severity] || f.severity}</span></td><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${f.description}</td><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0"><span style="color:${stColors[f.status]};font-weight:600">${stLabels[f.status] || f.status}</span></td></tr>`
+        html += `<tr><td style="padding:4px 8px;border-bottom:1px solid #EEF1F4">${f.id}</td><td style="padding:4px 8px;border-bottom:1px solid #EEF1F4">${f.category}</td><td style="padding:4px 8px;border-bottom:1px solid #EEF1F4"><span style="color:${sevColors[f.severity]};font-weight:600">${sevLabels[f.severity] || f.severity}</span></td><td style="padding:4px 8px;border-bottom:1px solid #EEF1F4">${f.description}</td><td style="padding:4px 8px;border-bottom:1px solid #EEF1F4"><span style="color:${stColors[f.status]};font-weight:600">${stLabels[f.status] || f.status}</span></td></tr>`
       })
       html += '</table>'
     }

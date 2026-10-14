@@ -6,10 +6,10 @@ const SupplierRisk = {
   ANSWER_LABELS: { yes: '예', partial: '부분', no: '아니오' },
 
   RISK_LEVELS: [
-    { value: 'high', label: '고위험', color: '#e74c3c' },
-    { value: 'medium', label: '중위험', color: '#f39c12' },
-    { value: 'low', label: '저위험', color: '#27ae60' },
-    { value: 'pending', label: '미진단', color: '#95a5a6' }
+    { value: 'high', label: '고위험', color: '#dc2626' },
+    { value: 'medium', label: '중위험', color: '#d97706' },
+    { value: 'low', label: '저위험', color: '#047857' },
+    { value: 'pending', label: '미진단', color: '#9CA3AF' }
   ],
 
   STATUS_OPTIONS: [
@@ -70,7 +70,7 @@ const SupplierRisk = {
 
   getRiskColor(level) {
     const found = this.RISK_LEVELS.find(r => r.value === level)
-    return found ? found.color : '#95a5a6'
+    return found ? found.color : '#9CA3AF'
   },
 
   getRiskLabel(level) {

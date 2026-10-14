@@ -132,7 +132,7 @@ const GRI = {
     const categoryNames = { universal: '보편적', economic: '경제', environmental: '환경', social: '사회' }
 
     let html = '<table style="width:100%;border-collapse:collapse;font-size:12px">'
-    html += '<tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #ddd">GRI 기준</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">상태</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">연결 지표</th></tr>'
+    html += '<tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #e4e7eb">GRI 기준</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">상태</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">연결 지표</th></tr>'
 
     categories.forEach(cat => {
       const items = rate.details.filter(d => {
@@ -140,14 +140,14 @@ const GRI = {
         return std && std.category === cat
       })
       if (!items.length) return
-      html += `<tr><td colspan="3" style="padding:8px;font-weight:600;background:#f8f9fa;border-bottom:1px solid #eee">${categoryNames[cat]}</td></tr>`
+      html += `<tr><td colspan="3" style="padding:8px;font-weight:600;background:#F8FAFC;border-bottom:1px solid #eef1f4">${categoryNames[cat]}</td></tr>`
       items.forEach(d => {
-        const statusColors = { compliant: '#27ae60', with_reference: '#f39c12', non_compliant: '#e74c3c' }
+        const statusColors = { compliant: '#047857', with_reference: '#d97706', non_compliant: '#dc2626' }
         const statusLabels = { compliant: '완전준수', with_reference: '부분준수', non_compliant: '미준수' }
         html += `<tr>
-          <td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${d.code} - ${d.name}</td>
-          <td style="text-align:center;padding:4px 8px;border-bottom:1px solid #f0f0f0"><span style="color:${statusColors[d.status]};font-weight:600;font-size:11px">${statusLabels[d.status]}</span></td>
-          <td style="text-align:center;padding:4px 8px;border-bottom:1px solid #f0f0f0">${d.indicators.length}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #EEF1F4">${d.code} - ${d.name}</td>
+          <td style="text-align:center;padding:4px 8px;border-bottom:1px solid #EEF1F4"><span style="color:${statusColors[d.status]};font-weight:600;font-size:11px">${statusLabels[d.status]}</span></td>
+          <td style="text-align:center;padding:4px 8px;border-bottom:1px solid #EEF1F4">${d.indicators.length}</td>
         </tr>`
       })
     })

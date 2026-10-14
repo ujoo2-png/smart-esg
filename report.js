@@ -25,26 +25,26 @@ const Report = {
     .page-break { page-break-before: always }
   }
   * { margin: 0; padding: 0; box-sizing: border-box }
-  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 10.5pt; line-height: 1.7; color: #1a1a2e; padding: 0 }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 10.5pt; line-height: 1.7; color: #14213D; padding: 0 }
   .cover { text-align: center; padding: 120px 40px 60px; border-bottom: 3px solid #1E3A5F }
-  .cover h1 { font-size: 26pt; font-weight: 700; letter-spacing: -0.5px; color: #1a1a2e; margin-bottom: 16px }
+  .cover h1 { font-size: 26pt; font-weight: 700; letter-spacing: -0.5px; color: #14213D; margin-bottom: 16px }
   .cover .company { font-size: 16pt; color: #1E3A5F; font-weight: 600; margin-bottom: 8px }
-  .cover .date { font-size: 12pt; color: #888 }
+  .cover .date { font-size: 12pt; color: #9ca3af }
   .toc { padding: 30px 40px }
-  .toc h2 { font-size: 14pt; border-bottom: 2px solid #1a1a2e; padding-bottom: 6px; margin-bottom: 16px }
-  .toc-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dotted #ddd; font-size: 11pt }
-  h2 { font-size: 14pt; font-weight: 700; color: #1a1a2e; border-bottom: 2px solid #1E3A5F; padding-bottom: 6px; margin: 28px 0 14px }
-  h3 { font-size: 11pt; font-weight: 600; color: #333; margin: 16px 0 8px }
+  .toc h2 { font-size: 14pt; border-bottom: 2px solid #14213D; padding-bottom: 6px; margin-bottom: 16px }
+  .toc-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dotted #e4e7eb; font-size: 11pt }
+  h2 { font-size: 14pt; font-weight: 700; color: #14213D; border-bottom: 2px solid #1E3A5F; padding-bottom: 6px; margin: 28px 0 14px }
+  h3 { font-size: 11pt; font-weight: 600; color: #1F2937; margin: 16px 0 8px }
   table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt }
-  th, td { border: 1px solid #e0e0e0; padding: 7px 10px; text-align: left }
-  th { background: #f5f8fb; font-weight: 600; color: #555; white-space: nowrap }
-  td { color: #333 }
+  th, td { border: 1px solid #E4E7EB; padding: 7px 10px; text-align: left }
+  th { background: #F8FAFC; font-weight: 600; color: #6B7280; white-space: nowrap }
+  td { color: #1F2937 }
   .section { margin-bottom: 20px; padding: 0 10px }
   .evidence-ref { color: #1E3A5F; font-size: 9pt; margin-top: 4px }
-  .scope-box { background: #f5f8fb; border: 1px solid #e4e7eb; border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 10pt }
+  .scope-box { background: #F8FAFC; border: 1px solid #e4e7eb; border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 10pt }
   .scope-box strong { color: #1E3A5F }
-  .warn-box { background: #fff5f5; border: 1px solid #ffccc7; border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 10pt; color: #cf1322 }
-  .footer { text-align: center; color: #999; font-size: 9pt; margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee }
+  .warn-box { background: #fff5f5; border: 1px solid #ffccc7; border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 10pt; color: #DC2626 }
+  .footer { text-align: center; color: #9CA3AF; font-size: 9pt; margin-top: 40px; padding-top: 16px; border-top: 1px solid #eef1f4 }
   .print-btn { position: fixed; bottom: 20px; right: 20px; z-index: 9999; padding: 12px 24px; background: #1E3A5F; color: #fff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(30,58,95,.3) }
 </style>
 </head>
@@ -121,7 +121,7 @@ const Report = {
         totalAll += s.total
         html += `<tr><td>Scope ${s.scope}</td><td>${s.scope2_method || '-'}</td><td>${s.total.toFixed(2)}</td><td>${s.count}</td></tr>`
       })
-      html += `<tr style="font-weight:700;background:#f5f8fb"><td colspan="2">합계</td><td>${totalAll.toFixed(2)}</td><td></td></tr>`
+      html += `<tr style="font-weight:700;background:#F8FAFC"><td colspan="2">합계</td><td>${totalAll.toFixed(2)}</td><td></td></tr>`
       html += `</table>`
     }
 

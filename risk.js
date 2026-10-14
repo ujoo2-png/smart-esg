@@ -1,8 +1,8 @@
 const RISK_LEVELS = [
-  { key: 'critical', label: '위험', color: '#e74c3c', min: 80 },
-  { key: 'high', label: '높음', color: '#f39c12', min: 60 },
-  { key: 'medium', label: '보통', color: '#f1c40f', min: 40 },
-  { key: 'low', label: '낮음', color: '#27ae60', min: 0 }
+  { key: 'critical', label: '위험', color: '#dc2626', min: 80 },
+  { key: 'high', label: '높음', color: '#d97706', min: 60 },
+  { key: 'medium', label: '보통', color: '#D97706', min: 40 },
+  { key: 'low', label: '낮음', color: '#047857', min: 0 }
 ]
 
 const RISK_CATEGORIES = [
@@ -119,27 +119,27 @@ const RISK = {
     const alerts = this.generateAlerts(assessmentId)
 
     let html = '<div style="font-size:12px;line-height:1.6">'
-    html += `<div style="text-align:center;padding:20px;border-radius:8px;margin-bottom:16px;background:${overall.color || '#f8f9fa'}20;border:2px solid ${overall.color || '#ddd'}">`
-    html += `<div style="font-size:32px;font-weight:700;color:${overall.color || '#333'}">${overall.score}</div>`
-    html += `<div style="font-size:14px;color:${overall.color || '#333'}">종합 리스크 점수 (${overall.label})</div></div>`
+    html += `<div style="text-align:center;padding:20px;border-radius:8px;margin-bottom:16px;background:${overall.color || '#F8FAFC'}20;border:2px solid ${overall.color || '#e4e7eb'}">`
+    html += `<div style="font-size:32px;font-weight:700;color:${overall.color || '#1F2937'}">${overall.score}</div>`
+    html += `<div style="font-size:14px;color:${overall.color || '#1F2937'}">종합 리스크 점수 (${overall.label})</div></div>`
 
     if (alerts.length) {
       html += '<div style="margin-bottom:16px"><h4 style="margin:0 0 8px 0;font-size:13px">⚠️ 알림</h4>'
       alerts.forEach(a => {
-        const colors = { critical: '#e74c3c', warning: '#f39c12', info: '#3498db' }
+        const colors = { critical: '#dc2626', warning: '#d97706', info: '#2563EB' }
         html += `<div style="padding:8px 12px;margin-bottom:4px;background:${colors[a.severity]}10;border-left:3px solid ${colors[a.severity]};border-radius:4px">${a.icon} <strong>[${a.category}]</strong> ${a.message}</div>`
       })
       html += '</div>'
     }
 
-    html += '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #ddd">카테고리</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">점수</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">수준</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">추세</th></tr>'
+    html += '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #e4e7eb">카테고리</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">점수</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">수준</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">추세</th></tr>'
     categories.forEach(cat => {
       const trendIcons = { worsening: '📈 악화', improving: '📉 개선', stable: '➡️ 유지' }
       html += `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${cat.icon} ${cat.label}</td>
-        <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f0f0f0"><strong>${cat.risk.score}</strong></td>
-        <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f0f0f0"><span style="color:${cat.risk.color};font-weight:600">${cat.risk.label}</span></td>
-        <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f0f0f0">${trendIcons[cat.risk.trend]}</td></tr>`
+        <td style="padding:6px 8px;border-bottom:1px solid #EEF1F4">${cat.icon} ${cat.label}</td>
+        <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #EEF1F4"><strong>${cat.risk.score}</strong></td>
+        <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #EEF1F4"><span style="color:${cat.risk.color};font-weight:600">${cat.risk.label}</span></td>
+        <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #EEF1F4">${trendIcons[cat.risk.trend]}</td></tr>`
     })
     html += '</table></div>'
     return { overall, categories, alerts, html }

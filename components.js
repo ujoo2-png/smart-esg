@@ -3,26 +3,26 @@ const ESGComponents = {
 
   changeLogTimeline(tableName, recordId) {
     const logs = Store.getChangeLogs(tableName, recordId)
-    if (!logs.length) return '<div style="padding:12px;color:#888;font-size:12px">변경이력이 없습니다.</div>'
+    if (!logs.length) return '<div style="padding:12px;color:#9ca3af;font-size:12px">변경이력이 없습니다.</div>'
     const actionIcons = { CREATE: '🆕', UPDATE: '✏️', DELETE: '🗑️', APPROVE: '✅', REJECT: '❌', SHARE: '🔗' }
-    const actionColors = { CREATE: '#22c55e', UPDATE: '#3b82f6', DELETE: '#ef4444', APPROVE: '#10b981', REJECT: '#ef4444', SHARE: '#2563EB' }
+    const actionColors = { CREATE: '#059669', UPDATE: '#2563EB', DELETE: '#dc2626', APPROVE: '#059669', REJECT: '#dc2626', SHARE: '#2563EB' }
     return '<div style="padding:12px;max-height:300px;overflow-y:auto">' +
       logs.map(log => {
         const icon = actionIcons[log.action_type] || '📝'
-        const color = actionColors[log.action_type] || '#666'
+        const color = actionColors[log.action_type] || '#6b7280'
         const time = new Date(log.changed_at).toLocaleString('ko-KR')
         const field = log.field_name ? `<span style="color:#1E3A5F;font-weight:500">${log.field_name}</span>` : ''
-        const change = log.old_value && log.new_value ? `<span style="text-decoration:line-through;color:#999">${log.old_value}</span> → <span style="color:#333;font-weight:500">${log.new_value}</span>` : log.new_value || log.old_value || ''
-        return `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:12px">
+        const change = log.old_value && log.new_value ? `<span style="text-decoration:line-through;color:#9CA3AF">${log.old_value}</span> → <span style="color:#1F2937;font-weight:500">${log.new_value}</span>` : log.new_value || log.old_value || ''
+        return `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #EEF1F4;font-size:12px">
           <span style="flex-shrink:0;width:20px;text-align:center;color:${color}">${icon}</span>
           <div style="flex:1">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <span style="font-weight:500;color:#333">${log.action_type}</span>
-              <span style="color:#aaa;font-size:10px">${time}</span>
+              <span style="font-weight:500;color:#1F2937">${log.action_type}</span>
+              <span style="color:#9CA3AF;font-size:10px">${time}</span>
             </div>
             ${field ? `<div style="margin-top:2px">${field}</div>` : ''}
-            ${change ? `<div style="margin-top:2px;color:#555">${change}</div>` : ''}
-            <div style="margin-top:2px;color:#888;font-size:10px">by ${log.changed_by}</div>
+            ${change ? `<div style="margin-top:2px;color:#6B7280">${change}</div>` : ''}
+            <div style="margin-top:2px;color:#9ca3af;font-size:10px">by ${log.changed_by}</div>
           </div>
         </div>`
       }).join('') + '</div>'
@@ -44,21 +44,21 @@ const ESGComponents = {
         return `<div style="padding:8px;margin-bottom:6px;border-radius:6px;background:${isActive ? '#f0fdf4' : '#fef2f2'};border:1px solid ${isActive ? '#bbf7d0' : '#fecaca'}">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <div>
-              <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:${l.permission === 'VIEW_ONLY' ? '#dbeafe' : '#fef3c7'};color:${l.permission === 'VIEW_ONLY' ? '#1e40af' : '#92400e'}">${l.permission === 'VIEW_ONLY' ? '열람만 가능' : '코멘트 가능'}</span>
-              <span style="font-size:11px;color:#666;margin-left:6px">${l.shared_with || '미지정'}</span>
+              <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:${l.permission === 'VIEW_ONLY' ? '#eef4fa' : '#fef3c7'};color:${l.permission === 'VIEW_ONLY' ? '#1E3A5F' : '#92400e'}">${l.permission === 'VIEW_ONLY' ? '열람만 가능' : '코멘트 가능'}</span>
+              <span style="font-size:11px;color:#6b7280;margin-left:6px">${l.shared_with || '미지정'}</span>
             </div>
             <div>
-              ${isActive ? `<button class="btn btn-sm" style="font-size:10px;color:#ef444c;background:none;border:none" onclick="ESGComponents.revokeShareLink(${l.id})">회수</button>` : '<span style="font-size:10px;color:#ef4444">무효화됨</span>'}
+              ${isActive ? `<button class="btn btn-sm" style="font-size:10px;color:#DC2626;background:none;border:none" onclick="ESGComponents.revokeShareLink(${l.id})">회수</button>` : '<span style="font-size:10px;color:#dc2626">무효화됨</span>'}
             </div>
           </div>
-          <div style="font-size:10px;color:#888;margin-top:4px;display:flex;gap:8px">
+          <div style="font-size:10px;color:#9ca3af;margin-top:4px;display:flex;gap:8px">
             <span>열람 ${accessCount}회</span>
             ${l.expires_at ? `<span>만료: ${new Date(l.expires_at).toLocaleDateString('ko-KR')}</span>` : ''}
             <span>생성: ${new Date(l.created_at).toLocaleDateString('ko-KR')}</span>
           </div>
-          ${isActive ? `<div style="margin-top:4px"><input type="text" value="${url}" readonly style="width:100%;font-size:10px;padding:3px 6px;border:1px solid #ddd;border-radius:3px;background:#fff;box-sizing:border-box" onclick="this.select()"></div>` : ''}
+          ${isActive ? `<div style="margin-top:4px"><input type="text" value="${url}" readonly style="width:100%;font-size:10px;padding:3px 6px;border:1px solid #e4e7eb;border-radius:3px;background:#fff;box-sizing:border-box" onclick="this.select()"></div>` : ''}
         </div>`
-      }).join('') : '<div style="text-align:center;color:#888;font-size:12px;padding:12px">생성된 공유 링크가 없습니다.</div>'}
+      }).join('') : '<div style="text-align:center;color:#9ca3af;font-size:12px;padding:12px">생성된 공유 링크가 없습니다.</div>'}
     </div>`
   },
 
@@ -67,18 +67,18 @@ const ESGComponents = {
     form.innerHTML = `
       <div style="padding:4px 0">
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">공유 대상</label>
-        <input type="text" id="shareTarget" placeholder="이메일 또는 메모 (예: 고객사 A 담당자)" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;box-sizing:border-box">
+        <input type="text" id="shareTarget" placeholder="이메일 또는 메모 (예: 고객사 A 담당자)" style="width:100%;padding:6px 8px;border:1px solid #e4e7eb;border-radius:4px;font-size:12px;box-sizing:border-box">
       </div>
       <div style="padding:4px 0">
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">권한</label>
-        <select id="sharePerm" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
+        <select id="sharePerm" style="width:100%;padding:6px 8px;border:1px solid #e4e7eb;border-radius:4px;font-size:12px">
           <option value="VIEW_ONLY">열람만 가능</option>
           <option value="COMMENT">코멘트 가능</option>
         </select>
       </div>
       <div style="padding:4px 0">
         <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">만료일 (선택)</label>
-        <input type="date" id="shareExpiry" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;box-sizing:border-box">
+        <input type="date" id="shareExpiry" style="width:100%;padding:6px 8px;border:1px solid #e4e7eb;border-radius:4px;font-size:12px;box-sizing:border-box">
       </div>
     `
     if (typeof modal === 'function') {
@@ -108,12 +108,12 @@ const ESGComponents = {
     panel.style.cssText = 'position:fixed;top:0;right:0;width:480px;max-width:90vw;height:100vh;background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.15);z-index:1000;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease'
     const activeTab = defaultTab || tabs[0]?.id || ''
     panel.innerHTML = `
-      <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#fafafa;flex-shrink:0">
+      <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;background:#F8FAFC;flex-shrink:0">
         <span style="font-weight:600;font-size:14px">${title}</span>
-        <button onclick="ESGComponents.closeSlidePanel()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#666;padding:0 4px">✕</button>
+        <button onclick="ESGComponents.closeSlidePanel()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#6b7280;padding:0 4px">✕</button>
       </div>
       <div style="display:flex;border-bottom:1px solid #e5e7eb;flex-shrink:0">
-        ${tabs.map(t => `<button data-tab="${t.id}" class="esg-tab-btn" style="flex:1;padding:8px;font-size:12px;border:none;background:${t.id === activeTab ? '#f0f6ff' : '#fff'};color:${t.id === activeTab ? '#1E3A5F' : '#666'};font-weight:${t.id === activeTab ? '600' : '400'};cursor:pointer;border-bottom:2px solid ${t.id === activeTab ? '#1E3A5F' : 'transparent'}">${t.label}</button>`).join('')}
+        ${tabs.map(t => `<button data-tab="${t.id}" class="esg-tab-btn" style="flex:1;padding:8px;font-size:12px;border:none;background:${t.id === activeTab ? '#f0f6ff' : '#fff'};color:${t.id === activeTab ? '#1E3A5F' : '#6b7280'};font-weight:${t.id === activeTab ? '600' : '400'};cursor:pointer;border-bottom:2px solid ${t.id === activeTab ? '#1E3A5F' : 'transparent'}">${t.label}</button>`).join('')}
       </div>
       <div id="esg-slide-content" style="flex:1;overflow-y:auto"></div>
     `
@@ -121,7 +121,7 @@ const ESGComponents = {
     requestAnimationFrame(() => { panel.style.transform = 'translateX(0)' })
     panel.querySelectorAll('.esg-tab-btn').forEach(btn => {
       btn.onclick = () => {
-        panel.querySelectorAll('.esg-tab-btn').forEach(b => { b.style.background = '#fff'; b.style.color = '#666'; b.style.fontWeight = '400'; b.style.borderBottom = '2px solid transparent' })
+        panel.querySelectorAll('.esg-tab-btn').forEach(b => { b.style.background = '#fff'; b.style.color = '#6b7280'; b.style.fontWeight = '400'; b.style.borderBottom = '2px solid transparent' })
         btn.style.background = '#f0f6ff'; btn.style.color = '#1E3A5F'; btn.style.fontWeight = '600'; btn.style.borderBottom = '2px solid #1E3A5F'
         const tab = tabs.find(t => t.id === btn.dataset.tab)
         if (tab) document.getElementById('esg-slide-content').innerHTML = tab.content

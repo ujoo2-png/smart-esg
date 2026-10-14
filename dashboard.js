@@ -139,7 +139,7 @@ const Dashboard = {
 
   _scoreCard(assessment) {
     const gradeColor = rating => {
-      const colors = { Platinum: '#0f766e', Gold: '#059669', Silver: '#2563EB', Bronze: '#d97706', 우수: '#059669', 양호: '#2563EB', 보통: '#d97706', 미흡: '#dc2626' }
+      const colors = { Platinum: '#047857', Gold: '#059669', Silver: '#2563EB', Bronze: '#d97706', 우수: '#059669', 양호: '#2563EB', 보통: '#d97706', 미흡: '#dc2626' }
       return colors[rating] || '#1E3A5F'
     }
     const score = assessment.total_score
@@ -239,9 +239,9 @@ ${this._head('🤖', 'AI 초안 현황')}
 <div class="dash-kpi">${total}<span style="font-size:16px;font-weight:600;color:var(--c-text-muted)">건</span></div>
 <div class="dash-kpi-sub">AI 검증 통과율 ${passRate}%</div>
 <div style="margin-top:14px;display:flex;gap:6px">
-  <span class="dash-chip" style="background:#fef3c7;color:#b45309">대기 ${pending}</span>
+  <span class="dash-chip" style="background:#fef3c7;color:#D97706">대기 ${pending}</span>
   <span class="dash-chip" style="background:#d1fae5;color:#047857">승인 ${approved}</span>
-  <span class="dash-chip" style="background:#fee2e2;color:#b91c1c">반려 ${rejected}</span>
+  <span class="dash-chip" style="background:#fee2e2;color:#DC2626">반려 ${rejected}</span>
 </div>`
   },
 

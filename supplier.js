@@ -33,10 +33,10 @@ const VSME_CHECKLIST = {
 
 const Supplier = {
   RISK_GRADES: [
-    { grade: 'A', label: '우수', min_score: 80, color: '#27ae60' },
-    { grade: 'B', label: '양호', min_score: 60, color: '#2980b9' },
-    { grade: 'C', label: '보통', min_score: 40, color: '#f39c12' },
-    { grade: 'D', label: '위험', min_score: 0, color: '#e74c3c' }
+    { grade: 'A', label: '우수', min_score: 80, color: '#047857' },
+    { grade: 'B', label: '양호', min_score: 60, color: '#1E3A5F' },
+    { grade: 'C', label: '보통', min_score: 40, color: '#d97706' },
+    { grade: 'D', label: '위험', min_score: 0, color: '#dc2626' }
   ],
 
   getAll() {

@@ -160,6 +160,6 @@ const Reference = {
   },
 
   statusColor(status) {
-    return { pending: '#9ca3af', uploading: '#3b82f6', converting: '#f59e0b', ready: '#22c55e', error: '#ef4444' }[status] || '#9ca3af'
+    return { pending: '#9ca3af', uploading: '#2563EB', converting: '#d97706', ready: '#059669', error: '#dc2626' }[status] || '#9ca3af'
   }
 }

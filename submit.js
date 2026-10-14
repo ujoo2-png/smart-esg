@@ -17,11 +17,11 @@ const SUBMISSION_AGENCIES = [
 ]
 
 const SUBMISSION_STATUS = [
-  { key: 'not_started', label: '미시작', color: '#95a5a6' },
-  { key: 'preparing', label: '준비중', color: '#f39c12' },
-  { key: 'ready', label: '제출가능', color: '#3498db' },
-  { key: 'submitted', label: '제출완료', color: '#27ae60' },
-  { key: 'rejected', label: '반려', color: '#e74c3c' }
+  { key: 'not_started', label: '미시작', color: '#9CA3AF' },
+  { key: 'preparing', label: '준비중', color: '#d97706' },
+  { key: 'ready', label: '제출가능', color: '#2563EB' },
+  { key: 'submitted', label: '제출완료', color: '#047857' },
+  { key: 'rejected', label: '반려', color: '#dc2626' }
 ]
 
 const SUBMISSION = {
@@ -296,18 +296,18 @@ ${disclosures}
     const submissions = this.getSubmissions(companyId)
     let html = '<div style="font-size:12px;line-height:1.6">'
     if (!submissions.length) {
-      html += '<p style="color:#666;text-align:center;padding:20px">등록된 제출이 없습니다. 평가기관을 추가해주세요.</p>'
+      html += '<p style="color:#6b7280;text-align:center;padding:20px">등록된 제출이 없습니다. 평가기관을 추가해주세요.</p>'
     } else {
-      html += '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #ddd">기관</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">연도</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">상태</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">준비율</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #ddd">기한</th></tr>'
+      html += '<table style="width:100%;border-collapse:collapse"><tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #e4e7eb">기관</th><th style="width:60px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">연도</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">상태</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">준비율</th><th style="width:80px;text-align:center;padding:6px 8px;border-bottom:2px solid #e4e7eb">기한</th></tr>'
       submissions.forEach(s => {
         const statusInfo = SUBMISSION_STATUS.find(st => st.key === s.status)
         const readiness = this.calcReadiness(s)
         html += `<tr>
-          <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0"><strong>${s.agency_name}</strong></td>
-          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f0f0f0">${s.year}</td>
-          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f0f0f0"><span style="color:${statusInfo?.color};font-weight:600;font-size:11px">${statusInfo?.label || s.status}</span></td>
-          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f0f0f0"><div style="background:#ecf0f1;border-radius:10px;height:8px;position:relative"><div style="background:${readiness >= 100 ? '#27ae60' : readiness >= 50 ? '#f39c12' : '#e74c3c'};border-radius:10px;height:100%;width:${readiness}%"></div></div><span style="font-size:10px;color:#666">${readiness}%</span></td>
-          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #f0f0f0">${s.deadline || '-'}</td></tr>`
+          <td style="padding:6px 8px;border-bottom:1px solid #EEF1F4"><strong>${s.agency_name}</strong></td>
+          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #EEF1F4">${s.year}</td>
+          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #EEF1F4"><span style="color:${statusInfo?.color};font-weight:600;font-size:11px">${statusInfo?.label || s.status}</span></td>
+          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #EEF1F4"><div style="background:#EEF1F4;border-radius:10px;height:8px;position:relative"><div style="background:${readiness >= 100 ? '#047857' : readiness >= 50 ? '#d97706' : '#dc2626'};border-radius:10px;height:100%;width:${readiness}%"></div></div><span style="font-size:10px;color:#6b7280">${readiness}%</span></td>
+          <td style="text-align:center;padding:6px 8px;border-bottom:1px solid #EEF1F4">${s.deadline || '-'}</td></tr>`
       })
       html += '</table>'
     }

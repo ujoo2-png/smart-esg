@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.1.5'
+const APP_VERSION = 'v2.1.6'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -28,7 +28,8 @@ const SB_SYNC_MAP = {
   projectBudget: ['tb_project_budget', ['id', 'project_name', 'category', 'planned_amount', 'actual_amount', 'status', 'start_date', 'end_date', 'notes', 'created_at', 'updated_at']],
   riskRegister: ['tb_risk_register', ['id', 'risk_name', 'category', 'description', 'probability', 'impact', 'status', 'owner', 'mitigation_plan', 'created_at', 'updated_at']],
   agencyMaster: ['tb_agency_master', ['id', 'code', 'name', 'track_type', 'description', 'effective_date', 'website_url', 'is_active', 'created_at']],
-  referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'status', 'error', 'tags', 'created_at', 'updated_at', 'converted_at']],
+  referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'status', 'error', 'tags', 'view_count', 'last_viewed_at', 'created_at', 'updated_at', 'converted_at']],
+  referenceChunks: ['tb_reference_chunk', ['id', 'reference_id', 'page', 'section_title', 'content', 'created_at']],
   reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'created_at', 'updated_at']],
   reportDocSections: ['tb_report_doc_section', ['id', 'doc_id', 'title', 'content', 'sort_order', 'status', 'indicator_refs', 'created_at', 'updated_at']],
   reportFeedback: ['tb_report_feedback', ['id', 'doc_id', 'section_id', 'kind', 'message', 'suggestion', 'reference_title', 'page', 'status', 'created_at']]
@@ -688,9 +689,45 @@ const Store = {
     return [e.code, e.message, e.details, e.hint].filter(Boolean).join(' | ')
   },
 
+  _isMissingColError(e) {
+    return !!e && (e.code === 'PGRST204' || /Could not find the '[^']+' column/i.test(e.message || ''))
+  },
+
+  _extractMissingCols(e) {
+    const out = []
+    const msg = e && e.message ? e.message : ''
+    const re = /Could not find the '([^']+)' column/g
+    let m
+    while ((m = re.exec(msg)) !== null) if (!out.includes(m[1])) out.push(m[1])
+    return out
+  },
+
+  _activeCols(tb, cols) {
+    const miss = this._missingCols && this._missingCols[tb]
+    return miss && miss.length ? cols.filter(c => !miss.includes(c)) : cols
+  },
+
+  async _upsertResilient(sb, tb, table, cols, rows) {
+    let useCols = this._activeCols(tb, cols)
+    let payload = this._buildSyncPayload(rows, useCols, table)
+    let { error } = await sb.from(tb).upsert(payload, { onConflict: 'id' })
+    let guard = 0
+    while (error && guard++ < 5) {
+      const miss = this._extractMissingCols(error)
+      if (!miss.length) break
+      this._missingCols = this._missingCols || {}
+      this._missingCols[tb] = [...(this._missingCols[tb] || []), ...miss]
+      useCols = this._activeCols(tb, cols)
+      payload = this._buildSyncPayload(rows, useCols, table)
+      ;({ error } = await sb.from(tb).upsert(payload, { onConflict: 'id' }))
+    }
+    return { error, payload, useCols }
+  },
+
   _buildSyncPayload(rows, cols, table) {
     const byId = new Map()
-    const window = rows.slice(-200)
+    const limit = table === 'referenceChunks' ? 2000 : 200
+    const window = rows.slice(-limit)
     let fallback = 0
     for (const row of window) {
       const out = {}
@@ -732,8 +769,7 @@ const Store = {
         }
         const rows = this._data[table]
         if (rows?.length) {
-          const payload = this._buildSyncPayload(rows, cols, table)
-          const { error } = await sb.from(tb).upsert(payload, { onConflict: 'id' })
+          const { error, payload } = await this._upsertResilient(sb, tb, table, cols, rows)
           if (error) {
             console.error(`[sbSync] UPSERT ${tb} (${payload.length}행)`, this._fmtSbError(error))
             console.error(`[sbSync] ${tb} 첫 행 예시`, JSON.stringify(payload[0]).slice(0, 400))
@@ -771,6 +807,54 @@ const Store = {
     console.table(report)
     console.log(JSON.stringify(report, null, 2))
     return report
+  },
+
+  _normalizeRemoteRow(row) {
+    const r = { ...row }
+    if (r.id != null) r.id = String(r.id)
+    if (typeof r.tags === 'string') { try { r.tags = JSON.parse(r.tags) } catch (e) { r.tags = [] } }
+    if (r.tags == null) r.tags = []
+    if (r.view_count == null) r.view_count = 0
+    return r
+  },
+
+  async pullFromSupabase(opts) {
+    const sb = getSupabase ? getSupabase() : null
+    if (!sb) return { ok: false, reason: 'no-supabase' }
+    const scope = (opts && opts.tables) || ['referenceDocs', 'referenceChunks']
+    const added = { referenceDocs: 0, referenceChunks: 0 }
+    const deletedDocs = new Set((this._getDeletedIds().referenceDocs || []).map(String))
+
+    if (scope.includes('referenceDocs')) {
+      try {
+        const { data, error } = await sb.from('tb_reference_doc').select('*')
+        if (error) return { ok: false, reason: this._fmtSbError(error) }
+        const local = this._data.referenceDocs || []
+        const have = new Set(local.map(d => String(d.id)))
+        const incoming = (data || []).filter(d => d && d.id != null && !have.has(String(d.id)) && !deletedDocs.has(String(d.id)))
+        incoming.forEach(d => local.push(this._normalizeRemoteRow(d)))
+        this._data.referenceDocs = local
+        added.referenceDocs = incoming.length
+      } catch (e) { return { ok: false, reason: e && e.message } }
+    }
+
+    if (scope.includes('referenceChunks')) {
+      try {
+        const { data } = await sb.from('tb_reference_chunk').select('*')
+        const local = this._data.referenceChunks || []
+        const haveRef = new Set(local.map(c => String(c.reference_id)))
+        const incoming = (data || []).filter(c => c && c.reference_id != null && !haveRef.has(String(c.reference_id)))
+        incoming.forEach(c => local.push(this._normalizeRemoteRow(c)))
+        this._data.referenceChunks = local
+        added.referenceChunks = incoming.length
+      } catch (e) {}
+    }
+
+    if (added.referenceDocs || added.referenceChunks) {
+      this._save()
+      this._notify()
+    }
+    return { ok: true, added }
   },
 
   _notify() {
@@ -1024,15 +1108,17 @@ const Store = {
   // ==== Reference Docs (참고자료 라이브러리) ====
   getReferenceDocs() { return this.data.referenceDocs || [] },
   getReferenceDoc(id) { return (this.data.referenceDocs || []).find(d => d.id === id) },
-  addReferenceDoc(doc) { const rec = { id: Date.now(), status: 'pending', tags: [], chunk_count: 0, created_at: new Date().toISOString(), ...doc }; this.data.referenceDocs.push(rec); this._save(); return rec },
+  addReferenceDoc(doc) { const rec = { id: Date.now(), status: 'pending', tags: [], chunk_count: 0, view_count: 0, last_viewed_at: null, created_at: new Date().toISOString(), ...doc }; this.data.referenceDocs.push(rec); this._save(); return rec },
   updateReferenceDoc(id, updates) { const i = (this.data.referenceDocs || []).findIndex(d => d.id === id); if (i > -1) { Object.assign(this.data.referenceDocs[i], updates, { updated_at: new Date().toISOString() }); this._save() } return this.getReferenceDoc(id) },
+  recordReferenceView(id) { const d = this.getReferenceDoc(id); if (!d) return null; this.data.referenceDocs[this.data.referenceDocs.indexOf(d)] = { ...d, view_count: (d.view_count || 0) + 1, last_viewed_at: new Date().toISOString() }; this._save(); return this.getReferenceDoc(id) },
   deleteReferenceDoc(id) { this.data.referenceDocs = (this.data.referenceDocs || []).filter(d => d.id !== id); this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => c.reference_id !== id); this._addDeletedId('referenceDocs', id); this._save() },
 
   // ==== Reference Chunks (검색 인덱스) ====
   getReferenceChunks(referenceId) { const all = this.data.referenceChunks || []; return referenceId == null ? all : all.filter(c => c.reference_id === referenceId) },
   replaceReferenceChunks(referenceId, chunks) {
     this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => c.reference_id !== referenceId)
-    chunks.forEach((c, idx) => this.data.referenceChunks.push({ id: Date.now() + idx, reference_id: referenceId, ...c }))
+    const base = Date.now()
+    chunks.forEach((c, idx) => this.data.referenceChunks.push({ id: `${base}_${idx}_${Math.random().toString(36).slice(2, 6)}`, reference_id: referenceId, ...c }))
     this._save()
   },
 
