@@ -11,10 +11,26 @@ const Reference = {
 
   typeLabel(name) { return this.FILE_TYPES[this.detectType(name)] || '기타' },
 
+  safeFileName(fileName) {
+    const raw = String(fileName || '')
+    const dot = raw.lastIndexOf('.')
+    const hasExt = dot > 0 && dot < raw.length - 1
+    const base = hasExt ? raw.slice(0, dot) : raw
+    const ext = hasExt ? raw.slice(dot + 1) : ''
+    const clean = s => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]/g, '_').replace(/_{2,}/g, '_').replace(/^_+|_+$/g, '')
+    const hash = Math.abs(raw.split('').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0)).toString(36)
+    let safeBase = clean(base)
+    const hadNonAscii = /[^\x00-\x7F]/.test(base)
+    if (hadNonAscii) safeBase = (safeBase ? safeBase + '_' : '') + hash
+    if (!safeBase) safeBase = 'file_' + hash
+    const safeExt = clean(ext).replace(/[^A-Za-z0-9]/g, '')
+    return safeExt ? `${safeBase}.${safeExt}` : safeBase
+  },
+
   storagePath(doc, fileName) {
     const companyId = (Store.getCompanies()[0]?.id) || 'default'
     const year = doc.year || new Date().getFullYear()
-    return `${companyId}/${year}/${doc.id}/${fileName}`
+    return `${companyId}/${year}/${doc.id}/${this.safeFileName(fileName)}`
   },
 
   chunkMarkdown(markdown, maxLen = 1200) {
