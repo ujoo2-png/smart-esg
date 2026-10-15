@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.2.1'
+const APP_VERSION = 'v2.3.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 

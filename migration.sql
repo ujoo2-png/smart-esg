@@ -502,6 +502,24 @@ ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS owner_id BIGINT;
 ALTER TABLE tb_evidence ADD COLUMN IF NOT EXISTS uploaded_by BIGINT;
 ALTER TABLE tb_assessment ADD COLUMN IF NOT EXISTS created_by BIGINT;
 
+CREATE TABLE IF NOT EXISTS tb_user_transfer_audit (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  from_user_id BIGINT,
+  from_username TEXT,
+  from_name TEXT,
+  to_user_id BIGINT,
+  to_username TEXT,
+  to_name TEXT,
+  counts JSONB,
+  total INT DEFAULT 0,
+  transferred_by BIGINT,
+  transferred_by_name TEXT,
+  reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_transfer_audit_from ON tb_user_transfer_audit(from_user_id);
+CREATE INDEX IF NOT EXISTS idx_user_transfer_audit_to ON tb_user_transfer_audit(to_user_id);
+
 CREATE TABLE IF NOT EXISTS tb_report_doc_version (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     doc_id TEXT,
