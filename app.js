@@ -4953,7 +4953,7 @@
               el('td', { style: 'font-size:11px;color:#dc2626' }, d.rejection_reason || '반려됨'),
               el('td', { style: 'white-space:nowrap' },
                 el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => { _editorAssId = d.assessment_id; navigate('editor'); setTimeout(() => { if (typeof renderReportEditor === 'function') renderReportEditor() }, 100) } }, '지금 수정하기'),
-                el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { AI.retryDraft(d.id, 'current_user'); showToast('AI 재생성이 시작되었습니다.', 'success'); renderAIHistory() } }, '재생성')
+                el('button', { className: 'btn btn-sm btn-secondary', onClick: async () => { const r = await AI.retryDraft(d.id, 'current_user'); if (r && r.error) { showToast('재생성 실패: ' + r.error, 'error'); return; } showToast('AI 재생성이 완료되었습니다. (v' + ((r && r.draft && r.draft.version) || 1) + ')', 'success'); renderAIHistory() } }, '재생성')
               )
             )
           }))

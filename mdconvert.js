@@ -1,5 +1,8 @@
 const MdConvert = {
-  _PDFJS_BASE: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174',
+  _PDFJS_BASES: [
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174',
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build'
+  ],
   _pdfjsPromise: null,
   _remoteDown: false,
 
@@ -35,16 +38,22 @@ const MdConvert = {
     if (this._pdfjsPromise) return this._pdfjsPromise
     this._pdfjsPromise = new Promise((resolve, reject) => {
       if (typeof document === 'undefined') return reject(new Error('브라우저 환경이 아닙니다.'))
-      const s = document.createElement('script')
-      s.src = this._PDFJS_BASE + '/pdf.min.js'
-      s.onload = () => {
-        const lib = window.pdfjsLib
-        if (!lib) return reject(new Error('pdf.js 로드에 실패했습니다.'))
-        try { lib.GlobalWorkerOptions.workerSrc = this._PDFJS_BASE + '/pdf.worker.min.js' } catch (e) {}
-        resolve(lib)
+      let i = 0
+      const tryNext = () => {
+        if (i >= this._PDFJS_BASES.length) { this._pdfjsPromise = null; return reject(new Error('pdf.js 로드에 실패했습니다. (네트워크)')) }
+        const base = this._PDFJS_BASES[i++]
+        const s = document.createElement('script')
+        s.src = base + '/pdf.min.js'
+        s.onload = () => {
+          const lib = window.pdfjsLib
+          if (!lib) return tryNext()
+          try { lib.GlobalWorkerOptions.workerSrc = base + '/pdf.worker.min.js' } catch (e) {}
+          resolve(lib)
+        }
+        s.onerror = () => tryNext()
+        document.head.appendChild(s)
       }
-      s.onerror = () => { this._pdfjsPromise = null; reject(new Error('pdf.js 로드에 실패했습니다. (네트워크)')) }
-      document.head.appendChild(s)
+      tryNext()
     })
     return this._pdfjsPromise
   },

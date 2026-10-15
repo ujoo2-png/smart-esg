@@ -449,6 +449,72 @@ ${evidenceExcerpts}
     return { success: true, draftId }
   },
 
+  async retryDraft(draftId, reviewerId = 'system', userRole = 'user') {
+    const draft = Store.getAIDrafts().find(d => d.id === draftId)
+    if (!draft) return { error: '초안을 찾을 수 없습니다.' }
+    const indicator = Store.getIndicators().find(i => i.id === draft.indicator_id)
+    if (!indicator) return { error: '지표를 찾을 수 없습니다.' }
+
+    const rawEvidences = Evidence.getByIndicator(draft.assessment_id, draft.indicator_id)
+    const evidences = this._maskEvidenceList(rawEvidences, userRole)
+    const prevYearText = this._getPrevYearText(draft.assessment_id, draft.indicator_id)
+    const evidenceExcerpts = this._formatEvidenceForPrompt(evidences)
+
+    const pillarMap = { POLICY: 'POLICY', ACTION: 'ACTION', RESULT: 'RESULT', GOVERNANCE: 'GOVERNANCE', STRATEGY: 'STRATEGY', RISK_MGMT: 'RISK_MGMT', METRICS: 'METRICS', Policies: 'POLICY', Actions: 'ACTION', Results: 'RESULT' }
+    const pillarType = pillarMap[indicator.pillar] || indicator.pillar || 'POLICY'
+
+    try {
+      const raw = await this._callAI([
+        { role: 'system', content: this._buildDraftSystemPrompt() },
+        { role: 'user', content: this._buildDraftUserPrompt(indicator, prevYearText, evidenceExcerpts, pillarType) }
+      ])
+      const parsed = this._safeParseJson(raw)
+
+      const next = {
+        ...draft,
+        draft_text: parsed?.draft_text || raw,
+        pillar_coverage: parsed?.pillar_coverage || null,
+        missing_pillars: parsed?.missing_pillars || [],
+        cited_evidence_ids: parsed?.cited_evidence_ids || evidences.map(e => e.id).filter(Boolean),
+        unsupported_claims_flagged: parsed?.unsupported_claims_flagged || [],
+        confidence: parsed?.confidence || 'LOW',
+        evidence_ids: evidences.map(e => e.id).filter(Boolean),
+        version: (draft.version || 1) + 1,
+        ver_status: 'pending',
+        ver_result: null,
+        ver_date: null,
+        human_status: 'pending',
+        human_feedback: '',
+        human_reviewer: null,
+        human_reviewed_at: null,
+        retried_at: new Date().toISOString(),
+        retried_by: reviewerId
+      }
+
+      const verResult = await this.verifyReport(next)
+      if (!verResult.error) {
+        next.ver_status = verResult.ver_status
+        next.ver_result = verResult
+        next.ver_date = new Date().toISOString()
+        if (verResult.overall_verdict === 'FAIL' || next.cited_evidence_ids.length === 0) {
+          next.human_status = 'blocked'
+          next.fail_count = (next.fail_count || 0) + 1
+          if (next.fail_count >= 3) {
+            next.human_status = 'escalated'
+            next.escalation_reason = '3회 연속 검증 실패'
+          }
+        } else {
+          next.fail_count = 0
+        }
+      }
+
+      Store.updateAIDraft(draftId, next)
+      return { success: true, draftId, draft: next, verification: verResult }
+    } catch (err) {
+      return { error: err.message }
+    }
+  },
+
   requestRevision(draftId, reviewerId, feedback = '') {
     const draft = Store.getAIDrafts().find(d => d.id === draftId)
     if (!draft) return { error: '초안을 찾을 수 없습니다.' }

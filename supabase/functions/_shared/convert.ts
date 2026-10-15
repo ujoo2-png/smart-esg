@@ -28,6 +28,10 @@ function detectType(name: string, mime: string): string {
   return 'etc'
 }
 
+function isOle(bytes: Uint8Array): boolean {
+  return bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0
+}
+
 async function fromPdf(bytes: Uint8Array): Promise<ConvertResult> {
   const pdf = await getDocumentProxy(bytes)
   const { totalPages, text } = await extractText(pdf, { mergePages: false })
@@ -106,6 +110,10 @@ function fromHtml(bytes: Uint8Array): ConvertResult {
 
 export async function convertDocument(bytes: Uint8Array, name: string, mime: string): Promise<ConvertResult> {
   const type = detectType(name, mime)
+  if (['doc', 'ppt', 'docx', 'pptx'].includes(type) && isOle(bytes)) {
+    const label = (type === 'doc' || type === 'docx') ? 'Word(.doc)' : 'PowerPoint(.ppt)'
+    throw new Error(`구형 ${label} 형식은 지원되지 않습니다. .docx/.pptx로 저장한 뒤 다시 시도하세요.`)
+  }
   switch (type) {
     case 'pdf':
       return await fromPdf(bytes)
