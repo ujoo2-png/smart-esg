@@ -501,10 +501,11 @@
         navigate('dashboard')
         if (typeof Store.pullFromSupabase === 'function') {
           Store.pullFromSupabase().then(r => {
-            if (r && r.ok && (r.added.referenceDocs || r.added.referenceChunks)) {
-              const active = document.querySelector('.page.active')
-              if (active && active.id === 'page-references') renderReferences()
-            }
+            if (!r || !r.ok) return
+            const active = document.querySelector('.page.active')
+            if (!active) return
+            if (active.id === 'page-references' && (r.added.referenceDocs || r.added.referenceChunks)) renderReferences()
+            if (active.id === 'page-project' && (r.added.projectTasks || r.added.projectTaskLogs)) renderProjectManagement()
           }).catch(() => {})
         }
       } else {
@@ -2885,14 +2886,12 @@
     const assessments = Store.getAssessments() || []
     c.innerHTML = ''
     if (!assessments.length) {
-      c.append(
-        el('div', { className: 'card', style: 'text-align:center;padding:40px 20px' },
-          el('div', { style: 'font-size:36px;margin-bottom:12px' }, '🤖'),
-          el('h3', { style: 'margin:0 0 8px' }, 'AI 보고서 초안 작성'),
-          el('p', { style: 'margin:0 0 16px;color:#9ca3af;font-size:13px' }, 'AI 초안 생성을 위해 먼저 평가를 완료하세요.'),
-          el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')
-        )
-      )
+      c.append(el('div', { className: 'card empty-state' },
+        el('div', { className: 'empty-ico' }, '🤖'),
+        el('h3', {}, 'AI 보고서 초안 작성'),
+        el('p', {}, 'AI 초안 생성을 위해 먼저 평가를 완료하세요.'),
+        el('button', { className: 'btn btn-primary', onClick: () => navigate('assessment') }, '+ 평가 생성하러 가기')
+      ))
       return
     }
     _aiAssId = _aiAssId || assessments[0].id
@@ -2910,112 +2909,111 @@
     const rejected = drafts.filter(d => d.human_status === 'rejected').length
     const pct = total ? Math.round(approved / total * 100) : 0
 
+    const dotClass = draft => !draft ? 'dot-muted' : draft.human_status === 'approved' ? 'dot-ok' : draft.ver_status === 'fail' || draft.human_status === 'rejected' ? 'dot-danger' : draft.ver_status === 'pass' ? 'dot-info' : 'dot-warn'
+
     c.append(
-      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eef1f4;background:#fff;border-radius:12px 12px 0 0' },
-        el('h3', { style: 'margin:0;font-size:16px' }, '🤖 AI 보고서 초안'),
-        el('div', { style: 'display:flex;gap:8px;align-items:center' },
-          el('select', { style: 'padding:6px 12px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px', onChange: e => { _aiAssId = parseInt(e.target.value); renderAI() } },
+      el('div', { className: 'card', style: 'overflow:hidden' },
+        el('div', { className: 'ai-toolbar' },
+          el('h3', {}, '🤖 AI 보고서 초안'),
+          el('select', { className: 'select-sm', onChange: e => { _aiAssId = parseInt(e.target.value); renderAI() } },
             ...assessments.map(a => el('option', { value: a.id, selected: a.id === _aiAssId }, a.title))
           )
-        )
-      ),
-      el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;background:#F8FAFC;border-bottom:1px solid #eef1f4' },
-        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
-          el('div', { style: 'font-size:11px;color:#9CA3AF' }, '전체 지표'),
-          el('div', { style: 'font-size:22px;font-weight:700;margin-top:2px' }, total)
         ),
-        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
-          el('div', { style: 'font-size:11px;color:#9CA3AF' }, '생성 완료'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#2563EB;margin-top:2px' }, generated)
+        el('div', { className: 'stat-grid' },
+          stat('전체 지표', total, ''),
+          stat('생성 완료', generated, 'is-info'),
+          stat('검증 통과', verified, 'is-warn'),
+          stat('승인 완료', approved, 'is-ok')
         ),
-        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
-          el('div', { style: 'font-size:11px;color:#9CA3AF' }, '검증 통과'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#d97706;margin-top:2px' }, verified)
-        ),
-        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)' },
-          el('div', { style: 'font-size:11px;color:#9CA3AF' }, '승인 완료'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#047857;margin-top:2px' }, approved)
-        )
-      ),
-      el('div', { style: 'padding:12px 20px;border-bottom:1px solid #eef1f4' },
-        el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:8px' },
-          el('div', { style: 'flex:1;background:#eef1f4;height:8px;border-radius:4px;overflow:hidden' },
-            el('div', { style: `background:#1E3A5F;height:100%;width:${pct}%;border-radius:4px;transition:width 0.3s` })
+        el('div', { className: 'progress-wrap' },
+          el('div', { className: 'progress-row' },
+            el('div', { className: 'progress-track' }, el('div', { className: 'progress-fill', style: `width:${pct}%` })),
+            el('span', { className: 'progress-pct' }, `${pct}%`)
           ),
-          el('span', { style: 'font-size:12px;font-weight:600;color:#1E3A5F' }, `${pct}%`)
-        ),
-        el('div', { style: 'display:flex;gap:8px;align-items:center' },
-          el('button', { className: 'btn btn-primary btn-sm', disabled: _aiGenerating, onClick: async () => {
-            _aiGenerating = true; renderAI(); showLoading('AI 보고서 일괄 생성 중...')
-            for (const ind of indicators) {
-              if (!drafts.find(d => d.indicator_id === ind.id)) {
-                await AI.generateReport(_aiAssId, ind.id, currentUser?.role)
+          el('div', { className: 'chip-row' },
+            el('button', { className: 'btn btn-primary btn-sm', disabled: _aiGenerating, onClick: async () => {
+              _aiGenerating = true; renderAI(); showLoading('AI 보고서 일괄 생성 중...')
+              for (const ind of indicators) {
+                if (!drafts.find(d => d.indicator_id === ind.id)) {
+                  await AI.generateReport(_aiAssId, ind.id, currentUser?.role)
+                }
               }
-            }
-            hideLoading(); showToast('AI 보고서가 생성되었습니다.', 'success')
-            _aiGenerating = false; renderAI()
-          }}, _aiGenerating ? '⏳ 생성 중...' : '🚀 전체 일괄 생성'),
-          el('span', { style: 'font-size:11px;color:#9CA3AF' }, `미생성: ${total - generated}건`)
-        )
-      ),
-      pending > 0 || rejected > 0 ? el('div', { className: 'card', style: 'margin:0 20px 12px;padding:14px 20px;background:linear-gradient(135deg,#fef3c7 0%,#fff7ed 100%)' },
-        el('div', { style: 'font-weight:600;font-size:13px;margin-bottom:10px' }, '📋 승인 워크플로우'),
-        el('div', { style: 'display:flex;gap:16px;align-items:center;flex-wrap:wrap' },
-          el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
-            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#d97706` }),
-            el('span', {}, `검토 대기: <strong>${pending}</strong>건`)
+              hideLoading(); showToast('AI 보고서가 생성되었습니다.', 'success')
+              _aiGenerating = false; renderAI()
+            }}, _aiGenerating ? '⏳ 생성 중...' : '🚀 전체 일괄 생성'),
+            el('span', { className: 'chip chip-muted' }, `미생성 ${total - generated}건`)
+          )
+        ),
+        pending > 0 || rejected > 0 ? el('div', { style: 'padding:14px 20px;border-top:1px solid var(--c-border-soft);background:linear-gradient(135deg,#fef3c7 0%,#fff7ed 100%)' },
+          el('div', { style: 'font-weight:600;font-size:13px;margin-bottom:10px' }, '📋 승인 워크플로우'),
+          el('div', { className: 'ai-flow' },
+            flowItem('dot-warn', '검토 대기', pending),
+            el('span', { className: 'arrow' }, '→'),
+            flowItem('dot-info', '검증 통과', verified),
+            el('span', { className: 'arrow' }, '→'),
+            flowItem('dot-ok', '승인 완료', approved),
+            rejected > 0 ? flowItem('dot-danger', '반려', rejected, true) : null
           ),
-          el('span', { style: 'color:#D0D5DD' }, '→'),
-          el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
-            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#2563EB` }),
-            el('span', {}, `검증 통과: <strong>${verified}</strong>건`)
-          ),
-          el('span', { style: 'color:#D0D5DD' }, '→'),
-          el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
-            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#047857` }),
-            el('span', {}, `승인 완료: <strong>${approved}</strong>건`)
-          ),
-          rejected > 0 ? el('div', { style: 'display:flex;align-items:center;gap:4px;font-size:12px' },
-            el('span', { style: `width:10px;height:10px;border-radius:50%;background:#dc2626` }),
-            el('span', { style: 'color:#dc2626' }, `반려: <strong>${rejected}</strong>건`)
+          pending > 0 ? el('div', { style: 'margin-top:10px' },
+            el('button', { className: 'btn btn-sm btn-primary', onClick: () => {
+              drafts.filter(d => d.human_status === 'pending').forEach(d => { AI.approveDraft(d.id, currentUser?.name || 'admin') })
+              showToast(`${pending}건의 초안이 승인되었습니다.`, 'success')
+              renderAI()
+            }}, '✅ 일괄 승인')
           ) : null
-        ),
-        pending > 0 ? el('div', { style: 'margin-top:10px;display:flex;gap:6px' },
-          el('button', { className: 'btn btn-sm btn-primary', onClick: () => {
-            drafts.filter(d => d.human_status === 'pending').forEach(d => { AI.approveDraft(d.id, currentUser?.name || 'admin') })
-            showToast(`${pending}건의 초안이 승인되었습니다.`, 'success')
-            renderAI()
-          }}, '✅ 일괄 승인')
         ) : null
-      ) : null,
-      el('div', { style: 'display:grid;grid-template-columns:280px 1fr;gap:0;min-height:500px' },
-        el('div', { style: 'border-right:1px solid #eef1f4;overflow-y:auto;max-height:600px' },
-          ...groups.map(g => {
-            const gInds = indicators.filter(i => i.group_id === g.id)
-            return el('div', {},
-              el('div', { style: 'padding:8px 12px;background:#F8FAFC;font-size:11px;font-weight:600;color:#9ca3af;border-bottom:1px solid #EEF1F4;text-transform:uppercase;letter-spacing:0.5px' }, g.group_name),
-              ...gInds.map(ind => {
-                const draft = drafts.find(d => d.indicator_id === ind.id)
-                const sc = draft?.human_status === 'approved' ? '#047857' : draft?.ver_status === 'fail' ? '#dc2626' : draft?.ver_status === 'pass' ? '#2563EB' : draft ? '#d97706' : '#e4e7eb'
-                const statusLabel = draft ? AI.getDraftStatus(draft) : '미생성'
-                return el('div', { style: `padding:8px 12px;border-bottom:1px solid #F8FAFC;cursor:pointer;transition:background 0.15s;border-left:3px solid ${sc}`,
-                  onClick: () => showAIDetail(ind.id), onMouseEnter: e => { e.currentTarget.style.background = '#F8FAFC' }, onMouseLeave: e => { e.currentTarget.style.background = '' } },
-                  el('div', { style: 'font-weight:500;font-size:12px' }, Indicator.getNameAndCode(ind)),
-                  el('div', { style: `font-size:10px;color:${sc};margin-top:2px` }, statusLabel)
-                )
-              })
+      ),
+      el('div', { className: 'card', style: 'overflow:hidden' },
+        el('div', { className: 'ai-layout' },
+          el('div', { className: 'ai-list', id: 'aiList' },
+            ...groups.map(g => {
+              const gInds = indicators.filter(i => i.group_id === g.id)
+              return el('div', {},
+                el('div', { className: 'ai-group-header' }, g.group_name),
+                ...gInds.map(ind => {
+                  const draft = drafts.find(d => d.indicator_id === ind.id)
+                  const statusLabel = draft ? AI.getDraftStatus(draft) : '미생성'
+                  const item = el('div', { className: 'ai-item', 'data-ind': ind.id, onClick: () => selectAIIndicator(ind.id) },
+                    el('span', { className: 'status-dot ' + dotClass(draft) }),
+                    el('div', { className: 'ai-item-body' },
+                      el('div', { className: 'ai-item-title' }, Indicator.getNameAndCode(ind)),
+                      el('div', { className: 'ai-item-status' }, statusLabel)
+                    )
+                  )
+                  return item
+                })
+              )
+            })
+          ),
+          el('div', { className: 'ai-detail', id: 'aiDetail' },
+            el('div', { className: 'empty-state', style: 'padding:60px 20px' },
+              el('div', { className: 'empty-ico' }, '👈'),
+              el('div', { style: 'font-size:13px' }, '왼쪽에서 지표를 선택하세요'),
+              el('div', { style: 'font-size:11.5px;color:var(--c-text-faint);margin-top:4px' }, 'AI가 증빙 데이터를 기반으로 보고서 초안을 생성합니다')
             )
-          })
-        ),
-        el('div', { id: 'aiDetail', style: 'padding:20px;min-height:300px' },
-          el('div', { style: 'text-align:center;padding:60px 20px;color:#9CA3AF' },
-            el('div', { style: { fontSize: '32px', marginBottom: '8px' } }, '👈'),
-            el('div', { style: { fontSize: '13px' } }, '왼쪽에서 지표를 선택하세요'),
-            el('div', { style: { fontSize: '11px', color: '#9CA3AF', marginTop: '4px' } }, 'AI가 증빙 데이터를 기반으로 보고서 초안을 생성합니다')
           )
         )
       )
     )
+  }
+
+  function stat(label, value, cls) {
+    return el('div', { className: 'stat' },
+      el('div', { className: 'stat-label' }, label),
+      el('div', { className: 'stat-value ' + (cls || '') }, value)
+    )
+  }
+
+  function flowItem(dotCls, label, count, danger) {
+    return el('div', { className: 'chip' },
+      el('span', { className: 'status-dot ' + dotCls }),
+      el('span', { style: danger ? 'color:var(--c-danger)' : '' }, label + ' ' + count + '건')
+    )
+  }
+
+  function selectAIIndicator(id) {
+    document.querySelectorAll('#aiList .ai-item').forEach(n => n.classList.toggle('active', String(n.getAttribute('data-ind')) === String(id)))
+    showAIDetail(id)
   }
 
   function showAIDetail(indicatorId) {
@@ -3029,58 +3027,68 @@
 
     const verResult = latest?.ver_result
     const claims = verResult?.claims || []
+    const verChip = !latest ? null : latest.ver_status === 'pass' ? 'chip-ok' : latest.ver_status === 'fail' ? 'chip-danger' : 'chip-warn'
+    const verText = !latest ? '' : latest.ver_status === 'pass' ? '✅ 검증 PASS' : latest.ver_status === 'fail' ? '❌ 검증 FAIL' : latest.ver_status === 'revision_needed' ? '⚠️ 수정 필요' : '⏳ 검증 대기'
+    const humanChip = !latest ? null : latest.human_status === 'approved' ? 'chip-ok' : (latest.human_status === 'rejected' || latest.human_status === 'blocked') ? 'chip-danger' : 'chip-warn'
+    const humanText = !latest ? '' : latest.human_status === 'approved' ? '✅ 승인' : latest.human_status === 'rejected' ? '❌ 반려' : latest.human_status === 'blocked' ? '🚫 차단됨' : latest.human_status === 'escalated' ? '🚨 에스컬레이션' : '⏳ 검토 대기'
 
     right.append(
-      el('h4', { style: 'margin:0 0 4px;font-size:14px' }, Indicator.getNameAndCode(indicator)),
-      el('div', { style: 'font-size:11px;color:#6b7280;margin-bottom:8px' }, `${Indicator.getPillarName(indicator.pillar)} | 증빙 ${evidences.length}건`),
-      latest?.pillar_coverage ? el('div', { style: 'font-size:11px;color:#9ca3af;margin-bottom:4px' },
-        `필러 커버리지: `,
-        latest.pillar_coverage.policy ? el('span', { style: 'color:#047857' }, 'Policy ') : el('span', { style: 'color:#D0D5DD' }, 'Policy '),
-        latest.pillar_coverage.action ? el('span', { style: 'color:#047857' }, 'Action ') : el('span', { style: 'color:#D0D5DD' }, 'Action '),
-        latest.pillar_coverage.result ? el('span', { style: 'color:#047857' }, 'Result') : el('span', { style: 'color:#D0D5DD' }, 'Result'),
-        latest.missing_pillars?.length ? el('span', { style: 'color:#dc2626;margin-left:4px' }, `(누락: ${latest.missing_pillars.join(', ')})`) : null
+      el('div', { className: 'ai-detail-head' },
+        el('div', {},
+          el('h4', {}, Indicator.getNameAndCode(indicator)),
+          el('div', { className: 'ai-detail-sub' }, `${Indicator.getPillarName(indicator.pillar)} · 증빙 ${evidences.length}건`)
+        ),
+        el('div', { className: 'chip-row' },
+          latest ? el('span', { className: 'chip ' + verChip }, verText) : null,
+          latest ? el('span', { className: 'chip ' + humanChip }, humanText) : null,
+          latest?.confidence ? el('span', { className: 'chip chip-muted' }, `신뢰도 ${latest.confidence}`) : null
+        )
+      ),
+      latest?.pillar_coverage ? el('div', { className: 'chip-row', style: 'margin-bottom:8px' },
+        el('span', { style: 'font-size:11px;color:var(--c-text-faint)' }, '필러 커버리지:'),
+        el('span', { className: 'chip ' + (latest.pillar_coverage.policy ? 'chip-ok' : 'chip-muted') }, 'Policy'),
+        el('span', { className: 'chip ' + (latest.pillar_coverage.action ? 'chip-ok' : 'chip-muted') }, 'Action'),
+        el('span', { className: 'chip ' + (latest.pillar_coverage.result ? 'chip-ok' : 'chip-muted') }, 'Result'),
+        latest.missing_pillars?.length ? el('span', { className: 'chip chip-danger' }, `누락: ${latest.missing_pillars.join(', ')}`) : null
       ) : null,
-      latest?.confidence ? el('div', { style: 'font-size:11px;margin-bottom:4px;color:' + ({ HIGH: '#047857', MEDIUM: '#d97706', LOW: '#dc2626' }[latest.confidence] || '#9ca3af') }, `신뢰도: ${latest.confidence}`) : null,
-      latest ? el('div', { style: 'background:#F8FAFC;border-radius:6px;padding:12px;margin:8px 0;font-size:12px;line-height:1.6;white-space:pre-wrap;max-height:300px;overflow-y:auto' }, latest.draft_text) : null,
-      latest ? el('div', { style: 'font-size:11px;margin-bottom:8px' },
-        el('span', { style: `color:${latest.ver_status === 'pass' ? '#047857' : latest.ver_status === 'fail' ? '#dc2626' : '#d97706'}` }, `AI 검증: ${latest.ver_status === 'pass' ? '✅ PASS' : latest.ver_status === 'fail' ? '❌ FAIL' : latest.ver_status === 'revision_needed' ? '⚠️ 수정필요' : '⏳ 대기'}`),
-        el('span', { style: 'margin-left:8px' }, `사람: ${latest.human_status === 'approved' ? '✅ 승인' : latest.human_status === 'rejected' ? '❌ 반려' : latest.human_status === 'blocked' ? '🚫 차단됨' : latest.human_status === 'escalated' ? '🚨 에스컬레이션' : '⏳ 검토대기'}`)
-      ) : null,
-      claims.length ? el('div', { style: 'margin:8px 0;border:1px solid #eef1f4;border-radius:6px;overflow:hidden' },
-        el('div', { style: 'padding:8px 12px;background:#F8FAFC;font-size:12px;font-weight:600;border-bottom:1px solid #eef1f4' }, `검증 결과 (${claims.length}개 주장)`),
+      latest ? el('div', { className: 'ai-section-label' }, 'AI 초안') : null,
+      latest ? el('div', { className: 'ai-draft' }, latest.draft_text) : el('div', { className: 'empty-state', style: 'padding:32px 16px' },
+        el('div', { className: 'empty-ico' }, '📝'),
+        el('div', { style: 'font-size:12.5px' }, '아직 생성된 초안이 없습니다. 아래 버튼으로 AI 초안을 생성하세요.')
+      ),
+      claims.length ? el('div', { className: 'claims' },
+        el('div', { className: 'claims-head' }, `🔍 검증 결과 (${claims.length}개 주장)`),
         ...claims.map(c => {
-          const colors = { SUPPORTED: '#047857', PARTIALLY_SUPPORTED: '#d97706', UNSUPPORTED: '#dc2626', MISMATCH: '#dc2626' }
+          const cls = { SUPPORTED: 'chip-ok', PARTIALLY_SUPPORTED: 'chip-warn', UNSUPPORTED: 'chip-danger', MISMATCH: 'chip-danger' }
           const icons = { SUPPORTED: '✅', PARTIALLY_SUPPORTED: '⚠️', UNSUPPORTED: '❌', MISMATCH: '🔴' }
-          return el('div', { style: 'padding:8px 12px;border-bottom:1px solid #EEF1F4;font-size:11px' },
-            el('div', { style: 'display:flex;align-items:flex-start;gap:6px' },
-              el('span', {}, icons[c.status] || '❓'),
-              el('div', { style: 'flex:1' },
-                el('div', { style: 'color:#1F2937;line-height:1.4' }, c.claim_text),
-                el('div', { style: `color:${colors[c.status] || '#9ca3af'};margin-top:2px;font-weight:500` }, `${c.status}${c.matched_evidence_id ? ' → ' + c.matched_evidence_id : ''}`),
-                c.reason ? el('div', { style: 'color:#9ca3af;margin-top:2px' }, c.reason) : null
-              )
+          return el('div', { className: 'claim' },
+            el('span', {}, icons[c.status] || '❓'),
+            el('div', { className: 'claim-body' },
+              el('div', { className: 'claim-text' }, c.claim_text),
+              el('div', { className: 'claim-status' }, el('span', { className: 'chip ' + (cls[c.status] || 'chip-muted') }, `${c.status}${c.matched_evidence_id ? ' → ' + c.matched_evidence_id : ''}`)),
+              c.reason ? el('div', { className: 'claim-reason' }, c.reason) : null
             )
           )
         }),
-        verResult?.revision_notes ? el('div', { style: 'padding:8px 12px;font-size:11px;color:#6b7280;background:#fff9e6' }, el('strong', {}, '수정 노트: '), verResult.revision_notes) : null
+        verResult?.revision_notes ? el('div', { className: 'claims-note' }, el('strong', {}, '수정 노트: '), verResult.revision_notes) : null
       ) : null,
-      el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap' },
-        el('button', { className: 'btn btn-sm btn-primary', onClick: async () => {
-          const btn = event.target; btn.disabled = true; btn.textContent = '생성 중...'
+      el('div', { className: 'ai-actions' },
+        el('button', { className: 'btn btn-sm btn-primary', onClick: async (e) => {
+          const btn = e.target; btn.disabled = true; btn.textContent = '생성 중...'
           const r = await AI.generateReport(_aiAssId, indicatorId, currentUser?.role)
-          btn.disabled = false; btn.textContent = 'AI 초안 생성'
           showAIDetail(indicatorId)
-          if (r.error) alert(r.error)
+          if (r.error) showToast(r.error, 'error')
         }}, 'AI 초안 생성'),
         latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && latest.cited_evidence_ids?.length > 0 ? el('button', { className: 'btn btn-sm btn-success', onClick: () => { const r = AI.approveDraft(latest.id, 'current_user'); if (r.error) { showToast(r.error, 'error'); return; } showAIDetail(indicatorId); showToast('승인되었습니다.', 'success') }}, '✅ 승인') : null,
-        latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && (!latest.cited_evidence_ids || latest.cited_evidence_ids.length === 0) ? el('span', { style: 'color:#dc2626;font-size:11px;font-weight:600;padding:5px 8px;background:#fff5f5;border-radius:6px' }, '⚠ 증빙 미연결 - 승인 불가') : null,
-        latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && (() => { const ind = Store.getIndicators().find(i => i.id === indicatorId); return ind && ind.scope2_split_required && Object.keys(GHG.getSummary(_aiAssId)).length === 0 })() ? el('span', { style: 'color:#DC2626;font-size:11px;font-weight:600;padding:5px 8px;background:#fff2f0;border-radius:6px' }, '⚠ GHG 미등록 - Scope2 분할 필요 지표 승인 불가') : null,
         latest && latest.human_status === 'pending' ? el('button', { className: 'btn btn-sm btn-danger', onClick: () => { const r = AI.rejectDraft(latest.id, 'current_user', '검토 필요'); if (r.error) { showToast(r.error, 'error'); return; } showAIDetail(indicatorId); showToast('반려되었습니다.', 'info') }}, '반려') : null,
-        latest && latest.human_status === 'pending' ? el('button', { className: 'btn btn-sm', onClick: () => { const fb = prompt('수정 요청 사항:'); if (fb) { AI.requestRevision(latest.id, 'current_user', fb); showAIDetail(indicatorId); showToast('수정이 요청되었습니다.', 'info') } }}, '수정 요청') : null,
-        latest && latest.human_status === 'blocked' ? el('span', { style: 'color:#dc2626;font-size:11px;font-weight:600;padding:5px 8px;background:#fff5f5;border-radius:6px' }, '🚫 검증 실패 - 증빙 연결 필요') : null,
-        latest && latest.human_status === 'escalated' ? el('span', { style: 'color:#DC2626;font-size:11px;font-weight:600;padding:5px 8px;background:#fff2f0;border-radius:6px' }, '🚨 에스컬레이션 - 관리자 확인 필요') : null
+        latest && latest.human_status === 'pending' ? el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { const fb = prompt('수정 요청 사항:'); if (fb) { AI.requestRevision(latest.id, 'current_user', fb); showAIDetail(indicatorId); showToast('수정이 요청되었습니다.', 'info') } }}, '수정 요청') : null,
+        latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && (!latest.cited_evidence_ids || latest.cited_evidence_ids.length === 0) ? el('span', { className: 'ai-note chip-danger' }, '⚠ 증빙 미연결 - 승인 불가') : null,
+        latest && latest.ver_status === 'pass' && latest.human_status === 'pending' && (() => { const ind = Store.getIndicators().find(i => i.id === indicatorId); return ind && ind.scope2_split_required && Object.keys(GHG.getSummary(_aiAssId)).length === 0 })() ? el('span', { className: 'ai-note chip-danger' }, '⚠ GHG 미등록 - Scope2 분할 필요 지표 승인 불가') : null,
+        latest && latest.human_status === 'blocked' ? el('span', { className: 'ai-note chip-danger' }, '🚫 검증 실패 - 증빙 연결 필요') : null,
+        latest && latest.human_status === 'escalated' ? el('span', { className: 'ai-note chip-danger' }, '🚨 에스컬레이션 - 관리자 확인 필요') : null
       ),
-      evidences.length ? el('div', { style: 'margin-top:8px;font-size:11px;color:#6b7280' }, el('strong', {}, '증빙: '), ...evidences.map(e => el('span', { style: 'margin-right:4px' }, `[${e.title}]`))) : null
+      evidences.length ? el('div', { className: 'ai-section-label' }, '연결된 증빙') : null,
+      evidences.length ? el('div', { className: 'chip-row' }, ...evidences.map(e => el('span', { className: 'chip chip-muted' }, e.title))) : null
     )
   }
 
@@ -3975,7 +3983,7 @@
     if (!_supabaseReady()) {
       c.append(el('div', { className: 'ref-banner warn' },
         el('span', { style: { fontSize: 16 } }, '⚠️'),
-        el('div', {}, el('b', {}, 'Supabase 미연결(로컬 모드)'), el('div', {}, 'PDF·PPT·Word 등 이진문서는 변환 서버(Edge Function)가 필요합니다. supabase.js에 프로젝트 URL/키를 입력하면 서버 변환과 원격 저장을 사용할 수 있습니다. (TXT·MD는 즉시 변환)'))
+        el('div', {}, el('b', {}, 'Supabase 미연결(로컬 모드)'), el('div', {}, '문서는 브라우저에서 변환됩니다(PDF·Word·PPT·Excel·TXT·MD). supabase.js에 프로젝트 URL/키를 입력하면 원격 저장·동기화와 서버 변환(Edge Function)을 사용할 수 있습니다.'))
       ))
     }
     if (!c.dataset.dropBound) {
@@ -3992,6 +4000,7 @@
         el('h3', {}, '📚 참고자료 라이브러리'),
         el('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
           el('input', { type: 'text', placeholder: '검색 (제목/기관/태그)', value: _refQuery, style: { padding: '7px 12px', border: '1px solid #e4e7eb', borderRadius: 6, fontSize: 13, width: 220 }, onInput: e => { _refQuery = e.target.value; renderReferences() } }),
+          _supabaseReady() ? el('button', { className: 'btn btn-secondary', onClick: testConvertServer, title: '변환 서버(Edge Function) 연결 확인' }, '🔌 변환 서버 테스트') : null,
           el('button', { className: 'btn btn-secondary', onClick: openStorageSettings, title: '저장소 설정' }, '⚙ 저장소'),
           el('button', { className: 'btn btn-primary', onClick: openReferenceUpload }, '＋ 참고자료 업로드')
         )
@@ -4023,7 +4032,7 @@
     }
 
     const rows = filtered.map(d => el('tr', {},
-      el('td', {}, el('div', { style: { fontWeight: 600 } }, d.title || d.file_name || '(제목 없음)'), el('div', { style: { fontSize: 12, color: '#9ca3af' } }, [Reference.typeLabel(d.file_name), d.file_name].filter(Boolean).join(' · '))),
+      el('td', {}, el('div', { style: { fontWeight: 600 } }, d.title || d.file_name || '(제목 없음)', d.scanned ? el('span', { className: 'chip chip-warn', style: 'margin-left:6px' }, '스캔본') : null), el('div', { style: { fontSize: 12, color: '#9ca3af' } }, [Reference.typeLabel(d.file_name), d.file_name, d.engine].filter(Boolean).join(' · '))),
       el('td', {}, d.source_org || '-'),
       el('td', {}, d.year || '-'),
       el('td', {}, el('span', { style: { display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, color: '#fff', background: Reference.statusColor(d.status) } }, Reference.statusLabel(d.status))),
@@ -4052,6 +4061,22 @@
       el('div', { style: { fontSize: 12, color: '#9ca3af' } }, label),
       el('div', { style: { fontSize: 22, fontWeight: 700, color: '#16304f' } }, String(value))
     )
+  }
+
+  async function testConvertServer() {
+    showLoading('변환 서버 연결 확인 중...')
+    try {
+      const r = await MdConvert.testServer()
+      if (r.ok) {
+        showToast(`변환 서버 정상 (engine: ${r.engine}${r.backend ? ', backend: ' + r.backend : ''})`, 'success')
+      } else {
+        showToast('변환 서버 오류: ' + r.reason, 'error')
+      }
+    } catch (e) {
+      showToast('변환 서버 확인 실패: ' + (e && e.message), 'error')
+    } finally {
+      hideLoading()
+    }
   }
 
   function openReferenceUpload(preset) {
@@ -4117,8 +4142,8 @@
       ),
       el('div', { style: { marginTop: 14, fontSize: 12, lineHeight: 1.6, color: _supabaseReady() ? '#6b7280' : '#D97706' } },
         _supabaseReady()
-          ? '업로드한 문서는 Markdown으로 변환되어 검색·인용에 활용됩니다.'
-          : '⚠ Supabase 미연결(로컬 모드): PDF·PPT·Word 등 이진문서는 변환 서버(Edge Function)가 필요합니다. TXT·MD는 즉시 변환됩니다.')
+          ? '업로드한 문서는 Markdown으로 변환되어 검색·인용에 활용됩니다. (스캔본 PDF는 텍스트 추출 정확도가 낮을 수 있습니다.)'
+          : '⚠ Supabase 미연결(로컬 모드): 문서를 브라우저에서 직접 변환합니다(PDF·Word·PPT·Excel·TXT·MD). 원격 저장이 필요하면 Supabase를 연결하세요.')
     )
     modal('참고자료 업로드', form)
     document.getElementById('modal-save').onclick = async () => {
@@ -4165,6 +4190,9 @@
           ...sugg.map(s => el('span', { style: { fontSize: 11, padding: '3px 8px', background: '#fff', border: '1px solid #dbe3ec', borderRadius: 99, color: '#16304f' } }, Indicator.getNameAndCode({ indicator_code: s.code, indicator_name: s.name })))
         )
       ) : null,
+      doc.scanned ? el('div', { className: 'ref-banner warn', style: 'margin-bottom:12px' },
+        el('span', { style: { fontSize: 16 } }, '⚠️'),
+        el('div', {}, el('b', {}, '스캔본(이미지) PDF'), el('div', {}, '텍스트 레이어가 거의 없어 변환 품질이 낮습니다. OCR이 적용된 PDF를 업로드하거나 변환 서버 사용을 권장합니다.'))) : null,
       el('div', { innerHTML: md ? _mdToHtml(md) : '<p style="color:#9ca3af">변환된 내용이 없습니다. 재변환을 시도하세요.</p>' })
     )
     modal('📖 ' + (doc.title || doc.file_name || '참고자료'), body, '닫기')
@@ -4261,8 +4289,8 @@
     c.append(el('div', { className: 'card' },
       el('div', { className: 'card-header' },
         el('h3', {}, '✍️ 보고서 작성기'),
-        el('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-          el('select', { style: { padding: '7px 12px', border: '1px solid #e4e7eb', borderRadius: 6, fontSize: 13 }, onChange: e => { _writerDocId = parseInt(e.target.value) || null; _writerSectionId = null; renderWriter() } },
+        el('div', { className: 'writer-toolbar' },
+          el('select', { className: 'select-sm', onChange: e => { _writerDocId = parseInt(e.target.value) || null; _writerSectionId = null; renderWriter() } },
             docs.length ? docs.map(d => el('option', { value: d.id, selected: d.id === _writerDocId }, d.title || '(제목 없음)')) : el('option', { value: '' }, '문서 없음')
           ),
           el('button', { className: 'btn btn-secondary', onClick: openImportDoc }, '📥 자료 불러오기'),
@@ -4272,10 +4300,10 @@
     ))
 
     if (!doc) {
-      c.append(el('div', { className: 'card' }, el('div', { style: { textAlign: 'center', padding: '40px 20px', color: '#9ca3af' } },
-        el('div', { style: { fontSize: 36, marginBottom: 12 } }, '✍️'),
-        el('h3', { style: { margin: '0 0 8px' } }, '작성 중인 보고서가 없습니다'),
-        el('p', { style: { margin: 0, fontSize: 13 } }, '새 보고서를 만들고 섹션을 추가해 원고를 작성하세요.'))))
+      c.append(el('div', { className: 'card empty-state' },
+        el('div', { className: 'empty-ico' }, '✍️'),
+        el('h3', {}, '작성 중인 보고서가 없습니다'),
+        el('p', {}, '새 보고서를 만들고 섹션을 추가해 원고를 작성하세요.')))
       return
     }
 
@@ -4283,77 +4311,82 @@
     const written = sections.filter(s => (s.content || '').trim()).length
     const progress = total ? Math.round(written / total * 100) : 0
     c.append(el('div', { className: 'card' },
-      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' } },
-        el('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+      el('div', { className: 'writer-summary' },
+        el('div', { className: 'writer-title' },
           el('strong', {}, doc.title || '(제목 없음)'),
-          el('span', { style: { fontSize: 11, color: '#1E3A5F', background: '#eef4fa', border: '1px solid #dbe3ec', borderRadius: 99, padding: '2px 8px', fontWeight: 600, whiteSpace: 'nowrap' } }, 'v' + (doc.version || 1))),
-        el('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
-          el('span', { style: { fontSize: 13, color: '#6b7280' } }, '진도 ' + progress + '% (' + written + '/' + total + ' 섹션)'),
+          el('span', { className: 'badge-ver' }, 'v' + (doc.version || 1))),
+        el('div', { className: 'chip-row' },
+          el('span', { className: 'chip chip-muted' }, `진도 ${progress}% · ${written}/${total} 섹션`),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: exportWriterPptx }, '📤 PPTX'),
           el('button', { className: 'btn btn-sm btn-primary', onClick: saveWriterDoc }, '💾 저장(버전)'))),
-      el('div', { style: { height: 8, background: '#eef1f4', borderRadius: 4, overflow: 'hidden' } },
-        el('div', { style: { height: '100%', width: progress + '%', background: '#2563EB', transition: 'width .3s' } }))))
+      el('div', { className: 'progress-track' },
+        el('div', { className: 'progress-fill', style: 'width:' + progress + '%' }))))
 
-    const grid = el('div', { style: { display: 'grid', gridTemplateColumns: '260px 1fr', gap: 16, alignItems: 'start' } })
-    grid.append(el('div', { className: 'card', style: { padding: 0 } },
-      el('div', { style: { padding: '10px 12px', borderBottom: '1px solid #eef1f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-        el('strong', { style: { fontSize: 13 } }, '섹션'),
+    const grid = el('div', { className: 'writer-grid' })
+    grid.append(el('div', { className: 'card writer-seclist' },
+      el('div', { className: 'writer-seclist-head' },
+        el('strong', {}, '섹션'),
         el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openAddSection(doc.id) }, '＋')),
-      el('div', {}, sections.length ? sections.map(s => el('div', {
-        style: { padding: '10px 12px', borderBottom: '1px solid #eef1f4', cursor: 'pointer', background: s.id === _writerSectionId ? '#eef4fa' : 'transparent' },
-        onClick: () => { _writerSectionId = s.id; renderWriter() }
-      },
-        el('div', { style: { fontSize: 13, fontWeight: 600, color: '#1f2937' } }, s.title || '(제목 없음)'),
-        el('div', { style: { fontSize: 11, color: (s.content || '').trim() ? '#059669' : '#9CA3AF' } }, (s.content || '').trim() ? '작성됨' : '미작성')
-      )) : el('div', { style: { padding: 16, color: '#9ca3af', fontSize: 13 } }, '섹션이 없습니다.')))
+      el('div', {}, sections.length ? sections.map(s => {
+        const done = (s.content || '').trim()
+        return el('div', {
+          className: 'writer-sec-item' + (s.id === _writerSectionId ? ' active' : ''),
+          onClick: () => { _writerSectionId = s.id; renderWriter() }
+        },
+          el('span', { className: 'status-dot ' + (done ? 'dot-ok' : 'dot-muted') }),
+          el('div', { className: 'writer-sec-body' },
+            el('div', { className: 'writer-sec-title' }, s.title || '(제목 없음)'),
+            el('div', { className: 'writer-sec-status' }, done ? '작성됨' : '미작성')
+          ))
+      }) : el('div', { className: 'rd-empty', style: 'padding:16px' }, '섹션이 없습니다.')))
     )
     grid.append(renderWriterEditor(sections.find(s => s.id === _writerSectionId)))
     c.append(grid)
   }
 
   function renderWriterEditor(section) {
-    if (!section) return el('div', { className: 'card' }, el('p', { style: { color: '#9ca3af', margin: 0 } }, '왼쪽에서 섹션을 선택하세요.'))
-    const ta = el('textarea', { id: 'writer-input', style: { width: '100%', minHeight: 260, padding: 12, border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 14, lineHeight: 1.6, fontFamily: 'inherit', resize: 'vertical' } })
+    if (!section) return el('div', { className: 'card' }, el('p', { style: { color: 'var(--c-text-faint)', margin: 0 } }, '왼쪽에서 섹션을 선택하세요.'))
+    const ta = el('textarea', { id: 'writer-input', className: 'writer-textarea' })
     ta.value = section.content || ''
     const all = Store.getFeedback(section.doc_id).filter(f => f.section_id === section.id)
     const proposals = all.filter(f => f.kind === 'polish_full').sort((a, b) => b.id - a.id)
     const feedback = all.filter(f => f.kind !== 'polish_full')
     return el('div', { className: 'card' },
-      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' } },
+      el('div', { className: 'writer-panel-head' },
         el('strong', {}, section.title || '(제목 없음)'),
-        el('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+        el('div', { className: 'chip-row' },
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); showToast('저장되었습니다.') } }, '저장'),
           el('button', { className: 'btn btn-sm btn-primary', onClick: () => runWriterPolish(section, ta.value) }, '🤖 참고자료로 다듬기'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => runWriterFeedback(section, ta.value) }, '💬 AI 피드백'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteWriterSection(section.id) }, '섹션 삭제')
         )),
       ta,
-      proposals.length ? el('div', { style: { marginTop: 16, border: '1px solid #dbe3ec', borderRadius: 10, overflow: 'hidden' } },
-        el('div', { style: { padding: '10px 12px', background: '#eef4fa', fontSize: 12, fontWeight: 600, color: '#1E3A5F' } }, '🤖 AI 다듬기 제안 (' + proposals.length + ')'),
+      proposals.length ? el('div', { className: 'proposal' },
+        el('div', { className: 'proposal-head' }, '🤖 AI 다듬기 제안 (' + proposals.length + ')'),
         proposals.map(p => {
           const open = p.status === 'open'
           const meta = (p.reference_title ? '근거: ' + p.reference_title + (p.page ? ' p.' + p.page : '') : '근거: 참고자료')
             + (p.confidence ? ' · 신뢰도 ' + p.confidence : '')
             + (p.missing && p.missing.length ? ' · 보완 필요: ' + p.missing.join(', ') : '')
-          return el('div', { style: { padding: 12, borderTop: '1px solid #eef1f4' } },
-            el('div', { style: { fontSize: 11, color: '#9ca3af', marginBottom: 8 } }, meta),
-            el('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+          return el('div', { className: 'proposal-item' },
+            el('div', { className: 'proposal-meta' }, meta),
+            el('div', { className: 'proposal-grid' },
               el('div', {},
-                el('div', { style: { fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 4 } }, '원문'),
-                el('div', { style: { fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', background: '#F8FAFC', border: '1px solid #eef1f4', borderRadius: 8, padding: 10, maxHeight: 220, overflow: 'auto', color: '#6b7280' } }, p.original || '(원문 없음)')),
+                el('div', { className: 'proposal-col-label orig' }, '원문'),
+                el('div', { className: 'proposal-body orig' }, p.original || '(원문 없음)')),
               el('div', {},
-                el('div', { style: { fontSize: 11, fontWeight: 600, color: '#059669', marginBottom: 4 } }, 'AI 제안'),
-                el('div', { style: { fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', background: '#f0fdf6', border: '1px solid #cceae0', borderRadius: 8, padding: 10, maxHeight: 220, overflow: 'auto', color: '#1f2937' } }, p.suggestion || ''))),
-            el('div', { style: { display: 'flex', gap: 6, marginTop: 8 } },
+                el('div', { className: 'proposal-col-label sugg' }, 'AI 제안'),
+                el('div', { className: 'proposal-body sugg' }, p.suggestion || ''))),
+            el('div', { className: 'proposal-actions' },
               el('button', { className: 'btn btn-sm btn-primary', disabled: !open, onClick: () => applyWriterPolish(section, p) }, p.status === 'applied' ? '✓ 적용됨' : '이 제안 적용'),
               el('button', { className: 'btn btn-sm btn-secondary', disabled: !open, onClick: () => { Store.updateFeedbackItem(p.id, { status: 'dismissed' }); renderWriter() } }, '무시')))
         })) : null,
       feedback.length ? el('div', { style: { marginTop: 16 } },
-        el('div', { style: { fontWeight: 600, marginBottom: 8 } }, '💬 피드백 (' + feedback.length + ')'),
-        feedback.map(f => el('div', { style: { border: '1px solid #eef1f4', borderLeft: '3px solid ' + (f.status === 'applied' ? '#059669' : f.status === 'dismissed' ? '#9CA3AF' : '#d97706'), borderRadius: 8, padding: '10px 12px', marginBottom: 8 } },
-          el('div', { style: { fontSize: 12, color: '#9ca3af', marginBottom: 4 } }, (f.kind === 'direction' ? '진행방향' : f.kind === 'polish' ? '문구 다듬기' : '제안') + (f.reference_title ? ' · 근거: ' + f.reference_title + (f.page ? ' p.' + f.page : '') : '')),
-          el('div', { style: { fontSize: 13, marginBottom: 8 } }, f.message),
-          el('div', { style: { display: 'flex', gap: 6 } },
+        el('div', { className: 'ai-section-label', style: 'margin-top:0' }, '💬 피드백 (' + feedback.length + ')'),
+        feedback.map(f => el('div', { className: 'fb-item' + (f.status === 'applied' ? ' is-applied' : f.status === 'dismissed' ? ' is-dismissed' : '') },
+          el('div', { className: 'fb-meta' }, (f.kind === 'direction' ? '진행방향' : f.kind === 'polish' ? '문구 다듬기' : '제안') + (f.reference_title ? ' · 근거: ' + f.reference_title + (f.page ? ' p.' + f.page : '') : '')),
+          el('div', { className: 'fb-msg' }, f.message),
+          el('div', { className: 'chip-row' },
             el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'applied' }); renderWriter() } }, '반영'),
             el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'dismissed' }); renderWriter() } }, '무시')
           )))
@@ -4538,8 +4571,9 @@
   }
 
   function _splitDocIntoItems(result) {
-    const md = (result && result.markdown) || ''
-    if (!md.trim()) return []
+    const raw = (result && result.markdown) || ''
+    const md = raw.replace(/^[ \t]*\[?page\s*[: ]?\d+\]?[ \t]*$/gim, '').replace(/\n{3,}/g, '\n\n').trim()
+    if (!md) return []
     const hasHeading = /^#{1,6}\s/m.test(md)
     const items = []
     if (hasHeading) {
@@ -4561,12 +4595,12 @@
 
   function openImportDoc() {
     const titleInput = el('input', { type: 'text', style: { padding: '10px 12px', border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 14, width: '100%' }, placeholder: '예: 2025 지속가능경영보고서' })
-    const fileInput = el('input', { type: 'file', accept: '.docx,.doc,.pptx,.ppt,.pdf,.txt,.md,.csv,.json', style: { fontSize: 13 } })
+    const fileInput = el('input', { type: 'file', accept: '.docx,.pptx,.pdf,.txt,.md,.csv,.json', style: { fontSize: 13 } })
     const status = el('div', { style: { fontSize: 12, color: '#6b7280', minHeight: 18 } })
     const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
       el('div', {}, el('div', { className: 'rd-field-label' }, '보고서 제목'), titleInput),
       el('div', {}, el('div', { className: 'rd-field-label' }, '작성 중인 자료 업로드 (docx / pptx / pdf / txt / md)'), fileInput),
-      el('div', { style: { fontSize: 12, color: '#9ca3af', lineHeight: 1.6 } }, '업로드한 문서를 항목(제목·헤딩)별로 나누어 섹션으로 만듭니다. 변환·처리는 브라우저에서 이뤄지며, 각 항목은 참고자료로 다듬을 수 있습니다.'),
+      el('div', { style: { fontSize: 12, color: '#9ca3af', lineHeight: 1.6 } }, '업로드한 문서를 항목(제목·헤딩)별로 나누어 섹션으로 만듭니다. 구형 .doc / .ppt는 지원되지 않으니 .docx / .pptx로 저장한 뒤 올려주세요. 변환·처리는 브라우저에서 이뤄지며, 각 항목은 참고자료로 다듬을 수 있습니다.'),
       status)
     modal('📥 기존 자료 불러오기', form)
     document.getElementById('modal-save').textContent = '불러오기'
@@ -5585,7 +5619,7 @@
       ) : null
     )
 
-    modal(isEdit ? '업무 수정' : '업무 추가', form, isEdit ? [{ label: '🗑 삭제', className: 'btn btn-danger', onClick: () => { if (confirm('이 업무를 삭제하시겠습니까?')) { Store.deleteProjectTask(task.id); closeModal(); showToast('삭제되었습니다.', 'success'); renderProjectManagement() } } }] : [])
+    modal(isEdit ? '업무 수정' : '업무 추가', form, isEdit ? [{ label: '🗑 삭제', className: 'btn btn-danger', onClick: () => { if (confirm('이 업무와 하위 업무를 삭제하시겠습니까?')) { closeModal(); _deleteProjectTaskCascade(task.id) } } }] : [])
     document.getElementById('modal-save').onclick = () => {
       const data = {
         title: document.getElementById('pmTitle').value,

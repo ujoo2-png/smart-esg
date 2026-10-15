@@ -25,7 +25,8 @@ DROP TABLE IF EXISTS
     tb_ghg_activity_data, tb_ai_report_draft, tb_ai_verification_log,
     tb_weight_param, tb_rating_threshold, tb_agency_master, tb_data_masking_rule,
     tb_project_budget, tb_risk_register, tb_ghg_summary, tb_reference_doc,
-    tb_report_doc, tb_report_doc_section, tb_report_feedback, tb_reference_chunk
+    tb_report_doc, tb_report_doc_section, tb_report_feedback, tb_reference_chunk,
+    tb_project_task, tb_project_task_log
     CASCADE;
 
 DROP FUNCTION IF EXISTS calculate_co2eq() CASCADE;
@@ -487,6 +488,9 @@ CREATE TABLE tb_reference_chunk (
 ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS view_count INT DEFAULT 0;
 ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ;
 
+-- 참고자료 스캔본 감지 (v2.2.1)
+ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS scanned BOOLEAN DEFAULT false;
+
 -- 보고서 버전 관리 (v2.2.0)
 ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
 ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS source_file TEXT;
@@ -503,6 +507,53 @@ CREATE TABLE IF NOT EXISTS tb_report_doc_version (
 );
 
 CREATE INDEX IF NOT EXISTS idx_report_doc_version_doc ON tb_report_doc_version(doc_id, version);
+
+-- 프로젝트 관리 WBS (v2.2.0)
+CREATE TABLE IF NOT EXISTS tb_project_task (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    description TEXT,
+    category TEXT DEFAULT '일반',
+    assignee TEXT,
+    assignee_id TEXT,
+    department TEXT,
+    dept_code TEXT,
+    priority TEXT DEFAULT '보통',
+    status TEXT DEFAULT '대기',
+    level TEXT DEFAULT '대',
+    parent_id TEXT,
+    start_date DATE,
+    due_date DATE,
+    planned_start DATE,
+    planned_end DATE,
+    actual_start DATE,
+    actual_end DATE,
+    progress INT DEFAULT 0,
+    sort_order INT DEFAULT 0,
+    tags JSONB DEFAULT '[]'::jsonb,
+    linked_type TEXT,
+    linked_id TEXT,
+    repeat TEXT DEFAULT 'none',
+    repeat_until DATE,
+    depends_on JSONB DEFAULT '[]'::jsonb,
+    comments JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS tb_project_task_log (
+    id TEXT PRIMARY KEY,
+    task_id TEXT,
+    user_id TEXT,
+    action TEXT,
+    from_value TEXT,
+    to_value TEXT,
+    detail TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_task_parent ON tb_project_task(parent_id);
+CREATE INDEX IF NOT EXISTS idx_project_task_status ON tb_project_task(status);
+CREATE INDEX IF NOT EXISTS idx_project_task_log_task ON tb_project_task_log(task_id);
 
 -- ============================================================
 -- 13. 인덱스

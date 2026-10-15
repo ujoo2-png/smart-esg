@@ -77,7 +77,7 @@ const Reference = {
   _applyConversion(docId, result) {
     const chunks = this.chunkMarkdown(result.markdown || '')
     Store.replaceReferenceChunks(docId, chunks)
-    Store.updateReferenceDoc(docId, { markdown: result.markdown || '', page_count: result.page_count || 0, chunk_count: chunks.length, engine: result.engine || '', status: 'ready', error: null, converted_at: new Date().toISOString() })
+    Store.updateReferenceDoc(docId, { markdown: result.markdown || '', page_count: result.page_count || 0, chunk_count: chunks.length, engine: result.engine || '', scanned: !!result.scanned, status: 'ready', error: null, converted_at: new Date().toISOString() })
   },
 
   async recreate(docId) {

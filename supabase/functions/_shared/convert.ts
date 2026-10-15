@@ -8,6 +8,7 @@ export interface ConvertResult {
   markdown: string
   page_count: number
   engine: string
+  scanned?: boolean
 }
 
 function decode(bytes: Uint8Array): string {
@@ -31,17 +32,14 @@ async function fromPdf(bytes: Uint8Array): Promise<ConvertResult> {
   const pdf = await getDocumentProxy(bytes)
   const { totalPages, text } = await extractText(pdf, { mergePages: false })
   const pages = Array.isArray(text) ? text : [text]
-  const markdown = pages.map((t, i) => `<!-- page: ${i + 1} -->\n\n${String(t).trim()}`).join('\n\n')
-  return { markdown, page_count: totalPages, engine: 'unpdf' }
+  const markdown = pages.map((t, i) => `[page ${i + 1}]\n\n${String(t).trim()}`).join('\n\n')
+  const scanned = totalPages > 0 && pages.every((t) => !String(t).trim())
+  return { markdown, page_count: totalPages, engine: 'unpdf', scanned }
 }
 
 async function fromDocx(bytes: Uint8Array): Promise<ConvertResult> {
   const { value } = await mammoth.convertToMarkdown({ buffer: Buffer.from(bytes) })
   return { markdown: value || '', page_count: 0, engine: 'mammoth' }
-}
-
-function cellText(c: unknown): string {
-  return String(c == null ? '' : c).replace(/\|/g, '\\|').replace(/\n/g, ' ').trim()
 }
 
 function sheetToMarkdown(rows: unknown[][]): string {
@@ -65,7 +63,7 @@ function fromSpreadsheet(bytes: Uint8Array): ConvertResult {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false, defval: '' }) as unknown[][]
     const table = sheetToMarkdown(rows)
     page += 1
-    parts.push(`<!-- page: ${page} -->\n\n## ${name}\n\n${table}`)
+    parts.push(`[page ${page}]\n\n## ${name}\n\n${table}`)
   })
   return { markdown: parts.join('\n\n'), page_count: page, engine: 'xlsx' }
 }
@@ -83,7 +81,7 @@ async function fromPptx(bytes: Uint8Array): Promise<ConvertResult> {
     const texts = Array.from(xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g))
       .map((mm) => mm[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim())
       .filter(Boolean)
-    return `<!-- page: ${i + 1} -->\n\n## 슬라이드 ${i + 1}\n\n${texts.join('\n\n')}`
+    return `[page ${i + 1}]\n\n## 슬라이드 ${i + 1}\n\n${texts.join('\n\n')}`
   }).join('\n\n')
   return { markdown, page_count: slides.length, engine: 'pptx-xml' }
 }

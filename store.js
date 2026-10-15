@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.2.0'
+const APP_VERSION = 'v2.2.1'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -26,9 +26,11 @@ const SB_SYNC_MAP = {
   ratingThresholds: ['tb_rating_threshold', ['id', 'authority_code', 'year', 'rating', 'min_score', 'max_score', 'notes', 'effective_from']],
   maskingRules: ['tb_data_masking_rule', ['id', 'field_name', 'masking_type', 'description', 'applies_to_ai_api', 'is_active', 'created_at']],
   projectBudget: ['tb_project_budget', ['id', 'project_name', 'category', 'planned_amount', 'actual_amount', 'status', 'start_date', 'end_date', 'notes', 'created_at', 'updated_at']],
+  projectTasks: ['tb_project_task', ['id', 'title', 'description', 'category', 'assignee', 'assignee_id', 'department', 'dept_code', 'priority', 'status', 'level', 'parent_id', 'start_date', 'due_date', 'planned_start', 'planned_end', 'actual_start', 'actual_end', 'progress', 'sort_order', 'tags', 'linked_type', 'linked_id', 'repeat', 'repeat_until', 'depends_on', 'comments', 'created_at']],
+  projectTaskLogs: ['tb_project_task_log', ['id', 'task_id', 'user_id', 'action', 'from_value', 'to_value', 'detail', 'created_at']],
   riskRegister: ['tb_risk_register', ['id', 'risk_name', 'category', 'description', 'probability', 'impact', 'status', 'owner', 'mitigation_plan', 'created_at', 'updated_at']],
   agencyMaster: ['tb_agency_master', ['id', 'code', 'name', 'track_type', 'description', 'effective_date', 'website_url', 'is_active', 'created_at']],
-  referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'status', 'error', 'tags', 'view_count', 'last_viewed_at', 'created_at', 'updated_at', 'converted_at']],
+  referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'scanned', 'status', 'error', 'tags', 'view_count', 'last_viewed_at', 'created_at', 'updated_at', 'converted_at']],
   referenceChunks: ['tb_reference_chunk', ['id', 'reference_id', 'page', 'section_title', 'content', 'created_at']],
   reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'version', 'source_file', 'source_type', 'created_at', 'updated_at']],
   reportDocSections: ['tb_report_doc_section', ['id', 'doc_id', 'title', 'content', 'sort_order', 'status', 'indicator_refs', 'created_at', 'updated_at']],
@@ -823,8 +825,8 @@ const Store = {
   async pullFromSupabase(opts) {
     const sb = getSupabase ? getSupabase() : null
     if (!sb) return { ok: false, reason: 'no-supabase' }
-    const scope = (opts && opts.tables) || ['referenceDocs', 'referenceChunks']
-    const added = { referenceDocs: 0, referenceChunks: 0 }
+    const scope = (opts && opts.tables) || ['referenceDocs', 'referenceChunks', 'projectTasks', 'projectTaskLogs']
+    const added = { referenceDocs: 0, referenceChunks: 0, projectTasks: 0, projectTaskLogs: 0 }
     const deletedDocs = new Set((this._getDeletedIds().referenceDocs || []).map(String))
 
     if (scope.includes('referenceDocs')) {
@@ -844,15 +846,46 @@ const Store = {
       try {
         const { data } = await sb.from('tb_reference_chunk').select('*')
         const local = this._data.referenceChunks || []
-        const haveRef = new Set(local.map(c => String(c.reference_id)))
-        const incoming = (data || []).filter(c => c && c.reference_id != null && !haveRef.has(String(c.reference_id)))
-        incoming.forEach(c => local.push(this._normalizeRemoteRow(c)))
+        const have = new Set(local.map(c => String(c.id)))
+        const deletedChunks = new Set((this._getDeletedIds().referenceChunks || []).map(String))
+        const localRefs = new Set((this._data.referenceDocs || []).map(d => String(d.id)))
+        const incoming = (data || []).filter(c => c && c.id != null && !have.has(String(c.id)) && !deletedChunks.has(String(c.id)) && localRefs.has(String(c.reference_id)))
+        incoming.forEach(c => { const row = this._normalizeRemoteRow(c); if (row.reference_id != null && /^\d+$/.test(String(row.reference_id))) row.reference_id = Number(row.reference_id); local.push(row) })
         this._data.referenceChunks = local
         added.referenceChunks = incoming.length
       } catch (e) {}
     }
 
-    if (added.referenceDocs || added.referenceChunks) {
+    if (scope.includes('projectTasks')) {
+      try {
+        const { data, error } = await sb.from('tb_project_task').select('*')
+        if (!error) {
+          const local = this._data.projectTasks || []
+          const have = new Set(local.map(t => String(t.id)))
+          const deletedTasks = new Set((this._getDeletedIds().projectTasks || []).map(String))
+          const incoming = (data || []).filter(t => t && t.id != null && !have.has(String(t.id)) && !deletedTasks.has(String(t.id)))
+          incoming.forEach(t => local.push(this._normalizeRemoteRow(t)))
+          this._data.projectTasks = local
+          added.projectTasks = incoming.length
+        }
+      } catch (e) {}
+    }
+
+    if (scope.includes('projectTaskLogs')) {
+      try {
+        const { data, error } = await sb.from('tb_project_task_log').select('*')
+        if (!error) {
+          const local = this._data.projectTaskLogs || []
+          const have = new Set(local.map(l => String(l.id)))
+          const incoming = (data || []).filter(l => l && l.id != null && !have.has(String(l.id)))
+          incoming.forEach(l => local.push(this._normalizeRemoteRow(l)))
+          this._data.projectTaskLogs = local
+          added.projectTaskLogs = incoming.length
+        }
+      } catch (e) {}
+    }
+
+    if (added.referenceDocs || added.referenceChunks || added.projectTasks || added.projectTaskLogs) {
       this._save()
       this._notify()
     }
@@ -1036,7 +1069,7 @@ const Store = {
   getProjectTasks() { return this.data.projectTasks || [] },
   addProjectTask(t) { const task = { id: Date.now() + Math.random(), title: '', description: '', category: '일반', assignee: '', assignee_id: null, department: '', dept_code: '', priority: '보통', status: '대기', level: '대', parent_id: null, start_date: '', due_date: '', planned_start: '', planned_end: '', actual_start: '', actual_end: '', progress: 0, sort_order: 0, tags: [], linked_type: '', linked_id: null, repeat: 'none', repeat_until: '', depends_on: [], comments: [], created_at: new Date().toISOString(), ...t }; this.data.projectTasks.push(task); this._logProjectTask(task.id, '생성', '', '', task.title); this._save(); return task },
   updateProjectTask(id, updates) { const i = (this.data.projectTasks || []).findIndex(x => x.id === id); if (i > -1) { const old = { ...this.data.projectTasks[i] }; Object.assign(this.data.projectTasks[i], updates); if (updates.status && updates.status !== old.status) this._logProjectTask(id, '상태변경', old.status, updates.status); if (updates.progress != null && updates.progress !== old.progress) this._logProjectTask(id, '진행률', old.progress + '%', updates.progress + '%'); if (updates.assignee && updates.assignee !== old.assignee) this._logProjectTask(id, '담당자변경', old.assignee, updates.assignee); this._save() } },
-  deleteProjectTask(id) { this.data.projectTasks = (this.data.projectTasks || []).filter(x => x.id !== id); this.data.projectTaskLogs = (this.data.projectTaskLogs || []).filter(x => x.task_id !== id); this._save() },
+  deleteProjectTask(id) { this.data.projectTasks = (this.data.projectTasks || []).filter(x => x.id !== id); this.data.projectTaskLogs = (this.data.projectTaskLogs || []).filter(x => x.task_id !== id); this._addDeletedId('projectTasks', id); this._save() },
   _logProjectTask(taskId, action, from, to, detail) { if (!this.data.projectTaskLogs) this.data.projectTaskLogs = []; this.data.projectTaskLogs.push({ id: Date.now() + Math.random(), task_id: taskId, user_id: null, action, from_value: String(from), to_value: String(to), detail: detail || '', created_at: new Date().toISOString() }) },
   getProjectTaskLogs(taskId) { return (this.data.projectTaskLogs || []).filter(l => l.task_id === taskId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) },
   getProjectTaskById(id) { return (this.data.projectTasks || []).find(t => String(t.id) === String(id)) },
@@ -1135,16 +1168,18 @@ const Store = {
 
   // ==== Reference Docs (참고자료 라이브러리) ====
   getReferenceDocs() { return this.data.referenceDocs || [] },
-  getReferenceDoc(id) { return (this.data.referenceDocs || []).find(d => d.id === id) },
+  getReferenceDoc(id) { const sid = String(id); return (this.data.referenceDocs || []).find(d => String(d.id) === sid) },
   addReferenceDoc(doc) { const rec = { id: Date.now(), status: 'pending', tags: [], chunk_count: 0, view_count: 0, last_viewed_at: null, created_at: new Date().toISOString(), ...doc }; this.data.referenceDocs.push(rec); this._save(); return rec },
-  updateReferenceDoc(id, updates) { const i = (this.data.referenceDocs || []).findIndex(d => d.id === id); if (i > -1) { Object.assign(this.data.referenceDocs[i], updates, { updated_at: new Date().toISOString() }); this._save() } return this.getReferenceDoc(id) },
+  updateReferenceDoc(id, updates) { const sid = String(id); const i = (this.data.referenceDocs || []).findIndex(d => String(d.id) === sid); if (i > -1) { Object.assign(this.data.referenceDocs[i], updates, { updated_at: new Date().toISOString() }); this._save() } return this.getReferenceDoc(id) },
   recordReferenceView(id) { const d = this.getReferenceDoc(id); if (!d) return null; this.data.referenceDocs[this.data.referenceDocs.indexOf(d)] = { ...d, view_count: (d.view_count || 0) + 1, last_viewed_at: new Date().toISOString() }; this._save(); return this.getReferenceDoc(id) },
-  deleteReferenceDoc(id) { this.data.referenceDocs = (this.data.referenceDocs || []).filter(d => d.id !== id); this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => c.reference_id !== id); this._addDeletedId('referenceDocs', id); this._save() },
+  deleteReferenceDoc(id) { const sid = String(id); (this.data.referenceChunks || []).filter(c => String(c.reference_id) === sid).forEach(c => this._addDeletedId('referenceChunks', c.id)); this.data.referenceDocs = (this.data.referenceDocs || []).filter(d => String(d.id) !== sid); this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => String(c.reference_id) !== sid); this._addDeletedId('referenceDocs', sid); this._save() },
 
   // ==== Reference Chunks (검색 인덱스) ====
-  getReferenceChunks(referenceId) { const all = this.data.referenceChunks || []; return referenceId == null ? all : all.filter(c => c.reference_id === referenceId) },
+  getReferenceChunks(referenceId) { const all = this.data.referenceChunks || []; return referenceId == null ? all : all.filter(c => String(c.reference_id) === String(referenceId)) },
   replaceReferenceChunks(referenceId, chunks) {
-    this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => c.reference_id !== referenceId)
+    const sid = String(referenceId)
+    ;(this.data.referenceChunks || []).filter(c => String(c.reference_id) === sid).forEach(c => this._addDeletedId('referenceChunks', c.id))
+    this.data.referenceChunks = (this.data.referenceChunks || []).filter(c => String(c.reference_id) !== sid)
     const base = Date.now()
     chunks.forEach((c, idx) => this.data.referenceChunks.push({ id: `${base}_${idx}_${Math.random().toString(36).slice(2, 6)}`, reference_id: referenceId, ...c }))
     this._save()
@@ -1307,6 +1342,8 @@ const Store = {
     const d = this._getDeletedIds()
     if (!d[table]) d[table] = []
     if (!d[table].includes(id)) d[table].push(id)
+    const MAX_DELETED = 5000
+    if (d[table].length > MAX_DELETED) d[table] = d[table].slice(-MAX_DELETED)
     localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(d))
   },
   _isDeleted(table, id) {

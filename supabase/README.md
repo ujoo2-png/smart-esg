@@ -16,7 +16,10 @@
 | `sign-upload` | `{ path }` | `{ uploadUrl, method, bucket }` |
 | `sign-download` | `{ path, expires? }` | `{ url }` |
 | `remove-object` | `{ path }` | `{ ok }` |
-| `convert` | `{ path, mime, docType }` | `{ markdown, page_count, engine }` |
+| `convert` | `POST { path, mime, docType }` | `{ markdown, page_count, engine, scanned }` |
+| `convert` (헬스체크) | `GET` | `{ ok: true, service, engine, backend, bucket }` |
+
+`convert`는 `verify_jwt`가 켜져 있어 브라우저가 `Authorization: Bearer <anonKey or 세션토큰>`을 보냅니다. GET 헬스체크도 동일 헤더가 필요하며, 앱의 "🔌 변환 서버 테스트" 버튼이 이를 호출합니다. 요청 본문은 최대 25MB(`MAX_BYTES`)입니다.
 
 ## 저장소 백엔드
 
@@ -49,13 +52,33 @@
 
 ## 배포
 
+> 이 저장소에는 `supabase`/`deno` CLI가 설치되어 있지 않으므로, 아래 명령은 사용자 환경에서 실행합니다.
+
+가장 간단한 방법은 저장소 루트의 배포 스크립트입니다(Docker 불필요, `--use-api` 사용):
+
+```bash
+export SUPABASE_ACCESS_TOKEN=<개인 액세스 토큰>
+# (선택) export SUPABASE_PROJECT_REF=<PROJECT_REF>   # 기본값: pyesmylwuzaftieqzokn
+./deploy-convert.sh
+```
+
+또는 수동으로:
+
 ```bash
 supabase login
 supabase link --project-ref <PROJECT_REF>
 supabase functions deploy sign-upload
 supabase functions deploy sign-download
 supabase functions deploy remove-object
-supabase functions deploy convert
+supabase functions deploy convert --use-api
+```
+
+배포 확인:
+
+```bash
+curl -i -H "Authorization: Bearer <ANON_KEY>" \
+  https://<PROJECT_REF>.supabase.co/functions/v1/convert
+# → 200 {"ok":true,"service":"convert","engine":"...","backend":"...","bucket":"references"}
 ```
 
 시크릿 등록:
