@@ -30,12 +30,28 @@ const SB_SYNC_MAP = {
   projectTaskLogs: ['tb_project_task_log', ['id', 'task_id', 'user_id', 'action', 'from_value', 'to_value', 'detail', 'created_at']],
   riskRegister: ['tb_risk_register', ['id', 'risk_name', 'category', 'description', 'probability', 'impact', 'status', 'owner', 'mitigation_plan', 'created_at', 'updated_at']],
   agencyMaster: ['tb_agency_master', ['id', 'code', 'name', 'track_type', 'description', 'effective_date', 'website_url', 'is_active', 'created_at']],
-  referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'scanned', 'status', 'error', 'tags', 'view_count', 'last_viewed_at', 'created_at', 'updated_at', 'converted_at']],
+  referenceDocs: ['tb_reference_doc', ['id', 'title', 'source_org', 'industry', 'year', 'file_name', 'file_type', 'mime_type', 'file_size', 'storage_path', 'markdown', 'page_count', 'chunk_count', 'engine', 'scanned', 'status', 'error', 'tags', 'view_count', 'last_viewed_at', 'owner_id', 'created_at', 'updated_at', 'converted_at']],
   referenceChunks: ['tb_reference_chunk', ['id', 'reference_id', 'page', 'section_title', 'content', 'created_at']],
-  reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'version', 'source_file', 'source_type', 'created_at', 'updated_at']],
+  reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'version', 'source_file', 'source_type', 'owner_id', 'created_at', 'updated_at']],
   reportDocSections: ['tb_report_doc_section', ['id', 'doc_id', 'title', 'content', 'sort_order', 'status', 'indicator_refs', 'created_at', 'updated_at']],
   reportFeedback: ['tb_report_feedback', ['id', 'doc_id', 'section_id', 'kind', 'message', 'suggestion', 'reference_title', 'page', 'status', 'created_at']],
   reportDocVersions: ['tb_report_doc_version', ['id', 'doc_id', 'version', 'title', 'section_count', 'note', 'created_at']]
+}
+
+const OWNER_FIELD = {
+  assessments: 'created_by',
+  evidences: 'uploaded_by',
+  referenceDocs: 'owner_id',
+  reportDocs: 'owner_id',
+  projectTasks: 'assignee_id'
+}
+
+const OWNER_LABEL = {
+  assessments: '평가',
+  evidences: '증빙자료',
+  referenceDocs: '참고자료',
+  reportDocs: '보고서',
+  projectTasks: '업무(프로젝트)'
 }
 
 async function _sha256(str) {
@@ -60,12 +76,97 @@ const Store = {
   getCurrentUser() {
     const raw = sessionStorage.getItem('smart_esg_session')
     if (!raw) return null
-    try { const s = JSON.parse(raw); return (this.getUsers() || []).find(u => u.id === s.id) || null } catch { return null }
+    try { const s = JSON.parse(raw); return (this.getUsers() || []).find(u => u.id === s.id) || (this.getUsers() || []).find(u => (u.username || '').toLowerCase() === (s.username || '').toLowerCase()) || null } catch { return null }
   },
 
   currentUserHasRole(role) {
     const u = this.getCurrentUser()
     return u && (u.role === role || u.role === 'admin')
+  },
+
+  isAdminUser() {
+    const u = this.getCurrentUser()
+    return !!u && u.role === 'admin'
+  },
+
+  _normId(v) { return v == null ? '' : String(v) },
+
+  getOwnerId(collection, item) {
+    const field = OWNER_FIELD[collection]
+    if (!field || !item) return null
+    return item[field] != null ? item[field] : null
+  },
+
+  canSeeOwned(collection, item) {
+    const u = this.getCurrentUser()
+    if (!u) return false
+    if (u.role === 'admin') return true
+    const owner = this.getOwnerId(collection, item)
+    if (owner == null || owner === '') return true
+    return this._normId(owner) === this._normId(u.id)
+  },
+
+  ownerLabel(key) { return OWNER_LABEL[key] || key },
+
+  countUserData(userId) {
+    const uid = this._normId(userId)
+    const out = { total: 0 }
+    Object.keys(OWNER_FIELD).forEach(key => {
+      const arr = this.data[key] || []
+      const n = arr.filter(it => this._normId(it[OWNER_FIELD[key]]) === uid).length
+      out[key] = n
+      out.total += n
+    })
+    return out
+  },
+
+  transferUserData(fromId, toId) {
+    const from = this._normId(fromId)
+    const to = toId == null ? null : this._normId(toId)
+    const moved = { total: 0 }
+    Object.keys(OWNER_FIELD).forEach(key => {
+      const field = OWNER_FIELD[key]
+      const arr = this.data[key] || []
+      let n = 0
+      arr.forEach(it => { if (this._normId(it[field]) === from) { it[field] = toId; n++ } })
+      moved[key] = n
+      moved.total += n
+    })
+    if (moved.total > 0) this._save()
+    return moved
+  },
+
+  mergeDuplicateUsers() {
+    const users = this.data.users || []
+    const groups = {}
+    users.forEach(u => {
+      const key = String(u.username || '').trim().toLowerCase()
+      if (!key) return
+      ;(groups[key] = groups[key] || []).push(u)
+    })
+    let merged = 0
+    const removals = []
+    Object.keys(groups).forEach(key => {
+      const list = groups[key]
+      if (list.length < 2) return
+      const score = u => (u.status === 'active' ? 100 : 0) + (u.company_id != null ? 10 : 0) + (u.email ? 1 : 0)
+      const sorted = list.slice().sort((a, b) => score(b) - score(a) || (b.createdAt || '').localeCompare(a.createdAt || '') || (b.id > a.id ? 1 : -1))
+      const keeper = sorted[0]
+      sorted.slice(1).forEach(dup => {
+        this.transferUserData(dup.id, keeper.id)
+        ;(['name', 'email', 'phone', 'position', 'dept_code', 'company_id']).forEach(f => {
+          if (!keeper[f] && dup[f]) keeper[f] = dup[f]
+        })
+        removals.push(dup.id)
+        merged++
+      })
+    })
+    if (merged > 0) {
+      this.data.users = this.data.users.filter(u => !removals.includes(u.id))
+      removals.forEach(id => this._addDeletedId('users', id))
+      this._save()
+    }
+    return merged
   },
 
   deleteAssessmentCascade(id) {

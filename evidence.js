@@ -28,6 +28,7 @@ const Evidence = {
     const ev = {
       id: Date.now(),
       ...data,
+      uploaded_by: data.uploaded_by ?? Store.getCurrentUser()?.id ?? null,
       status: data.status || 'self',
       uploaded_at: new Date().toISOString()
     }

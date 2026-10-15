@@ -493,6 +493,7 @@
     if (vb) vb.textContent = Store.version
     renderSupabaseStatus()
     ensureAdmin()
+    try { Store.mergeDuplicateUsers() } catch (e) { console.warn('mergeDuplicateUsers:', e) }
     GHG.init()
     checkAuth().then(user => {
       applyAuthUI()
@@ -584,7 +585,7 @@
 
   function renderAssessments() {
     const c = document.getElementById('page-assessment')
-    const assessments = Store.getAssessments()
+    const assessments = Store.getAssessments().filter(a => Store.canSeeOwned('assessments', a))
     c.innerHTML = ''
     c.append(
       el('div', { className: 'card' },
@@ -831,7 +832,7 @@
     )
     modal(isEdit ? '평가 수정' : '새 ESG 평가', form)
     document.getElementById('modal-save').onclick = function save() {
-      const data = { title: title.value, assessment_year: parseInt(year.value), authority_code: authority.value, status: 'draft' }
+      const data = { title: title.value, assessment_year: parseInt(year.value), authority_code: authority.value, status: 'draft', created_by: currentUser?.id ?? null }
       if (isEdit) {
         Store.updateAssessment(a.id, data)
         showToast('평가가 수정되었습니다.', 'success')
@@ -3968,7 +3969,7 @@
   function renderReferences() {
     const c = document.getElementById('page-references')
     if (!c) return
-    const docs = Reference.getAll()
+    const docs = Reference.getAll().filter(d => Store.canSeeOwned('referenceDocs', d))
     const q = _refQuery.trim().toLowerCase()
     const filtered = docs.filter(d => {
       if (_refStatus !== 'all' && d.status !== _refStatus) return false
@@ -4277,8 +4278,8 @@
   function renderWriter() {
     const c = document.getElementById('page-writer')
     if (!c) return
-    const docs = Store.getReportDocs()
-    if (_writerDocId && !Store.getReportDoc(_writerDocId)) _writerDocId = null
+    const docs = Store.getReportDocs().filter(d => Store.canSeeOwned('reportDocs', d))
+    if (_writerDocId && !docs.find(d => d.id === _writerDocId)) _writerDocId = null
     if (!_writerDocId && docs.length) _writerDocId = docs[docs.length - 1].id
     const doc = _writerDocId ? Store.getReportDoc(_writerDocId) : null
     const sections = doc ? Store.getReportDocSections(doc.id) : []
@@ -4395,8 +4396,8 @@
   }
 
   function openNewReportDoc() {
-    const refs = Reference.getAll()
-    const docs = Store.getReportDocs()
+    const refs = Reference.getAll().filter(d => Store.canSeeOwned('referenceDocs', d))
+    const docs = Store.getReportDocs().filter(d => Store.canSeeOwned('reportDocs', d))
     const state = { start: 'new', src: 'report' }
 
     const titleInput = el('input', { id: 'rd-title', type: 'text', placeholder: '예: 2025 지속가능경영보고서', style: { padding: '10px 12px', border: '1px solid #e4e7eb', borderRadius: 8, fontSize: 14, width: '100%' } })
@@ -4461,7 +4462,7 @@
     modal('새 보고서', form)
     document.getElementById('modal-save').onclick = () => {
       const title = titleInput.value.trim() || '제목 없는 보고서'
-      const doc = Store.addReportDoc({ title })
+      const doc = Store.addReportDoc({ title, owner_id: currentUser?.id ?? null })
       if (state.start === 'new') {
         sectionsArea.value.split('\n').map(s => s.trim()).filter(Boolean).forEach(t => Store.addReportSection({ doc_id: doc.id, title: t, content: '' }))
       } else if (state.src === 'report') {
@@ -4613,7 +4614,7 @@
         const result = await MdConvert.convertLocal(f)
         const items = _splitDocIntoItems(result)
         if (!items.length) throw new Error('문서에서 내용을 추출하지 못했습니다.')
-        const doc = Store.addReportDoc({ title, status: 'draft', progress: 0, version: 1, source_file: f.name, source_type: Reference.detectType(f.name) })
+        const doc = Store.addReportDoc({ title, status: 'draft', progress: 0, version: 1, source_file: f.name, source_type: Reference.detectType(f.name), owner_id: currentUser?.id ?? null })
         items.forEach((it, i) => Store.addReportSection({ doc_id: doc.id, title: it.title, content: it.content, sort_order: i, status: it.content ? 'draft' : 'empty' }))
         Store.addReportDocVersion(doc.id, { version: 1, title, section_count: items.length, note: '자료 불러오기 (' + f.name + ')' })
         _writerDocId = doc.id; _writerSectionId = null
@@ -6227,11 +6228,6 @@
       { label: '상태', value: u => u.status !== 'active' ? el('span', { className: 'badge badge-unpaid' }, '승인대기') : el('span', { className: 'badge badge-paid' }, '활성') },
       { label: '가입일', key: 'createdAt', value: u => u.createdAt || '-' }
     ], users, {
-      bulkDelete: id => {
-        if (currentUser && currentUser.id === id) return
-        Store.deleteUser(id)
-        showToast('사용자가 삭제되었습니다.', 'success')
-      },
       actions: u => {
         const isPending = u.status !== 'active'
         const canDelete = currentUser && currentUser.id !== u.id
@@ -6286,11 +6282,87 @@
   }
 
   function deleteUser(id) {
-    if (!confirm('정말 삭제하시겠습니까?')) return
     const u = Store.getUsers().find(x => x.id === id)
-    Store.deleteUser(id)
-    Store.addAuditLog({ category: '사용자삭제', action: '사용자 삭제', user_id: currentUser?.id || null, user_name: currentUser?.name || '', detail: `대상: ${u?.name || id} (${u?.username || ''}), 역할: ${u?.role || ''}` })
-    showToast('사용자가 삭제되었습니다.', 'success')
+    if (!u) return
+    if (currentUser && currentUser.id === id) { alert('본인 계정은 삭제할 수 없습니다.'); return }
+    const counts = Store.countUserData(id)
+    const candidates = Store.getUsers().filter(x =>
+      x.id !== id && x.status === 'active' &&
+      ((x.company_id != null && x.company_id === u.company_id) || x.role === 'admin')
+    )
+    const sameCo = candidates.filter(x => x.company_id != null && x.company_id === u.company_id)
+    const admins = candidates.filter(x => x.role === 'admin' && !sameCo.includes(x))
+
+    const rows = Object.keys(counts).filter(k => k !== 'total').map(k =>
+      el('tr', {},
+        el('td', { style: 'padding:6px 10px;border-bottom:1px solid #EEF1F4' }, Store.ownerLabel(k)),
+        el('td', { style: 'padding:6px 10px;border-bottom:1px solid #EEF1F4;text-align:right;font-weight:600' }, String(counts[k]))
+      )
+    )
+
+    const body = el('div', {},
+      el('div', { style: 'padding:12px;background:#FEF3F2;border:1px solid #FECDCA;border-radius:10px;color:#B42318;font-size:13px;marginBottom:14px' },
+        el('div', { style: 'font-weight:700;marginBottom:4px' }, '⚠️ 사용자 삭제 — 데이터 이관 필요'),
+        el('div', {}, `${u.name || u.username}(${u.username}) 님을 삭제하면 아래 자료의 소유자가 사라집니다. 삭제 전에 반드시 이관자를 지정해야 합니다.`)
+      ),
+      counts.total > 0
+        ? el('div', { style: 'marginBottom:14px' },
+            el('table', { style: 'width:100%;border-collapse:collapse;font-size:13px' },
+              el('thead', {}, el('tr', {},
+                el('th', { style: 'padding:6px 10px;text-align:left;border-bottom:2px solid #EEF4FA;color:#6B7280;font-size:12px' }, '연관 자료'),
+                el('th', { style: 'padding:6px 10px;text-align:right;border-bottom:2px solid #EEF4FA;color:#6B7280;font-size:12px' }, '건수')
+              )),
+              el('tbody', {}, ...rows,
+                el('tr', {}, el('td', { style: 'padding:6px 10px;font-weight:700' }, '합계'), el('td', { style: 'padding:6px 10px;text-align:right;font-weight:700' }, String(counts.total)))
+              )
+            )
+          )
+        : el('div', { style: 'padding:12px;background:#F8FAFC;border-radius:10px;color:#6B7280;font-size:13px;marginBottom:14px' }, '연관된 자료가 없습니다.'),
+      counts.total > 0
+        ? el('label', { style: 'display:block;font-size:12px;font-weight:600;color:#374151;marginBottom:6px' }, '이관자 선택 *')
+        : null,
+      counts.total > 0
+        ? el('select', { id: 'del-successor', style: 'width:100%;padding:10px 12px;border:2px solid #EEF1F4;border-radius:10px;font-size:14px;box-sizing:border-box' },
+            el('option', { value: '' }, '— 이관자를 선택하세요 —'),
+            sameCo.length ? el('optgroup', { label: '같은 회사 사용자' }, ...sameCo.map(x => el('option', { value: String(x.id) }, `${x.name || x.username} (${x.username})`))) : null,
+            admins.length ? el('optgroup', { label: '관리자' }, ...admins.map(x => el('option', { value: String(x.id) }, `${x.name || x.username} (${x.username})·관리자`))) : null
+          )
+        : null,
+      (counts.total > 0 && !candidates.length)
+        ? el('div', { style: 'margin-top:10px;padding:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;color:#92400E;font-size:12px' }, '같은 회사 활성 사용자나 관리자가 없어 이관할 수 없습니다. 먼저 이관자를 추가하세요.')
+        : null
+    )
+    modal(`사용자 삭제 — ${u.name || u.username}`, body)
+    const saveBtn = document.getElementById('modal-save')
+    saveBtn.textContent = counts.total > 0 ? '이관 후 삭제' : '삭제'
+    if (counts.total > 0) {
+      const sel = document.getElementById('del-successor')
+      const update = () => { const ok = !!sel.value; saveBtn.disabled = !ok; saveBtn.style.opacity = ok ? '' : '.5'; saveBtn.style.cursor = ok ? 'pointer' : 'not-allowed' }
+      sel.addEventListener('change', update); update()
+    }
+    saveBtn.onclick = () => {
+      let toId = null
+      if (counts.total > 0) {
+        const sel = document.getElementById('del-successor')
+        if (!sel || !sel.value) { alert('이관자를 선택해야 삭제할 수 있습니다.'); return }
+        toId = Number(sel.value)
+      }
+      const target = toId != null ? Store.getUsers().find(x => x.id === toId) : null
+      const moved = Store.transferUserData(id, toId)
+      Store.deleteUser(id)
+      Store.addAuditLog({ category: '사용자삭제', action: '사용자 삭제', user_id: currentUser?.id || null, user_name: currentUser?.name || '', detail: `대상: ${u.name || id} (${u.username}), 이관자: ${target ? (target.name || target.username) : '없음'}, 이관 자료: ${moved.total}건` })
+      showToast(moved.total > 0 ? `사용자가 삭제되고 자료 ${moved.total}건이 이관되었습니다.` : '사용자가 삭제되었습니다.', 'success')
+      closeModal(); renderUsers()
+    }
+  }
+
+  function mergeDuplicateUsers() {
+    if (!currentUser || currentUser.role !== 'admin') return alert('관리자만 실행할 수 있습니다.')
+    const before = Store.getUsers().length
+    const merged = Store.mergeDuplicateUsers()
+    if (!merged) { showToast('중복된 아이디가 없습니다.', 'success'); return }
+    Store.addAuditLog({ category: '사용자관리', action: '중복 아이디 병합', user_id: currentUser.id, user_name: currentUser.name, detail: `중복 계정 ${merged}건을 병합했습니다. (${before} → ${Store.getUsers().length})` })
+    showToast(`중복 계정 ${merged}건을 병합했습니다.`, 'success')
     renderUsers()
   }
 
@@ -6300,7 +6372,7 @@
     if (!pending.length) return alert('미승인 대기 회원이 없습니다.')
     if (!confirm(`미승인 회원 ${pending.length}명을 삭제하시겠습니까?`)) return
     if (!confirm('정말입니까? 이 작업은 되돌릴 수 없습니다.')) return
-    pending.forEach(u => { Store.addAuditLog({ category: '사용자삭제', action: '일괄 삭제', user_id: currentUser.id, user_name: currentUser.name, detail: `대상: ${u.name} (${u.username})` }); Store.deleteUser(u.id) })
+    pending.forEach(u => { Store.addAuditLog({ category: '사용자삭제', action: '일괄 삭제', user_id: currentUser.id, user_name: currentUser.name, detail: `대상: ${u.name} (${u.username})` }); Store.transferUserData(u.id, currentUser.id); Store.deleteUser(u.id) })
     const pc = document.getElementById('pending-count')
     if (pc) pc.textContent = Store.getUsers().filter(u => u.status !== 'active').length
     renderUsers()
@@ -6385,6 +6457,7 @@
   window.approveUser = approveUser
   window.editUser = editUser
   window.deleteUser = deleteUser
+  window.mergeDuplicateUsers = mergeDuplicateUsers
   window.cleanupUsers = cleanupUsers
   window.toggleKeepAlive = toggleKeepAlive
   window.toggleHelp = toggleHelp

@@ -67,17 +67,8 @@ async function checkAuth() {
 async function register(data) {
   const users = Store.getUsers()
   const uname = String(data.username || '').trim().toLowerCase()
-  const localDup = users.find(u => (u.username || '').toLowerCase() === uname)
-  if (localDup) {
-    try {
-      const sb = getSupabase()
-      if (sb) {
-        const { data: dup } = await sb.from('tb_user').select('id').ilike('username', data.username)
-        if (dup && dup.length > 0) return { error: '이미 사용 중인 아이디입니다.' }
-      } else return { error: '이미 사용 중인 아이디입니다.' }
-    } catch (e) { return { error: '이미 사용 중인 아이디입니다.' } }
-  }
-  if (data.email && users.find(u => u.email === data.email)) return { error: '이미 사용 중인 이메일입니다.' }
+  const localDup = users.find(u => (u.username || '').trim().toLowerCase() === uname)
+  if (localDup) return { error: '이미 사용 중인 아이디입니다.' }
   let authId = null
   const sbAuth = getSbAuth()
   if (sbAuth && data.email) {
@@ -141,14 +132,15 @@ async function logout() {
 }
 
 function findId(email) {
-  const user = Store.getUsers().find(u => u.email === email)
-  if (!user) return { error: '등록된 이메일이 없습니다.' }
+  const matches = Store.getUsers().filter(u => u.email === email)
+  if (!matches.length) return { error: '등록된 이메일이 없습니다.' }
+  const user = matches.find(u => u.status === 'active') || matches[0]
   return { ok: true, username: user.username, createdAt: user.createdAt }
 }
 
 function findPassword(name, email) {
-  const user = Store.getUsers().find(u => u.name === name && u.email === email)
-  if (!user) return { error: '등록된 이름과 이메일이 일치하는 계정이 없습니다.' }
+  const matches = Store.getUsers().filter(u => u.name === name && u.email === email)
+  if (!matches.length) return { error: '등록된 이름과 이메일이 일치하는 계정이 없습니다.' }
   return { ok: true }
 }
 

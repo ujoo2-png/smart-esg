@@ -59,7 +59,7 @@ const Reference = {
   },
 
   async create({ title, source_org, industry, year, file, tags }) {
-    const doc = Store.addReferenceDoc({ title: title || file.name, source_org: source_org || '', industry: industry || '', year: year || null, file_name: file.name, file_type: this.detectType(file.name), mime_type: file.type || '', file_size: file.size, tags: tags || [] })
+    const doc = Store.addReferenceDoc({ title: title || file.name, source_org: source_org || '', industry: industry || '', year: year || null, file_name: file.name, file_type: this.detectType(file.name), mime_type: file.type || '', file_size: file.size, tags: tags || [], owner_id: Store.getCurrentUser()?.id ?? null })
     try {
       const path = this.storagePath(doc, file.name)
       Store.updateReferenceDoc(doc.id, { status: 'uploading', storage_path: path })

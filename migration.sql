@@ -496,6 +496,12 @@ ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
 ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS source_file TEXT;
 ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS source_type TEXT;
 
+-- 자료 소유자/이관 (v2.2.2)
+ALTER TABLE tb_reference_doc ADD COLUMN IF NOT EXISTS owner_id BIGINT;
+ALTER TABLE tb_report_doc ADD COLUMN IF NOT EXISTS owner_id BIGINT;
+ALTER TABLE tb_evidence ADD COLUMN IF NOT EXISTS uploaded_by BIGINT;
+ALTER TABLE tb_assessment ADD COLUMN IF NOT EXISTS created_by BIGINT;
+
 CREATE TABLE IF NOT EXISTS tb_report_doc_version (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     doc_id TEXT,
