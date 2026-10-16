@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.3.1'
+const APP_VERSION = 'v2.4.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -136,7 +136,22 @@ const Store = {
     return moved
   },
 
-  mergeDuplicateUsers() {
+  duplicateUserGroups() {
+    const groups = {}
+    ;(this.data.users || []).forEach(u => {
+      const key = String(u.username || '').trim().toLowerCase()
+      if (!key) return
+      ;(groups[key] = groups[key] || []).push(u)
+    })
+    return Object.keys(groups).filter(k => groups[k].length > 1).map(k => ({ username: groups[k][0].username, members: groups[k] }))
+  },
+
+  _mergeKeeperScore(u) {
+    const owned = (this.countUserData(u.id).total) || 0
+    return { active: u.status === 'active' ? 1 : 0, owned, company: u.company_id != null ? 1 : 0, email: u.email ? 1 : 0 }
+  },
+
+  mergeDuplicateUsers(prefer) {
     const users = this.data.users || []
     const groups = {}
     users.forEach(u => {
@@ -144,15 +159,25 @@ const Store = {
       if (!key) return
       ;(groups[key] = groups[key] || []).push(u)
     })
+    const prefFor = (key) => {
+      if (prefer == null) return null
+      if (typeof prefer === 'object') return prefer[key] == null ? null : this._normId(prefer[key])
+      return this._normId(prefer)
+    }
+    const ownedCount = u => (this.countUserData(u.id).total) || 0
     let merged = 0
     const removals = []
     Object.keys(groups).forEach(key => {
       const list = groups[key]
       if (list.length < 2) return
-      const score = u => (u.status === 'active' ? 100 : 0) + (u.company_id != null ? 10 : 0) + (u.email ? 1 : 0)
-      const sorted = list.slice().sort((a, b) => score(b) - score(a) || (b.createdAt || '').localeCompare(a.createdAt || '') || (b.id > a.id ? 1 : -1))
-      const keeper = sorted[0]
-      sorted.slice(1).forEach(dup => {
+      const sorted = list.slice().sort((a, b) => {
+        const sa = this._mergeKeeperScore(a), sb = this._mergeKeeperScore(b)
+        return (sb.active - sa.active) || (sb.owned - sa.owned) || (sb.company - sa.company) || (sb.email - sa.email) ||
+          String(a.createdAt || '9999').localeCompare(String(b.createdAt || '9999')) || (Number(a.id) - Number(b.id))
+      })
+      const preferred = prefFor(key) ? list.find(u => this._normId(u.id) === prefFor(key)) : null
+      const keeper = preferred || sorted[0]
+      sorted.filter(u => u !== keeper).forEach(dup => {
         this.transferUserData(dup.id, keeper.id)
         ;(['name', 'email', 'phone', 'position', 'dept_code', 'company_id']).forEach(f => {
           if (!keeper[f] && dup[f]) keeper[f] = dup[f]
@@ -162,7 +187,7 @@ const Store = {
       })
     })
     if (merged > 0) {
-      this.data.users = this.data.users.filter(u => !removals.includes(u.id))
+      this.data.users = this.data.users.filter(u => !removals.some(id => this._normId(id) === this._normId(u.id)))
       removals.forEach(id => this._addDeletedId('users', id))
       this._save()
     }
@@ -1004,9 +1029,10 @@ const Store = {
 
   // ==== Users ====
   getUsers() { return this.data.users },
+  getUser(id) { const nid = this._normId(id); return (this.data.users || []).find(u => this._normId(u.id) === nid) || null },
   addUser(user) { this.data.users.push({ id: Date.now(), ...user, company_id: user.company_id || null, dept_code: user.dept_code || '', position: user.position || '', createdAt: new Date().toISOString() }); this._save(); return user },
-  updateUser(id, updates) { const i = this.data.users.findIndex(u => u.id === id); if (i > -1) { Object.assign(this.data.users[i], updates); this._save() } },
-  deleteUser(id) { this.data.users = this.data.users.filter(u => u.id !== id); this._addDeletedId('users', id); this._save() },
+  updateUser(id, updates) { const nid = this._normId(id); const i = this.data.users.findIndex(u => this._normId(u.id) === nid); if (i > -1) { Object.assign(this.data.users[i], updates); this._save() } },
+  deleteUser(id) { const nid = this._normId(id); this.data.users = this.data.users.filter(u => this._normId(u.id) !== nid); this._addDeletedId('users', id); this._save() },
 
   // ==== Companies ====
   getCompanies() { return this.data.companies },
@@ -1295,6 +1321,7 @@ const Store = {
 
   // ==== Report Doc Versions (버전 이력) ====
   getReportDocVersions(docId) { return (this.data.reportDocVersions || []).filter(v => docId == null || v.doc_id === docId).sort((a, b) => b.version - a.version) },
+  getReportDocVersion(docId, version) { return (this.data.reportDocVersions || []).find(v => v.doc_id === docId && v.version === version) || null },
   addReportDocVersion(docId, meta) {
     if (!this.data.reportDocVersions) this.data.reportDocVersions = []
     const doc = this.getReportDoc(docId)
@@ -1302,6 +1329,19 @@ const Store = {
     const version = (meta && meta.version) || (prev + 1)
     const rec = { id: Date.now(), doc_id: docId, version, title: '', section_count: 0, note: '', created_at: new Date().toISOString(), ...meta }
     this.data.reportDocVersions.push(rec); this._save(); return rec
+  },
+  snapshotReportDoc(docId) {
+    return this.getReportDocSections(docId).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+      .map(s => ({ id: s.id, title: s.title, content: s.content || '', sort_order: s.sort_order || 0, indicator_ids: s.indicator_ids || [] }))
+  },
+  restoreReportDocVersion(docId, version) {
+    const v = this.getReportDocVersion(docId, version)
+    if (!v || !Array.isArray(v.snapshot)) return null
+    const others = (this.data.reportDocSections || []).filter(s => s.doc_id !== docId)
+    const restored = v.snapshot.map((s, i) => ({ ...s, id: (s.id != null ? s.id : Date.now() + Math.random() + i), doc_id: docId, status: (s.content || '').trim() ? 'draft' : 'empty' }))
+    this.data.reportDocSections = others.concat(restored)
+    this._save()
+    return restored
   },
 
   // ==== Report Doc Sections (보고서 섹션) ====

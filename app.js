@@ -502,7 +502,6 @@
     if (vb) vb.textContent = Store.version
     renderSupabaseStatus()
     ensureAdmin()
-    try { Store.mergeDuplicateUsers() } catch (e) { console.warn('mergeDuplicateUsers:', e) }
     GHG.init()
     checkAuth().then(user => {
       applyAuthUI()
@@ -531,6 +530,7 @@
     if (typeof canAccess === 'function' && !canAccess(page)) {
       page = 'dashboard'
     }
+    if (page !== 'writer') { const ap = document.getElementById('writer-assistant'); if (ap) ap.remove() }
     document.querySelectorAll('#nav a').forEach(a => a.classList.remove('active'))
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
     const link = document.querySelector(`#nav a[data-page="${page}"]`)
@@ -4290,15 +4290,27 @@
   // ==================== 보고서 작성기 ====================
   let _writerDocId = null
   let _writerSectionId = null
+  let _writerPreset = { tone: 'formal', length: 'normal', format: 'prose' }
+  let _writerRefDocId = null
+  let _writerChat = []
+  let _writerAutosaveTimer = null
+  let _writerSkipFlush = false
+
+  function _flushWriterInput() {
+    const ta = document.getElementById('writer-input')
+    if (ta && _writerSectionId != null) Store.updateReportSection(_writerSectionId, { content: ta.value })
+  }
 
   function renderWriter() {
     const c = document.getElementById('page-writer')
     if (!c) return
+    if (!_writerSkipFlush) _flushWriterInput()
+    _writerSkipFlush = false
     const docs = Store.getReportDocs().filter(d => Store.canSeeOwned('reportDocs', d))
     if (_writerDocId && !docs.find(d => d.id === _writerDocId)) _writerDocId = null
     if (!_writerDocId && docs.length) _writerDocId = docs[docs.length - 1].id
     const doc = _writerDocId ? Store.getReportDoc(_writerDocId) : null
-    const sections = doc ? Store.getReportDocSections(doc.id) : []
+    const sections = doc ? Store.getReportDocSections(doc.id).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)) : []
     if (_writerSectionId && !sections.find(s => s.id === _writerSectionId)) _writerSectionId = null
     if (!_writerSectionId && sections.length) _writerSectionId = sections[0].id
 
@@ -4307,7 +4319,7 @@
       el('div', { className: 'card-header' },
         el('h3', {}, '✍️ 보고서 작성기'),
         el('div', { className: 'writer-toolbar' },
-          el('select', { className: 'select-sm', onChange: e => { _writerDocId = parseInt(e.target.value) || null; _writerSectionId = null; renderWriter() } },
+          el('select', { className: 'select-sm', onChange: e => { _flushWriterInput(); _writerSkipFlush = true; _writerDocId = parseInt(e.target.value) || null; _writerSectionId = null; renderWriter() } },
             docs.length ? docs.map(d => el('option', { value: d.id, selected: d.id === _writerDocId }, d.title || '(제목 없음)')) : el('option', { value: '' }, '문서 없음')
           ),
           el('button', { className: 'btn btn-secondary', onClick: openImportDoc }, '📥 자료 불러오기'),
@@ -4334,50 +4346,83 @@
           el('span', { className: 'badge-ver' }, 'v' + (doc.version || 1))),
         el('div', { className: 'chip-row' },
           el('span', { className: 'chip chip-muted' }, `진도 ${progress}% · ${written}/${total} 섹션`),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: openWriterVersions }, '🗂 버전·되돌리기'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: exportWriterPptx }, '📤 PPTX'),
           el('button', { className: 'btn btn-sm btn-primary', onClick: saveWriterDoc }, '💾 저장(버전)'))),
       el('div', { className: 'progress-track' },
         el('div', { className: 'progress-fill', style: 'width:' + progress + '%' }))))
 
     const grid = el('div', { className: 'writer-grid' })
-    grid.append(el('div', { className: 'card writer-seclist' },
-      el('div', { className: 'writer-seclist-head' },
+    grid.append(renderWriterRefPane(sections.find(s => s.id === _writerSectionId)))
+
+    const main = el('div', { className: 'writer-main' },
+      el('div', { className: 'writer-secbar' },
         el('strong', {}, '섹션'),
-        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openAddSection(doc.id) }, '＋')),
-      el('div', {}, sections.length ? sections.map(s => {
-        const done = (s.content || '').trim()
-        return el('div', {
-          className: 'writer-sec-item' + (s.id === _writerSectionId ? ' active' : ''),
-          onClick: () => { _writerSectionId = s.id; renderWriter() }
-        },
-          el('span', { className: 'status-dot ' + (done ? 'dot-ok' : 'dot-muted') }),
-          el('div', { className: 'writer-sec-body' },
-            el('div', { className: 'writer-sec-title' }, s.title || '(제목 없음)'),
-            el('div', { className: 'writer-sec-status' }, done ? '작성됨' : '미작성')
-          ))
-      }) : el('div', { className: 'rd-empty', style: 'padding:16px' }, '섹션이 없습니다.')))
-    )
-    grid.append(renderWriterEditor(sections.find(s => s.id === _writerSectionId)))
+        el('select', { className: 'select-sm', style: 'flex:1;min-width:180px', onChange: e => { _flushWriterInput(); _writerSkipFlush = true; _writerSectionId = isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value); renderWriter() } },
+          sections.length ? sections.map(s => el('option', { value: String(s.id), selected: s.id === _writerSectionId }, (s.title || '(제목 없음)') + ((s.content || '').trim() ? '' : ' · 미작성'))) : el('option', { value: '' }, '섹션 없음')
+        ),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openAddSection(doc.id) }, '＋ 섹션')))
+    main.append(renderWriterEditor(sections.find(s => s.id === _writerSectionId)))
+    grid.append(main)
     c.append(grid)
   }
 
+  function _fbKindLabel(kind) {
+    const m = { direction: '진행방향', polish: '문구 다듬기', polish_full: 'AI 다듬기', compliance: '문체·컴플라이언스', coverage: 'GRI/ISSB 점검', continue: '이어쓰기' }
+    return m[kind] || '제안'
+  }
+
   function renderWriterEditor(section) {
-    if (!section) return el('div', { className: 'card' }, el('p', { style: { color: 'var(--c-text-faint)', margin: 0 } }, '왼쪽에서 섹션을 선택하세요.'))
-    const ta = el('textarea', { id: 'writer-input', className: 'writer-textarea' })
+    if (!section) return el('div', { className: 'card' }, el('p', { style: { color: 'var(--c-text-faint)', margin: 0 } }, '섹션을 선택하세요.'))
+    const ta = el('textarea', {
+      id: 'writer-input', className: 'writer-textarea',
+      onInput: e => {
+        const val = e.target.value
+        const st = document.getElementById('writer-autosave')
+        const cnt = document.getElementById('writer-count')
+        if (cnt) cnt.textContent = val.length + '자'
+        if (st) st.textContent = '입력 중…'
+        clearTimeout(_writerAutosaveTimer)
+        _writerAutosaveTimer = setTimeout(() => {
+          Store.updateReportSection(section.id, { content: val })
+          const s2 = document.getElementById('writer-autosave')
+          if (s2) s2.textContent = '자동 저장됨 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        }, 1200)
+      }
+    })
     ta.value = section.content || ''
     const all = Store.getFeedback(section.doc_id).filter(f => f.section_id === section.id)
     const proposals = all.filter(f => f.kind === 'polish_full').sort((a, b) => b.id - a.id)
     const feedback = all.filter(f => f.kind !== 'polish_full')
-    return el('div', { className: 'card' },
+    const P = AI.WRITER_PRESETS
+
+    const aiBtn = (label, fn) => el('button', { className: 'btn btn-sm btn-secondary wbtn', onClick: fn }, label)
+
+    return el('div', { className: 'card writer-editor' },
       el('div', { className: 'writer-panel-head' },
         el('strong', {}, section.title || '(제목 없음)'),
         el('div', { className: 'chip-row' },
-          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); showToast('저장되었습니다.') } }, '저장'),
-          el('button', { className: 'btn btn-sm btn-primary', onClick: () => runWriterPolish(section, ta.value) }, '🤖 참고자료로 다듬기'),
-          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => runWriterFeedback(section, ta.value) }, '💬 AI 피드백'),
-          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteWriterSection(section.id) }, '섹션 삭제')
-        )),
+          el('span', { id: 'writer-autosave', className: 'writer-autosave' }, ''),
+          el('span', { id: 'writer-count', className: 'writer-count' }, (ta.value.length) + '자'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteWriterSection(section.id) }, '섹션 삭제'))),
+      el('div', { className: 'writer-ai-tools' },
+        aiBtn('🤖 참조자료로 다듬기', () => runWriterPolish(section, ta.value)),
+        aiBtn('💬 AI 피드백', () => runWriterFeedback(section, ta.value)),
+        aiBtn('✨ 이어쓰기', () => runWriterContinue(section, ta.value)),
+        aiBtn('✂️ 선택 다듬기', () => runWriterInline(section, ta)),
+        aiBtn('🧭 GRI/ISSB 점검', () => runWriterCoverage(section, ta.value)),
+        aiBtn('🛡️ 문체·컴플라이언스', () => runWriterCompliance(section, ta.value))),
+      el('div', { className: 'writer-preset-row' },
+        el('span', { className: 'writer-preset-label' }, 'AI 프리셋'),
+        el('select', { className: 'select-sm', onChange: e => { _writerPreset.tone = e.target.value } }, Object.keys(P.tone).map(k => el('option', { value: k, selected: _writerPreset.tone === k }, '문체·' + P.tone[k]))),
+        el('select', { className: 'select-sm', onChange: e => { _writerPreset.length = e.target.value } }, Object.keys(P.length).map(k => el('option', { value: k, selected: _writerPreset.length === k }, '분량·' + P.length[k]))),
+        el('select', { className: 'select-sm', onChange: e => { _writerPreset.format = e.target.value } }, Object.keys(P.format).map(k => el('option', { value: k, selected: _writerPreset.format === k }, '형식·' + P.format[k])))),
       ta,
+      el('div', { className: 'writer-card-footer' },
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); showToast('임시저장되었습니다.') } }, '📌 임시저장'),
+        el('button', { className: 'btn btn-sm btn-primary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); saveWriterDoc() } }, '💾 저장 (버전)'),
+        el('div', { style: { flex: 1 } }),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openWriterAssistant(section, ta.value) }, '💡 AI 어시스턴트')),
       proposals.length ? el('div', { className: 'proposal' },
         el('div', { className: 'proposal-head' }, '🤖 AI 다듬기 제안 (' + proposals.length + ')'),
         proposals.map(p => {
@@ -4399,16 +4444,207 @@
               el('button', { className: 'btn btn-sm btn-secondary', disabled: !open, onClick: () => { Store.updateFeedbackItem(p.id, { status: 'dismissed' }); renderWriter() } }, '무시')))
         })) : null,
       feedback.length ? el('div', { style: { marginTop: 16 } },
-        el('div', { className: 'ai-section-label', style: 'margin-top:0' }, '💬 피드백 (' + feedback.length + ')'),
+        el('div', { className: 'ai-section-label', style: { marginTop: 0 } }, '💬 AI 결과 (' + feedback.length + ')'),
         feedback.map(f => el('div', { className: 'fb-item' + (f.status === 'applied' ? ' is-applied' : f.status === 'dismissed' ? ' is-dismissed' : '') },
-          el('div', { className: 'fb-meta' }, (f.kind === 'direction' ? '진행방향' : f.kind === 'polish' ? '문구 다듬기' : '제안') + (f.reference_title ? ' · 근거: ' + f.reference_title + (f.page ? ' p.' + f.page : '') : '')),
+          el('div', { className: 'fb-meta' }, _fbKindLabel(f.kind) + (f.reference_title ? ' · 근거: ' + f.reference_title + (f.page ? ' p.' + f.page : '') : '')),
           el('div', { className: 'fb-msg' }, f.message),
+          f.suggestion ? el('div', { className: 'fb-msg', style: { marginTop: 6, padding: 8, background: '#f0fdf6', borderRadius: 8 } }, f.suggestion) : null,
           el('div', { className: 'chip-row' },
-            el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'applied' }); renderWriter() } }, '반영'),
+            f.suggestion ? el('button', { className: 'btn btn-sm btn-primary', disabled: f.status !== 'open', onClick: () => { Store.updateReportSection(section.id, { content: f.suggestion }); Store.updateFeedbackItem(f.id, { status: 'applied' }); renderWriter(); showToast('반영했습니다.') } }, '내용에 반영') : null,
+            el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'applied' }); renderWriter() } }, '확인'),
             el('button', { className: 'btn btn-sm btn-secondary', disabled: f.status !== 'open', onClick: () => { Store.updateFeedbackItem(f.id, { status: 'dismissed' }); renderWriter() } }, '무시')
           )))
       ) : null
     )
+  }
+
+  function renderWriterRefPane(section) {
+    const refDocs = Reference.getAll().filter(d => Store.canSeeOwned('referenceDocs', d))
+    if (_writerRefDocId && !refDocs.find(d => String(d.id) === String(_writerRefDocId))) _writerRefDocId = null
+    if (!_writerRefDocId && refDocs.length) _writerRefDocId = refDocs[refDocs.length - 1].id
+    const doc = _writerRefDocId ? Store.getReferenceDoc(_writerRefDocId) : null
+
+    const pane = el('div', { className: 'card writer-refpane' },
+      el('div', { className: 'writer-refpane-head' },
+        el('strong', {}, '📚 참고자료'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { if (section) runWriterRefPeek(section) } }, '이 섹션 근거')),
+      refDocs.length ? el('select', { className: 'select-sm', style: 'width:calc(100% - 24px);margin:12px 12px 0', onChange: e => { _writerRefDocId = e.target.value || null; renderWriter() } },
+        refDocs.map(d => el('option', { value: String(d.id), selected: String(d.id) === String(_writerRefDocId) }, d.title || d.file_name || '(제목 없음)')))
+        : el('div', { className: 'rd-empty', style: 'padding:12px' }, '등록된 참고자료가 없습니다.'),
+      el('div', { id: 'writer-ref-body', className: 'writer-refpane-body' },
+        doc ? (doc.markdown || '').slice(0, 20000) : (refDocs.length ? '문서를 선택하세요.' : '자료를 먼저 업로드하세요.')))
+    return pane
+  }
+
+  async function runWriterRefPeek(section) {
+    const body = document.getElementById('writer-ref-body')
+    if (!body) return
+    const refs = findRefsForSection(section.title, section.content || '', 8)
+    if (!refs.length) { body.textContent = '이 섹션과 연관된 참고 근거를 찾지 못했습니다.'; return }
+    body.innerHTML = ''
+    refs.forEach((r, i) => body.append(el('div', { className: 'refpeek-item' },
+      el('div', { className: 'refpeek-meta' }, '[' + (i + 1) + '] ' + (r.source_org || '') + ' ' + (r.title || '') + (r.page ? ' p.' + r.page : '')),
+      el('div', { className: 'refpeek-text' }, (r.content || '').slice(0, 600)))))
+    Store.addFeedbackItem({ doc_id: section.doc_id, section_id: section.id, kind: 'coverage', message: '참고 근거 ' + refs.length + '건을 참고자료 패널에 표시했습니다.' })
+  }
+
+  async function runWriterContinue(section, content) {
+    Store.updateReportSection(section.id, { content })
+    showLoading('AI가 이어서 작성 중...')
+    try {
+      const refs = findRefsForSection(section.title, content, 6)
+      const chunks = refs.map(r => ({ reference_id: r.reference_id, page: r.page, section_title: r.section_title, content: r.content }))
+      const res = await AI.continueDraft({ title: section.title, content, refChunks: chunks, preset: _writerPreset })
+      if (res.error) throw new Error(res.error)
+      const text = (res.draft_text || '').trim()
+      if (!text) throw new Error('AI 응답이 비어 있습니다.')
+      Store.addFeedbackItem({
+        doc_id: section.doc_id, section_id: section.id, kind: 'continue',
+        message: content.trim() ? '이어쓰기 제안' : '초안 제안', suggestion: text, original: content,
+        reference_title: refs[0]?.title || '', page: refs[0]?.page || null, confidence: res.confidence || ''
+      })
+      showToast('이어쓰기 제안을 생성했습니다. 내용에 반영 여부를 선택하세요.')
+    } catch (e) { showToast('이어쓰기 실패: ' + e.message, 'error') }
+    finally { hideLoading(); renderWriter() }
+  }
+
+  async function runWriterInline(section, ta) {
+    const s = ta.selectionStart, e = ta.selectionEnd
+    const selected = (s != null && e != null && e > s) ? ta.value.slice(s, e) : ''
+    if (!selected.trim()) { showToast('다듬을 문장을 먼저 선택(드래그)하세요.', 'error'); return }
+    showLoading('선택 문장 다듬는 중...')
+    try {
+      const res = await AI.refineInline({ text: selected, instruction: '', preset: _writerPreset })
+      if (res.error) throw new Error(res.error)
+      const text = (res.draft_text || '').trim()
+      if (!text) throw new Error('AI 응답이 비어 있습니다.')
+      Store.addFeedbackItem({ doc_id: section.doc_id, section_id: section.id, kind: 'polish', message: '선택 문장 다듬기', suggestion: text, original: selected })
+      showToast('선택 문장 다듬기 제안을 생성했습니다.')
+    } catch (err) { showToast('다듬기 실패: ' + err.message, 'error') }
+    finally { hideLoading(); renderWriter() }
+  }
+
+  async function runWriterCompliance(section, content) {
+    if (!content.trim()) { showToast('내용을 먼저 작성하세요.', 'error'); return }
+    showLoading('문체·컴플라이언스 점검 중...')
+    try {
+      const res = await AI.complianceCheck({ text: content })
+      if (res.error) throw new Error(res.error)
+      const issues = res.issues || []
+      const msg = issues.length
+        ? issues.map(i => '· [' + i.type + '/' + i.severity + '] "' + (i.quote || '') + '"\n  ' + (i.message || '') + (i.suggestion ? '\n  → ' + i.suggestion : '')).join('\n')
+        : (res.summary || '특이사항 없음')
+      Store.addFeedbackItem({ doc_id: section.doc_id, section_id: section.id, kind: 'compliance', message: (res.summary ? res.summary + '\n' : '') + msg })
+      showToast(issues.length ? issues.length + '건의 점검 항목을 찾았습니다.' : '특이사항이 없습니다.')
+    } catch (e) { showToast('점검 실패: ' + e.message, 'error') }
+    finally { hideLoading(); renderWriter() }
+  }
+
+  async function runWriterCoverage(section, content) {
+    showLoading('GRI/ISSB 커버리지 점검 중...')
+    try {
+      const res = await AI.coverageCheck({ title: section.title, content })
+      if (res.error) throw new Error(res.error)
+      const covered = (res.covered || []).map(c => c.standard + ' ' + (c.label || '')).join(', ')
+      const gaps = (res.gaps || []).map(g => '· ' + g.standard + ' ' + (g.label || '') + (g.hint ? ' — ' + g.hint : '')).join('\n')
+      const msg = (covered ? '충족: ' + covered + '\n' : '') + (gaps ? '보완 필요:\n' + gaps : '') + (res.summary ? '\n' + res.summary : '')
+      Store.addFeedbackItem({ doc_id: section.doc_id, section_id: section.id, kind: 'coverage', message: msg || '분석 결과가 없습니다.' })
+      showToast((res.gaps || []).length ? (res.gaps.length + '건의 보완 항목이 있습니다.') : '커버리지 점검 완료.')
+    } catch (e) { showToast('점검 실패: ' + e.message, 'error') }
+    finally { hideLoading(); renderWriter() }
+  }
+
+  function _lineDiff(a, b) {
+    const la = (a || '').split('\n'), lb = (b || '').split('\n')
+    const n = Math.max(la.length, lb.length)
+    const out = []
+    for (let i = 0; i < n; i++) {
+      const x = la[i], y = lb[i]
+      if (x === y) out.push({ type: 'same', text: x == null ? '' : x })
+      else { if (x != null) out.push({ type: 'del', text: x }); if (y != null) out.push({ type: 'add', text: y }) }
+    }
+    return out
+  }
+
+  function openWriterVersions() {
+    const doc = _writerDocId ? Store.getReportDoc(_writerDocId) : null
+    if (!doc) { showToast('문서가 없습니다.', 'error'); return }
+    const versions = Store.getReportDocVersions(doc.id)
+    const cur = doc.version || 1
+    if (!versions.length) { showToast('저장된 버전이 없습니다. (저장(버전)을 실행하세요)', 'error'); return }
+    const body = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+      versions.map(v => el('div', { className: 'ver-item' },
+        el('div', { className: 'ver-head' },
+          el('strong', {}, 'v' + v.version),
+          el('span', { className: 'ver-meta' }, (v.note || v.title || '') + ' · ' + (v.section_count || 0) + '섹션 · ' + (v.created_at ? new Date(v.created_at).toLocaleString('ko-KR') : '') + (v.version === cur ? ' · 현재' : '')),
+        el('div', { className: 'chip-row' },
+          el('button', { className: 'btn btn-sm btn-secondary', disabled: !v.snapshot || v.version === cur, onClick: () => showVersionDiff(doc, v) }, '현재와 비교'),
+          el('button', { className: 'btn btn-sm btn-primary', disabled: !v.snapshot || v.version === cur, onClick: () => {
+            if (!confirm('v' + v.version + ' 내용으로 되돌릴까요? 현재 내용은 덮어써집니다.')) return
+            Store.restoreReportDocVersion(doc.id, v.version)
+            closeModal(); renderWriter(); showToast('v' + v.version + '으로 되돌렸습니다.')
+          } }, '이 버전으로 되돌리기'))))))
+    modal('🗂 버전 이력 — ' + (doc.title || ''), body)
+    const saveBtn = document.getElementById('modal-save')
+    saveBtn.textContent = '닫기'
+    saveBtn.onclick = () => closeModal()
+  }
+
+  function showVersionDiff(doc, v) {
+    const cur = Store.snapshotReportDoc(doc.id)
+    const snap = v.snapshot || []
+    const byTitle = (arr) => { const m = {}; arr.forEach(s => { (m[s.title] = m[s.title] || []).push(s.content || '') }); return m }
+    const cm = byTitle(cur), sm = byTitle(snap)
+    const titles = [...new Set([...Object.keys(sm), ...Object.keys(cm)])]
+    const wrap = el('div', {}, titles.map(t => {
+      const before = (sm[t] || []).join('\n'), after = (cm[t] || []).join('\n')
+      if (before === after) return null
+      return el('div', { style: { marginBottom: 14 } },
+        el('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 6 } }, t),
+        el('div', { className: 'diff-body' }, _lineDiff(before, after).map(l => el('div', { className: 'diff-line ' + l.type }, (l.type === 'add' ? '+ ' : l.type === 'del' ? '- ' : '  ') + l.text))))
+    }).filter(Boolean))
+    if (!wrap.childNodes.length) wrap.append(el('div', { style: { color: '#6b7280', fontSize: 13 } }, 'v' + v.version + '와 현재 내용이 동일합니다.'))
+    modal('변경 비교 — v' + v.version + ' → 현재', wrap)
+    const saveBtn = document.getElementById('modal-save')
+    saveBtn.textContent = '닫기'
+    saveBtn.onclick = () => closeModal()
+  }
+
+  function openWriterAssistant(section, content) {
+    const existing = document.getElementById('writer-assistant')
+    if (existing) existing.remove()
+    const log = el('div', { className: 'assistant-log' })
+    const paint = () => {
+      log.innerHTML = ''
+      if (!_writerChat.length) log.append(el('div', { className: 'assistant-hint' }, '현재 섹션에 대해 질문하거나 "더 전문적으로 다시 써줘"처럼 요청하세요.'))
+      _writerChat.forEach(m => log.append(el('div', { className: 'assistant-msg ' + m.role }, m.content)))
+      log.scrollTop = log.scrollHeight
+    }
+    const input = el('textarea', { className: 'assistant-input', placeholder: '예: 이 문단을 더 간결하게 다듬어줘', rows: 2 })
+    const send = async () => {
+      const text = input.value.trim()
+      if (!text) return
+      input.value = ''
+      _writerChat.push({ role: 'user', content: text })
+      paint()
+      showLoading('AI 응답 생성 중...')
+      try {
+        const res = await AI.chat({ messages: _writerChat.map(m => ({ role: m.role, content: m.content })), context: { title: section.title, content: section.content || content } })
+        _writerChat.push({ role: 'assistant', content: res.error ? ('오류: ' + res.error) : res.reply })
+      } catch (e) { _writerChat.push({ role: 'assistant', content: '오류: ' + e.message }) }
+      finally { hideLoading(); paint() }
+    }
+    const panel = el('div', { id: 'writer-assistant', className: 'writer-assistant' },
+      el('div', { className: 'assistant-head' },
+        el('strong', {}, '💡 AI 어시스턴트'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => panel.remove() }, '닫기')),
+      log,
+      el('div', { className: 'assistant-foot' },
+        input,
+        el('button', { className: 'btn btn-sm btn-primary', onClick: send }, '전송')))
+    document.body.append(panel)
+    paint()
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } })
   }
 
   function openNewReportDoc() {
@@ -4632,7 +4868,7 @@
         if (!items.length) throw new Error('문서에서 내용을 추출하지 못했습니다.')
         const doc = Store.addReportDoc({ title, status: 'draft', progress: 0, version: 1, source_file: f.name, source_type: Reference.detectType(f.name), owner_id: currentUser?.id ?? null })
         items.forEach((it, i) => Store.addReportSection({ doc_id: doc.id, title: it.title, content: it.content, sort_order: i, status: it.content ? 'draft' : 'empty' }))
-        Store.addReportDocVersion(doc.id, { version: 1, title, section_count: items.length, note: '자료 불러오기 (' + f.name + ')' })
+        Store.addReportDocVersion(doc.id, { version: 1, title, section_count: items.length, note: '자료 불러오기 (' + f.name + ')', snapshot: Store.snapshotReportDoc(doc.id) })
         _writerDocId = doc.id; _writerSectionId = null
         closeModal(); renderWriter()
         showToast(items.length + '개 항목을 불러왔습니다. 각 항목에서 "참고자료로 다듬기"를 실행하세요.')
@@ -4675,7 +4911,7 @@
     if (!sections.length) { showToast('저장할 섹션이 없습니다.', 'error'); return }
     const nextVersion = (doc.version || 1) + 1
     Store.updateReportDoc(doc.id, { version: nextVersion, progress: _writerProgress(sections), status: 'draft' })
-    Store.addReportDocVersion(doc.id, { version: nextVersion, title: doc.title, section_count: sections.length, note: '' })
+    Store.addReportDocVersion(doc.id, { version: nextVersion, title: doc.title, section_count: sections.length, note: '', snapshot: Store.snapshotReportDoc(doc.id) })
     showLoading('v' + nextVersion + ' 저장 중 · PPTX 생성...')
     let fn = null
     try { fn = await PptxExport.export({ ...doc, version: nextVersion }, sections, { version: nextVersion }) }
@@ -6261,7 +6497,7 @@
 
   function approveUser(id) {
     if (!currentUser) return alert('로그인이 필요합니다.')
-    const u = Store.getUsers().find(x => x.id === id)
+    const u = Store.getUser(id)
     Store.updateUser(id, { status: 'active' })
     Store.addAuditLog({ category: '사용자관리', action: '사용자 승인', user_id: currentUser.id, user_name: currentUser.name, detail: `대상: ${u?.name || id} (${u?.username || ''})` })
     showToast('사용자가 승인되었습니다.', 'success')
@@ -6272,7 +6508,7 @@
   }
 
   function editUser(id) {
-    const user = Store.getUsers().find(x => x.id === id)
+    const user = Store.getUser(id)
     if (!user) return
     const form = document.createElement('form')
     const companies = Store.getCompanies()
@@ -6298,16 +6534,13 @@
   }
 
   function deleteUser(id) {
-    const u = Store.getUsers().find(x => x.id === id)
+    const u = Store.getUser(id)
     if (!u) return
-    if (currentUser && currentUser.id === id) { alert('본인 계정은 삭제할 수 없습니다.'); return }
+    if (currentUser && String(currentUser.id) === String(id)) { alert('본인 계정은 삭제할 수 없습니다.'); return }
     const counts = Store.countUserData(id)
-    const candidates = Store.getUsers().filter(x =>
-      x.id !== id && x.status === 'active' &&
-      ((x.company_id != null && x.company_id === u.company_id) || x.role === 'admin')
-    )
-    const sameCo = candidates.filter(x => x.company_id != null && x.company_id === u.company_id)
-    const admins = candidates.filter(x => x.role === 'admin' && !sameCo.includes(x))
+    const others = Store.getUsers().filter(x => String(x.id) !== String(id) && x.status === 'active')
+    const sameCo = others.filter(x => x.company_id != null && u.company_id != null && String(x.company_id) === String(u.company_id))
+    const rest = others.filter(x => !sameCo.includes(x))
 
     const rows = Object.keys(counts).filter(k => k !== 'total').map(k =>
       el('tr', {},
@@ -6340,12 +6573,12 @@
       counts.total > 0
         ? el('select', { id: 'del-successor', style: 'width:100%;padding:10px 12px;border:2px solid #EEF1F4;border-radius:10px;font-size:14px;box-sizing:border-box' },
             el('option', { value: '' }, '— 이관자를 선택하세요 —'),
-            sameCo.length ? el('optgroup', { label: '같은 회사 사용자' }, ...sameCo.map(x => el('option', { value: String(x.id) }, `${x.name || x.username} (${x.username})`))) : null,
-            admins.length ? el('optgroup', { label: '관리자' }, ...admins.map(x => el('option', { value: String(x.id) }, `${x.name || x.username} (${x.username})·관리자`))) : null
+            sameCo.length ? el('optgroup', { label: '같은 회사 사용자' }, ...sameCo.map(x => el('option', { value: String(x.id) }, `${x.name || x.username} (${x.username})${x.role === 'admin' ? ' · 관리자' : ''}`))) : null,
+            rest.length ? el('optgroup', { label: '그 외 사용자' }, ...rest.map(x => el('option', { value: String(x.id) }, `${x.name || x.username} (${x.username})${x.role === 'admin' ? ' · 관리자' : ''}`))) : null
           )
         : null,
-      (counts.total > 0 && !candidates.length)
-        ? el('div', { style: 'margin-top:10px;padding:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;color:#92400E;font-size:12px' }, '같은 회사 활성 사용자나 관리자가 없어 이관할 수 없습니다. 먼저 이관자를 추가하세요.')
+      (counts.total > 0 && !others.length)
+        ? el('div', { style: { marginTop: 10, padding: 10, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, color: '#92400E', fontSize: 12 } }, '이관할 수 있는 활성 사용자가 없습니다. 먼저 이관자를 추가하거나 활성화하세요.')
         : null
     )
     modal(`사용자 삭제 — ${u.name || u.username}`, body)
@@ -6361,9 +6594,9 @@
       if (counts.total > 0) {
         const sel = document.getElementById('del-successor')
         if (!sel || !sel.value) { alert('이관자를 선택해야 삭제할 수 있습니다.'); return }
-        toId = Number(sel.value)
+        toId = sel.value
       }
-      const target = toId != null ? Store.getUsers().find(x => x.id === toId) : null
+      const target = toId != null ? Store.getUser(toId) : null
       const moved = Store.transferUserData(id, toId)
       Store.deleteUser(id)
       Store.addAuditLog({ category: '사용자삭제', action: '사용자 삭제', user_id: currentUser?.id || null, user_name: currentUser?.name || '', detail: `대상: ${u.name || id} (${u.username}), 이관자: ${target ? (target.name || target.username) : '없음'}, 이관 자료: ${moved.total}건` })
@@ -6374,12 +6607,51 @@
 
   function mergeDuplicateUsers() {
     if (!currentUser || currentUser.role !== 'admin') return alert('관리자만 실행할 수 있습니다.')
-    const before = Store.getUsers().length
-    const merged = Store.mergeDuplicateUsers()
-    if (!merged) { showToast('중복된 아이디가 없습니다.', 'success'); return }
-    Store.addAuditLog({ category: '사용자관리', action: '중복 아이디 병합', user_id: currentUser.id, user_name: currentUser.name, detail: `중복 계정 ${merged}건을 병합했습니다. (${before} → ${Store.getUsers().length})` })
-    showToast(`중복 계정 ${merged}건을 병합했습니다.`, 'success')
-    renderUsers()
+    const groups = Store.duplicateUserGroups()
+    if (!groups.length) { showToast('중복된 아이디가 없습니다.', 'success'); return }
+
+    const memberRow = (u) => {
+      const c = Store.countUserData(u.id)
+      const co = Store.getCompanies().find(x => String(x.id) === String(u.company_id))
+      return el('tr', { style: 'border-bottom:1px solid #EEF1F4' },
+        el('td', { style: 'padding:6px 8px' }, el('input', { type: 'radio', name: 'keep-' + u.username, value: String(u.id), className: 'keep-pick', 'data-username': u.username })),
+        el('td', { style: 'padding:6px 8px' }, (u.name || '-') + ' (' + u.username + ')'),
+        el('td', { style: 'padding:6px 8px;color:#6B7280' }, co ? co.name : '-'),
+        el('td', { style: 'padding:6px 8px;color:#6B7280' }, u.email || '-'),
+        el('td', { style: 'padding:6px 8px;text-align:right' }, String(c.total) + '건'),
+        el('td', { style: 'padding:6px 8px' }, u.status === 'active' ? '활성' : '대기'))
+    }
+    const body = el('div', {},
+      el('div', { style: 'padding:12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;color:#1E40AF;font-size:13px;margin-bottom:14px' },
+        el('div', { style: 'font-weight:700;margin-bottom:4px' }, '중복 아이디 정리'),
+        el('div', {}, '각 아이디마다 남길(유지) 계정을 선택하세요. 나머지 계정의 자료는 선택한 계정으로 이관된 뒤 삭제됩니다.')),
+      groups.map(g => el('div', { style: { marginBottom: 14 } },
+        el('div', { style: { fontWeight: 700, fontSize: 13, marginBottom: 6 } }, '아이디: ' + g.username),
+        el('table', { style: 'width:100%;border-collapse:collapse;font-size:12.5px' },
+          el('thead', {}, el('tr', { style: 'color:#6B7280' },
+            el('th', { style: 'text-align:left;padding:4px 8px' }, '유지'),
+            el('th', { style: 'text-align:left;padding:4px 8px' }, '이름'),
+            el('th', { style: 'text-align:left;padding:4px 8px' }, '회사'),
+            el('th', { style: 'text-align:left;padding:4px 8px' }, '이메일'),
+            el('th', { style: 'text-align:right;padding:4px 8px' }, '보유자료'),
+            el('th', { style: 'text-align:left;padding:4px 8px' }, '상태'))),
+          el('tbody', {}, ...g.members.map(memberRow))))))
+    modal('중복 아이디 정리', body)
+    const saveBtn = document.getElementById('modal-save')
+    saveBtn.textContent = '선택 계정으로 병합'
+    saveBtn.onclick = () => {
+      const prefer = {}
+      groups.forEach(g => {
+        const picked = document.querySelector('input.keep-pick[data-username="' + CSS.escape(g.username) + '"]:checked')
+        if (picked) prefer[String(g.username).trim().toLowerCase()] = picked.value
+      })
+      const before = Store.getUsers().length
+      const merged = Store.mergeDuplicateUsers(prefer)
+      if (!merged) { showToast('병합할 중복 계정이 없습니다.', 'success'); closeModal(); return }
+      Store.addAuditLog({ category: '사용자관리', action: '중복 아이디 병합', user_id: currentUser.id, user_name: currentUser.name, detail: `중복 계정 ${merged}건을 병합했습니다. (${before} → ${Store.getUsers().length})` })
+      showToast(`중복 계정 ${merged}건을 병합했습니다.`, 'success')
+      closeModal(); renderUsers(); applyAuthUI()
+    }
   }
 
   function cleanupUsers() {

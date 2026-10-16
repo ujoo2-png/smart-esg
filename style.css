@@ -447,3 +447,43 @@ body.viewer-mode #content textarea { pointer-events:none; opacity:.7 }
 .fb-item.is-dismissed { border-left-color:var(--c-text-faint) }
 .fb-meta { font-size:11px; color:var(--c-text-faint); margin-bottom:4px }
 .fb-msg { font-size:13px; margin-bottom:8px; line-height:1.55 }
+
+.writer-grid { grid-template-columns:360px 1fr }
+@media (max-width:900px) { .writer-grid { grid-template-columns:1fr } }
+.writer-main { display:flex; flex-direction:column; gap:12px; min-width:0 }
+.writer-secbar { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--c-border-soft); border-radius:var(--radius-sm); padding:10px 12px }
+.writer-secbar strong { font-size:13px }
+.writer-editor { display:flex; flex-direction:column }
+.writer-ai-tools { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px }
+.wbtn { white-space:nowrap }
+.writer-preset-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px }
+.writer-preset-label { font-size:12px; font-weight:700; color:var(--c-text-muted) }
+.writer-card-footer { display:flex; align-items:center; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--c-border-soft) }
+.writer-autosave { font-size:11px; color:var(--c-accent) }
+.writer-count { font-size:11px; color:var(--c-text-faint) }
+.writer-refpane { padding:0; display:flex; flex-direction:column; max-height:calc(100vh - 200px); overflow:hidden; position:sticky; top:12px }
+.writer-refpane-head { display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--c-border-soft); gap:8px }
+.writer-refpane-head strong { font-size:13px }
+.writer-refpane-body { flex:1; overflow:auto; padding:12px; font-size:13px; line-height:1.7; white-space:pre-wrap; color:var(--c-text-muted) }
+.refpeek-item { padding:10px 0; border-bottom:1px dashed var(--c-border-soft) }
+.refpeek-item:last-child { border-bottom:none }
+.refpeek-meta { font-size:11px; font-weight:700; color:var(--c-primary); margin-bottom:4px }
+.refpeek-text { font-size:12.5px; line-height:1.65; white-space:pre-wrap }
+.ver-item { border:1px solid var(--c-border-soft); border-radius:var(--radius-sm); padding:12px }
+.ver-head { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:8px; align-items:baseline }
+.ver-meta { font-size:12px; color:var(--c-text-faint) }
+.diff-body { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.6; border:1px solid var(--c-border-soft); border-radius:8px; overflow:auto; max-height:300px; padding:8px }
+.diff-line { white-space:pre-wrap; padding:1px 6px; border-radius:4px }
+.diff-line.add { background:#e7f7ee; color:#116b3d }
+.diff-line.del { background:#fdecec; color:#a12b2b }
+.diff-line.same { color:var(--c-text-faint) }
+.writer-assistant { position:fixed; right:20px; bottom:20px; width:380px; max-width:calc(100vw - 32px); height:520px; max-height:calc(100vh - 40px); background:#fff; border:1px solid var(--c-border); border-radius:var(--radius); box-shadow:0 12px 40px rgba(15,23,42,.22); display:flex; flex-direction:column; z-index:1200; overflow:hidden }
+.assistant-head { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid var(--c-border-soft) }
+.assistant-log { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; background:#f8fafc }
+.assistant-hint { font-size:12.5px; color:var(--c-text-faint); text-align:center; margin:auto 0 }
+.assistant-msg { padding:9px 12px; border-radius:12px; font-size:13px; line-height:1.6; white-space:pre-wrap; max-width:88% }
+.assistant-msg.user { align-self:flex-end; background:var(--c-primary); color:#fff; border-bottom-right-radius:4px }
+.assistant-msg.assistant { align-self:flex-start; background:#fff; border:1px solid var(--c-border-soft); border-bottom-left-radius:4px }
+.assistant-foot { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--c-border-soft); align-items:flex-end }
+.assistant-input { flex:1; resize:none; padding:9px 11px; border:1px solid var(--c-border); border-radius:8px; font-size:13px; font-family:inherit; line-height:1.5; outline:none; max-height:100px }
+.assistant-input:focus { border-color:var(--c-primary); box-shadow:var(--focus-ring) }

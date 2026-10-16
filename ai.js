@@ -542,5 +542,198 @@ ${evidenceExcerpts}
 
   getDraftsByIndicator(assessmentId, indicatorId) {
     return this.getDraftsByAssessment(assessmentId).filter(d => d.indicator_id === indicatorId)
+  },
+
+  // ==================== 보고서 작성기 AI ====================
+  WRITER_PRESETS: {
+    tone: { neutral: '중립·객관적', formal: '격식·공시체', friendly: '친근·소통', lead: '단호·리더십' },
+    length: { short: '간결 (2~3문장)', normal: '보통 (1문단)', long: '상세 (2~3문단)' },
+    format: { prose: '서술식 문단', bullets: '개조식 불릿', report: '보고서형 (소제목+문단)' }
+  },
+
+  _presetText(preset) {
+    const P = this.WRITER_PRESETS
+    const p = preset || {}
+    const parts = []
+    if (p.tone && P.tone[p.tone]) parts.push('문체: ' + P.tone[p.tone])
+    if (p.length && P.length[p.length]) parts.push('분량: ' + P.length[p.length])
+    if (p.format && P.format[p.format]) parts.push('형식: ' + P.format[p.format])
+    return parts.length ? '\n\n[작성 지침] ' + parts.join(' / ') : ''
+  },
+
+  _buildWriteSystemPrompt() {
+    return `당신은 제조업 ESG 지속가능경영보고서 작성을 돕는 한국어 전문 집필 보조입니다.
+
+규칙(반드시 준수):
+1. 사용자가 제공한 <draft_text>(기존 원고)와 <evidence>(참고자료)에 근거해서만 서술합니다.
+   근거에 없는 수치·날짜·고유명사·사실은 절대 만들어내지 않습니다.
+2. 근거가 부족한 부분은 "[확인 필요: 항목]"으로 남기고 추정치로 채우지 않습니다.
+3. 문장은 Policy(정책)-Action(조치)-Result(성과) 구조를 지향합니다.
+4. 법적 단정, 등급 확정, 타사 비교 주장은 하지 않습니다.
+5. 출력은 지정된 JSON 스키마로만 반환하고 다른 설명을 붙이지 않습니다.`
+  },
+
+  _formatRefs(refChunks) {
+    return this._formatRefChunksForPrompt(refChunks)
+  },
+
+  async continueDraft({ title, content, refChunks, preset }) {
+    const evidence = this._formatRefs(refChunks)
+    const mode = content && content.trim() ? '이어쓰기(자연스럽게 다음 문단을 작성)' : '초안 새로 작성'
+    const userPrompt = `<item>항목명: ${title || '(제목 없음)'}</item>
+
+<draft_text>
+${content && content.trim() ? content : '(아직 작성 전)'}
+</draft_text>
+
+<evidence>
+${evidence}
+</evidence>
+
+위 항목의 원고를 ${mode}하십시오.${this._presetText(preset)}
+
+출력은 반드시 다음 JSON 스키마를 따르십시오:
+{
+  "draft_text": "완성하거나 이어쓴 문장 전체(기존 원고가 있으면 이어붙인 전체)",
+  "appended_text": "이번에 새로 추가한 부분만",
+  "missing_pillars": ["policy", ...],
+  "cited_evidence_ids": ["REF-...", ...],
+  "unsupported_claims_flagged": ["...", ...],
+  "confidence": "HIGH" | "MEDIUM" | "LOW"
+}`
+    try {
+      const raw = await this._callAI([
+        { role: 'system', content: this._buildWriteSystemPrompt() },
+        { role: 'user', content: userPrompt }
+      ])
+      const parsed = this._safeParseJson(raw)
+      return {
+        draft_text: parsed?.draft_text || raw || '',
+        appended_text: parsed?.appended_text || '',
+        missing_pillars: parsed?.missing_pillars || [],
+        cited_evidence_ids: parsed?.cited_evidence_ids || [],
+        unsupported_claims_flagged: parsed?.unsupported_claims_flagged || [],
+        confidence: parsed?.confidence || 'LOW'
+      }
+    } catch (err) {
+      return { error: err.message }
+    }
+  },
+
+  async refineInline({ text, instruction, preset }) {
+    if (!text || !text.trim()) return { error: '선택된 문장이 없습니다.' }
+    const userPrompt = `<selected_text>
+${text}
+</selected_text>
+
+요청: ${instruction || '문장을 더 명확하고 매끄럽게 다듬어 주세요.'}${this._presetText(preset)}
+- 원문의 사실·의미는 유지하고 표현만 개선합니다.
+- 없는 수치·사실은 추가하지 않습니다.
+
+출력은 반드시 다음 JSON 스키마를 따르십시오:
+{ "draft_text": "다듬은 문장" }`
+    try {
+      const raw = await this._callAI([
+        { role: 'system', content: this._buildWriteSystemPrompt() },
+        { role: 'user', content: userPrompt }
+      ])
+      const parsed = this._safeParseJson(raw)
+      return { draft_text: parsed?.draft_text || raw || '' }
+    } catch (err) {
+      return { error: err.message }
+    }
+  },
+
+  async complianceCheck({ text }) {
+    if (!text || !text.trim()) return { error: '내용이 없습니다.' }
+    const userPrompt = `<text>
+${text}
+</text>
+
+위 ESG 보고서 문장을 아래 관점에서 점검하십시오.
+- 과장·최상급 표현(최고, 최초, 유일, 완벽, 100% 등)
+- 근거 없는 단정·전망(반드시, 확실히, 보장)
+- 모호한 수치(약, 대략, 추정)
+- 법적·등급 확정 표현
+- 미검증 수치/단위 누락
+
+출력은 반드시 다음 JSON 스키마를 따르십시오:
+{
+  "issues": [ { "type": "과장|단정|모호|법적|수치", "severity": "high|medium|low", "quote": "지적 문구", "message": "이유", "suggestion": "수정 제안" } ],
+  "summary": "총평"
+}`
+    try {
+      const raw = await this._callAI([
+        { role: 'system', content: '당신은 ESG 공시 문장의 문체·컴플라이언스 검토자입니다. JSON으로만 답합니다.' },
+        { role: 'user', content: userPrompt }
+      ])
+      const parsed = this._safeParseJson(raw)
+      if (parsed && Array.isArray(parsed.issues)) return { issues: parsed.issues, summary: parsed.summary || '' }
+      return this._ruleComplianceCheck(text)
+    } catch (err) {
+      return this._ruleComplianceCheck(text)
+    }
+  },
+
+  _ruleComplianceCheck(text) {
+    const rules = [
+      { re: /(최고|최초|유일|완벽|무결점|국내 1위|세계 1위|100%|전량)/g, type: '과장', severity: 'medium', message: '최상급·과장 표현은 검증 없이는 사용을 피하세요.' },
+      { re: /(반드시|확실히|보장|절대|틀림없)/g, type: '단정', severity: 'medium', message: '근거 없는 단정적 표현은 공시 리스크가 있습니다.' },
+      { re: /(약|대략|추정|정도|쯤)\s*[0-9]/g, type: '모호', severity: 'low', message: '모호한 수치 표현은 정확한 값으로 대체하는 것이 좋습니다.' },
+      { re: /(위반하지 않|문제가 없|법적으로 적법)/g, type: '법적', severity: 'high', message: '법적 단정 표현은 자제하고 사실만 기술하세요.' }
+    ]
+    const issues = []
+    const seen = new Set()
+    rules.forEach(r => {
+      const m = text.match(r.re)
+      if (m) m.slice(0, 5).forEach(q => { const k = r.type + q; if (seen.has(k)) return; seen.add(k); issues.push({ type: r.type, severity: r.severity, quote: q, message: r.message, suggestion: '' }) })
+    })
+    return { issues, summary: issues.length ? issues.length + '건의 점검 항목이 발견되었습니다.' : '특이사항이 발견되지 않았습니다.' }
+  },
+
+  async coverageCheck({ title, content }) {
+    const userPrompt = `<item>항목명: ${title || '(제목 없음)'}</item>
+<content>
+${(content || '').slice(0, 4000)}
+</content>
+
+위 섹션이 아래 국제 기준의 핵심 요소를 얼마나 담고 있는지 점검하십시오.
+- GRI: 2-1~2-5(조직·거버넌스), 3-1~3-3(중대성), 305(배출), 302(에너지), 401(고용), 403(안전보건), 413(지역사회)
+- ISSB(IFRS S1/S2): 거버넌스, 전략, 위험관리, 지표와 목표
+
+출력은 반드시 다음 JSON 스키마를 따르십시오:
+{
+  "covered": [ { "standard": "GRI 305", "label": "배출" } ],
+  "gaps": [ { "standard": "ISSB S2", "label": "기후 시나리오 분석", "hint": "보완 방법" } ],
+  "summary": "총평"
+}`
+    try {
+      const raw = await this._callAI([
+        { role: 'system', content: '당신은 GRI/ISSB 공시 커버리지 분석가입니다. JSON으로만 답합니다.' },
+        { role: 'user', content: userPrompt }
+      ])
+      const parsed = this._safeParseJson(raw)
+      if (parsed && (Array.isArray(parsed.covered) || Array.isArray(parsed.gaps))) {
+        return { covered: parsed.covered || [], gaps: parsed.gaps || [], summary: parsed.summary || '' }
+      }
+      return { covered: [], gaps: [], summary: '분석 결과를 해석하지 못했습니다.' }
+    } catch (err) {
+      return { error: err.message }
+    }
+  },
+
+  async chat({ messages, context }) {
+    const sys = this._buildWriteSystemPrompt() + '\n\n당신은 작성자와 대화하며 보고서 작성을 돕는 어시스턴트입니다. 한국어로 간결히 답하세요.'
+    const ctx = context && (context.title || context.content)
+      ? `\n\n[현재 섹션] ${context.title || ''}\n${(context.content || '').slice(0, 1500)}`
+      : ''
+    const sysMsg = { role: 'system', content: sys + (ctx ? '\n\n' + ctx : '') }
+    try {
+      const raw = await this._callAI([sysMsg, ...(messages || [])])
+      const parsed = this._safeParseJson(raw)
+      return { reply: (parsed && (parsed.reply || parsed.draft_text)) || raw || '응답이 없습니다.' }
+    } catch (err) {
+      return { error: err.message }
+    }
   }
 }
