@@ -57,7 +57,7 @@ async function checkAuth() {
   }
   const s = getSession()
   if (!s) return null
-  const user = Store.getUsers().find(u => u.id === s.id)
+  const user = Store.getUsers().find(u => String(u.id) === String(s.id)) || null
   currentUser = user
   return user
 }
@@ -100,14 +100,34 @@ function checkUsername(username) {
 
 async function login(username, password) {
   const uname = String(username || '').trim().toLowerCase()
-  const cands = Store.getUsers().filter(u => (u.username || '').toLowerCase() === uname)
-  if (!cands.length) { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: null, user_name: '', detail: `아이디: ${username} (사용자 없음)` }); return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' } }
+  let cands = Store.getUsers().filter(u => (u.username || '').toLowerCase() === uname)
+  if (!cands.length) {
+    try {
+      if (typeof Store.pullFromSupabase === 'function') {
+        await Promise.race([
+          Store.pullFromSupabase({ tables: ['users'] }),
+          new Promise(res => setTimeout(() => res(null), 5000))
+        ])
+        cands = Store.getUsers().filter(u => (u.username || '').toLowerCase() === uname)
+      }
+    } catch (e) {}
+  }
+  if (!cands.length) {
+    try { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: null, user_name: '', detail: `아이디: ${username} (사용자 없음)` }) } catch (e) {}
+    return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
+  }
   const pwHash = await Store.hashPassword(password)
   const matched = cands.filter(u => u.password === pwHash)
-  const user = matched.find(u => u.company_id != null) || matched[0]
+  const user = matched.find(u => u.company_id != null) || matched[0] || null
   const pwMatch = !!user
-  if (!pwMatch) { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: cands[0].id, user_name: cands[0].name, detail: `아이디: ${username} (비밀번호 불일치)` }); return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' } }
-  if (user.status !== 'active') { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: user.id, user_name: user.name, detail: `아이디: ${username} (승인 대기)` }); return { error: '관리자 승인 대기 중입니다. 관리자에게 문의하세요.' } }
+  if (!pwMatch) {
+    try { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: cands[0].id, user_name: cands[0].name, detail: `아이디: ${username} (비밀번호 불일치)` }) } catch (e) {}
+    return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
+  }
+  if (user.status !== 'active') {
+    try { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: user.id, user_name: user.name, detail: `아이디: ${username} (승인 대기)` }) } catch (e) {}
+    return { error: '관리자 승인 대기 중입니다. 관리자에게 문의하세요.' }
+  }
 
   let sbSession = null
   const sbAuth = getSbAuth()
@@ -119,7 +139,7 @@ async function login(username, password) {
   }
 
   setSession(user, sbSession)
-  Store.addAuditLog({ category: '로그인', action: '로그인 성공', user_id: user.id, user_name: user.name, detail: `아이디: ${username}` })
+  try { Store.addAuditLog({ category: '로그인', action: '로그인 성공', user_id: user.id, user_name: user.name, detail: `아이디: ${username}` }) } catch (e) {}
   return { ok: true, user }
 }
 
@@ -346,12 +366,19 @@ async function doLogin() {
   const pw = document.getElementById('af-pw').value
   const err = document.getElementById('af-err')
   if (!id || !pw) { err.textContent = '아이디와 비밀번호를 입력하세요.'; err.style.display = 'block'; return }
-  const r = await login(id, pw)
-  if (r.error) { err.textContent = r.error; err.style.display = 'block'; return }
-  closeAuthModal(true)
-  applyAuthUI()
-  init()
-  if (typeof initKeepAlive === 'function') initKeepAlive()
+  try {
+    const r = await login(id, pw)
+    if (r.error) { err.textContent = r.error; err.style.display = 'block'; return }
+    closeAuthModal(true)
+    applyAuthUI()
+    try {
+      if (typeof init === 'function') await init()
+      else if (typeof window !== 'undefined' && typeof window.init === 'function') await window.init()
+    } catch (e) { console.warn('init after login:', e) }
+    if (typeof initKeepAlive === 'function') { try { initKeepAlive() } catch (e) {} }
+  } catch (e) {
+    if (err) { err.textContent = '로그인 처리 중 오류가 발생했습니다.'; err.style.display = 'block' }
+  }
 }
 
 async function doRegister() {

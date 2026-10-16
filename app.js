@@ -496,29 +496,30 @@
   window.renderSupabaseStatus = renderSupabaseStatus
   window.diagnoseSupabase = () => Store.diagnoseSupabase()
 
-  function init() {
+  async function init() {
     document.getElementById('version-label').textContent = '지속가능경영보고서 시스템 ' + Store.version
     const vb = document.getElementById('version-badge')
     if (vb) vb.textContent = Store.version
     renderSupabaseStatus()
-    ensureAdmin()
+    try { await ensureAdmin() } catch (e) { console.warn('ensureAdmin:', e) }
     GHG.init()
     checkAuth().then(user => {
       applyAuthUI()
       if (user) {
         document.getElementById('app').style.display = 'flex'
         navigate('dashboard')
-        if (typeof Store.pullFromSupabase === 'function') {
-          Store.pullFromSupabase().then(r => {
+      } else {
+        showAuthModal('login')
+      }
+      if (typeof Store.pullFromSupabase === 'function') {
+        Store.pullFromSupabase({ tables: ['users', 'referenceDocs', 'referenceChunks', 'projectTasks', 'projectTaskLogs'] })
+          .then(r => {
             if (!r || !r.ok) return
             const active = document.querySelector('.page.active')
             if (!active) return
             if (active.id === 'page-references' && (r.added.referenceDocs || r.added.referenceChunks)) renderReferences()
             if (active.id === 'page-project' && (r.added.projectTasks || r.added.projectTaskLogs)) renderProjectManagement()
           }).catch(() => {})
-        }
-      } else {
-        showAuthModal('login')
       }
     })
     initKeepAlive()
@@ -4190,6 +4191,7 @@
   async function openReferencePreview(id) {
     const doc = Reference.getById(id)
     if (!doc) return
+    _refRte = null
     Store.recordReferenceView(id)
     showLoading('문서 불러오는 중...')
     let md = doc.markdown || ''
@@ -4210,11 +4212,46 @@
       doc.scanned ? el('div', { className: 'ref-banner warn', style: 'margin-bottom:12px' },
         el('span', { style: { fontSize: 16 } }, '⚠️'),
         el('div', {}, el('b', {}, '스캔본(이미지) PDF'), el('div', {}, '텍스트 레이어가 거의 없어 변환 품질이 낮습니다. OCR이 적용된 PDF를 업로드하거나 변환 서버 사용을 권장합니다.'))) : null,
-      el('div', { innerHTML: md ? _mdToHtml(md) : '<p style="color:#9ca3af">변환된 내용이 없습니다. 재변환을 시도하세요.</p>' })
+      el('div', { id: 'ref-md-view', innerHTML: md ? _mdToHtml(md) : '<p style="color:#9ca3af">변환된 내용이 없습니다. 재변환을 시도하세요.</p>' }),
+      el('div', { id: 'ref-rte-host', style: 'display:none' })
     )
     modal('📖 ' + (doc.title || doc.file_name || '참고자료'), body, '닫기')
-    document.getElementById('modal-save').style.display = 'none'
+    const saveBtn = document.getElementById('modal-save')
+    saveBtn.style.display = ''
+    saveBtn.textContent = '✎ 편집'
+    saveBtn.onclick = () => _toggleRefEdit(id, md)
     renderReferences()
+  }
+
+  let _refRte = null
+  function _toggleRefEdit(id, md) {
+    const view = document.getElementById('ref-md-view')
+    const host = document.getElementById('ref-rte-host')
+    const saveBtn = document.getElementById('modal-save')
+    if (!view || !host) return
+    if (_refRte) {
+      const markdown = RichEditor.textFromBlocks(_refRte.blocks)
+      Store.updateReferenceDoc(id, { markdown })
+      showToast('참고자료를 수정했습니다.')
+      view.innerHTML = markdown ? _mdToHtml(markdown) : '<p style="color:#9ca3af">내용이 없습니다.</p>'
+      view.style.display = ''
+      host.style.display = 'none'
+      _refRte = null
+      saveBtn.textContent = '✎ 편집'
+      saveBtn.onclick = () => _toggleRefEdit(id)
+      renderReferences()
+      return
+    }
+    if (!window.RichEditor) { showToast('에디터를 불러올 수 없습니다.', 'error'); return }
+    const doc = Reference.getById(id)
+    const cur = (doc && doc.markdown) || md || ''
+    view.style.display = 'none'
+    host.style.display = ''
+    host.innerHTML = ''
+    _refRte = new RichEditor.RichEditor({ html: cur ? _mdToHtml(cur) : '', showAI: false, autosaveLabel: null })
+    _refRte.mount(host)
+    saveBtn.textContent = '💾 저장'
+    saveBtn.onclick = () => _toggleRefEdit(id)
   }
 
   async function openReferenceFile(id) {
@@ -4295,12 +4332,24 @@
   let _writerChat = []
   let _writerAutosaveTimer = null
   let _writerSkipFlush = false
+  let _writerRte = null
   let _previewIndex = 0
   let _previewSectionId = null
 
-  function _flushWriterInput() {
+  function _writerContentNow() {
+    if (_writerRte) return _writerRte.getHTML()
     const ta = document.getElementById('writer-input')
-    if (ta && _writerSectionId != null) Store.updateReportSection(_writerSectionId, { content: ta.value })
+    return ta ? ta.value : ''
+  }
+
+  function _sectionText(content) {
+    if (!window.RichEditor) return content || ''
+    return RichEditor.textFromBlocks(RichEditor.blocksFromHTML(content || ''))
+  }
+
+  function _flushWriterInput() {
+    if (_writerSectionId == null) return
+    Store.updateReportSection(_writerSectionId, { content: _writerContentNow() })
   }
 
   function renderWriter() {
@@ -4339,7 +4388,7 @@
     }
 
     const total = sections.length
-    const written = sections.filter(s => (s.content || '').trim()).length
+    const written = sections.filter(s => _sectionText(s.content).trim()).length
     const progress = total ? Math.round(written / total * 100) : 0
     const refDocs = Reference.getAll().filter(d => Store.canSeeOwned('referenceDocs', d))
     const chunkCount = Store.getReferenceChunks().length
@@ -4372,7 +4421,7 @@
       el('div', { className: 'writer-secbar' },
         el('button', { className: 'btn btn-sm btn-secondary', title: '이전 섹션', disabled: curIdx <= 0, onClick: () => _writerSelectSection(sections[Math.max(0, curIdx - 1)].id) }, '◀'),
         el('select', { className: 'select-sm', style: 'flex:1;min-width:160px', onChange: e => _writerSelectSection(isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value)) },
-          sections.length ? sections.map(s => el('option', { value: String(s.id), selected: s.id === _writerSectionId }, (s.title || '(제목 없음)') + ((s.content || '').trim() ? '' : ' · 미작성'))) : el('option', { value: '' }, '섹션 없음')
+          sections.length ? sections.map(s => el('option', { value: String(s.id), selected: s.id === _writerSectionId }, (s.title || '(제목 없음)') + (_sectionText(s.content).trim() ? '' : ' · 미작성'))) : el('option', { value: '' }, '섹션 없음')
         ),
         el('button', { className: 'btn btn-sm btn-secondary', title: '다음 섹션', disabled: curIdx < 0 || curIdx >= sections.length - 1, onClick: () => _writerSelectSection(sections[Math.min(sections.length - 1, curIdx + 1)].id) }, '▶'),
         el('button', { className: 'btn btn-sm btn-secondary', title: '위로 이동', disabled: curIdx <= 0, onClick: () => moveWriterSection(sections, curIdx, -1) }, '↑'),
@@ -4381,6 +4430,7 @@
     main.append(renderWriterEditor(sections.find(s => s.id === _writerSectionId)))
     grid.append(main)
     c.append(grid)
+    _mountWriterEditor(sections.find(s => s.id === _writerSectionId), document.getElementById('writer-input'))
   }
 
   function _writerBuildSlides(doc, sections) {
@@ -4388,7 +4438,7 @@
     if (!sections.length) return slides
     slides.push({ kind: 'toc', titles: sections.map(s => s.title || '(제목 없음)') })
     sections.forEach(s => {
-      const chunks = PptxExport._chunk((s.content || '').trim() || '(내용 없음)', 900)
+      const chunks = PptxExport._chunk(_sectionText(s.content).trim() || '(내용 없음)', 900)
       chunks.forEach((ck, ci) => slides.push({ kind: 'section', sectionId: s.id, title: s.title || '(제목 없음)', content: ck, part: ci + 1, parts: chunks.length }))
     })
     return slides
@@ -4478,6 +4528,39 @@
     renderWriter()
   }
 
+  function _mountWriterEditor(section, ta) {
+    const host = document.getElementById('writer-rte-host')
+    if (!host || !section || !window.RichEditor) { _writerRte = null; return }
+    const rte = new RichEditor.RichEditor({
+      html: section.content || '',
+      onChange: (html, blocks, text) => {
+        ta.value = html
+        const st = document.getElementById('writer-autosave')
+        const cnt = document.getElementById('writer-count')
+        if (cnt) cnt.textContent = RichEditor.stripTags(text).length + '자'
+        if (st) st.textContent = '입력 중…'
+        clearTimeout(_writerAutosaveTimer)
+        _writerAutosaveTimer = setTimeout(() => {
+          Store.updateReportSection(section.id, { content: html })
+          const s2 = document.getElementById('writer-autosave')
+          if (s2) s2.textContent = '자동 저장됨 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        }, 1200)
+      },
+      onAI: (text, done) => {
+        showLoading('블록 문장 다듬는 중...')
+        AI.refineInline({ text, instruction: '', preset: _writerPreset }).then(res => {
+          if (res.error) throw new Error(res.error)
+          const t = (res.draft_text || '').trim()
+          if (!t) throw new Error('AI 응답이 비어 있습니다.')
+          done(t)
+          showToast('블록을 다듬었습니다.')
+        }).catch(e => showToast('다듬기 실패: ' + e.message, 'error')).finally(hideLoading)
+      }
+    })
+    rte.mount(host)
+    _writerRte = rte
+  }
+
   function _fbKindLabel(kind) {
     const m = { direction: '진행방향', polish: '문구 다듬기', polish_full: 'AI 다듬기', compliance: '문체·컴플라이언스', coverage: 'GRI/ISSB 점검', continue: '이어쓰기' }
     return m[kind] || '제안'
@@ -4485,24 +4568,11 @@
 
   function renderWriterEditor(section) {
     if (!section) return el('div', { className: 'card' }, el('p', { style: { color: 'var(--c-text-faint)', margin: 0 } }, '섹션을 선택하세요.'))
-    const ta = el('textarea', {
-      id: 'writer-input', className: 'writer-textarea',
-      onInput: e => {
-        const val = e.target.value
-        const st = document.getElementById('writer-autosave')
-        const cnt = document.getElementById('writer-count')
-        if (cnt) cnt.textContent = val.length + '자'
-        if (st) st.textContent = '입력 중…'
-        clearTimeout(_writerAutosaveTimer)
-        _writerAutosaveTimer = setTimeout(() => {
-          Store.updateReportSection(section.id, { content: val })
-          const s2 = document.getElementById('writer-autosave')
-          if (s2) s2.textContent = '자동 저장됨 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-        }, 1200)
-      },
-      onBlur: () => { clearTimeout(_writerAutosaveTimer); Store.updateReportSection(section.id, { content: ta.value }) }
-    })
+    _writerRte = null
+    const ta = el('textarea', { id: 'writer-input', style: 'display:none' })
     ta.value = section.content || ''
+    const contentNow = () => (_writerRte ? _writerRte.getHTML() : ta.value)
+    const textNow = () => (_writerRte ? _writerRte.getText() : RichEditor.stripTags(ta.value))
     const all = Store.getFeedback(section.doc_id).filter(f => f.section_id === section.id)
     const proposals = all.filter(f => f.kind === 'polish_full').sort((a, b) => b.id - a.id)
     const feedback = all.filter(f => f.kind !== 'polish_full')
@@ -4515,27 +4585,28 @@
         el('strong', {}, section.title || '(제목 없음)'),
         el('div', { className: 'chip-row' },
           el('span', { id: 'writer-autosave', className: 'writer-autosave' }, ''),
-          el('span', { id: 'writer-count', className: 'writer-count' }, (ta.value.length) + '자'),
+          el('span', { id: 'writer-count', className: 'writer-count' }, RichEditor.stripTags(section.content || '').length + '자'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteWriterSection(section.id) }, '섹션 삭제'))),
       el('div', { className: 'writer-ai-tools' },
-        aiBtn('🔎 전체 참고자료 근거', () => showWriterEvidence(section, ta.value)),
-        aiBtn('🤖 참조자료로 다듬기', () => runWriterPolish(section, ta.value)),
-        aiBtn('💬 AI 피드백', () => runWriterFeedback(section, ta.value)),
-        aiBtn('✨ 이어쓰기', () => runWriterContinue(section, ta.value)),
-        aiBtn('✂️ 선택 다듬기', () => runWriterInline(section, ta)),
-        aiBtn('🧭 GRI/ISSB 점검', () => runWriterCoverage(section, ta.value)),
-        aiBtn('🛡️ 문체·컴플라이언스', () => runWriterCompliance(section, ta.value))),
+        aiBtn('🔎 전체 참고자료 근거', () => showWriterEvidence(section, textNow())),
+        aiBtn('🤖 참조자료로 다듬기', () => runWriterPolish(section, textNow())),
+        aiBtn('💬 AI 피드백', () => runWriterFeedback(section, textNow())),
+        aiBtn('✨ 이어쓰기', () => runWriterContinue(section, textNow())),
+        aiBtn('✂️ 선택 다듬기', () => runWriterInline(section)),
+        aiBtn('🧭 GRI/ISSB 점검', () => runWriterCoverage(section, textNow())),
+        aiBtn('🛡️ 문체·컴플라이언스', () => runWriterCompliance(section, textNow()))),
       el('div', { className: 'writer-preset-row' },
         el('span', { className: 'writer-preset-label' }, 'AI 프리셋'),
         el('select', { className: 'select-sm', onChange: e => { _writerPreset.tone = e.target.value } }, Object.keys(P.tone).map(k => el('option', { value: k, selected: _writerPreset.tone === k }, '문체·' + P.tone[k]))),
         el('select', { className: 'select-sm', onChange: e => { _writerPreset.length = e.target.value } }, Object.keys(P.length).map(k => el('option', { value: k, selected: _writerPreset.length === k }, '분량·' + P.length[k]))),
         el('select', { className: 'select-sm', onChange: e => { _writerPreset.format = e.target.value } }, Object.keys(P.format).map(k => el('option', { value: k, selected: _writerPreset.format === k }, '형식·' + P.format[k])))),
+      el('div', { id: 'writer-rte-host', className: 'writer-rte-host' }),
       ta,
       el('div', { className: 'writer-card-footer' },
-        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); showToast('임시저장되었습니다.') } }, '📌 임시저장'),
-        el('button', { className: 'btn btn-sm btn-primary', onClick: () => { Store.updateReportSection(section.id, { content: ta.value }); saveWriterDoc() } }, '💾 저장 (버전)'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { Store.updateReportSection(section.id, { content: contentNow() }); showToast('임시저장되었습니다.') } }, '📌 임시저장'),
+        el('button', { className: 'btn btn-sm btn-primary', onClick: () => { Store.updateReportSection(section.id, { content: contentNow() }); saveWriterDoc() } }, '💾 저장 (버전)'),
         el('div', { style: { flex: 1 } }),
-        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openWriterAssistant(section, ta.value) }, '💡 AI 어시스턴트')),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openWriterAssistant(section, textNow()) }, '💡 AI 어시스턴트')),
       proposals.length ? el('div', { className: 'proposal' },
         el('div', { className: 'proposal-head' }, '🤖 AI 다듬기 제안 (' + proposals.length + ')'),
         proposals.map(p => {
@@ -4590,7 +4661,7 @@
   }
 
   async function runWriterContinue(section, content) {
-    Store.updateReportSection(section.id, { content })
+    _flushWriterInput()
     showLoading('AI가 이어서 작성 중...')
     try {
       const refs = findRefsForSection(section.title, content, 6)
@@ -4609,10 +4680,16 @@
     finally { hideLoading(); renderWriter() }
   }
 
-  async function runWriterInline(section, ta) {
-    const s = ta.selectionStart, e = ta.selectionEnd
-    const selected = (s != null && e != null && e > s) ? ta.value.slice(s, e) : ''
-    if (!selected.trim()) { showToast('다듬을 문장을 먼저 선택(드래그)하세요.', 'error'); return }
+  async function runWriterInline(section) {
+    let selected = ''
+    if (_writerRte) {
+      const b = _writerRte.blocks[_writerRte._active]
+      selected = b ? RichEditor.blockText(b) : ''
+    } else {
+      const ta = document.getElementById('writer-input')
+      selected = ta ? (ta.value || '') : (section.content || '')
+    }
+    if (!selected.trim()) { showToast('다듬을 블록(문단)을 먼저 선택하세요.', 'error'); return }
     showLoading('선택 문장 다듬는 중...')
     try {
       const res = await AI.refineInline({ text: selected, instruction: '', preset: _writerPreset })
@@ -4694,7 +4771,7 @@
   function showVersionDiff(doc, v) {
     const cur = Store.snapshotReportDoc(doc.id)
     const snap = v.snapshot || []
-    const byTitle = (arr) => { const m = {}; arr.forEach(s => { (m[s.title] = m[s.title] || []).push(s.content || '') }); return m }
+    const byTitle = (arr) => { const m = {}; arr.forEach(s => { (m[s.title] = m[s.title] || []).push(_sectionText(s.content)) }); return m }
     const cm = byTitle(cur), sm = byTitle(snap)
     const titles = [...new Set([...Object.keys(sm), ...Object.keys(cm)])]
     const wrap = el('div', {}, titles.map(t => {
@@ -4857,7 +4934,7 @@
 
   async function runWriterFeedback(section, content) {
     if (!content.trim()) { showToast('내용을 먼저 작성하세요.', 'error'); return }
-    Store.updateReportSection(section.id, { content })
+    _flushWriterInput()
     showLoading('참고자료와 대비하여 분석 중...')
     try {
       const refs = Reference.search(section.title || '', 5)
@@ -4896,7 +4973,7 @@
     if (!content) { showToast('내용을 먼저 작성하거나 자료를 불러오세요.', 'error'); return }
     showLoading('참고자료에서 근거를 찾아 다듬는 중...')
     try {
-      Store.updateReportSection(section.id, { content })
+      _flushWriterInput()
       const refs = findRefsForSection(section.title, content, 6)
       const chunks = refs.map(r => ({ reference_id: r.reference_id, page: r.page, section_title: r.section_title, content: r.content }))
       const res = await AI.refineReportItem({ title: section.title, draft: content.slice(0, 4000), refChunks: chunks })
@@ -4987,7 +5064,7 @@
   }
 
   function _writerProgress(sections) {
-    const written = sections.filter(s => (s.content || '').trim()).length
+    const written = sections.filter(s => _sectionText(s.content).trim()).length
     return sections.length ? Math.round(written / sections.length * 100) : 0
   }
 
@@ -6945,6 +7022,7 @@
     if (_suppressOverlayClose && Date.now() < _suppressOverlayClose) return
     if (e && e.target !== document.getElementById('modal-overlay') && !e.target.closest('#modal')) return
     document.getElementById('modal-overlay').classList.add('hidden')
+    _refRte = null
   }
 
   function saveModal() {

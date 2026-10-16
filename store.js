@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.4.1'
+const APP_VERSION = 'v2.5.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -952,9 +952,23 @@ const Store = {
   async pullFromSupabase(opts) {
     const sb = getSupabase ? getSupabase() : null
     if (!sb) return { ok: false, reason: 'no-supabase' }
-    const scope = (opts && opts.tables) || ['referenceDocs', 'referenceChunks', 'projectTasks', 'projectTaskLogs']
-    const added = { referenceDocs: 0, referenceChunks: 0, projectTasks: 0, projectTaskLogs: 0 }
+    const scope = (opts && opts.tables) || ['users', 'referenceDocs', 'referenceChunks', 'projectTasks', 'projectTaskLogs']
+    const added = { users: 0, referenceDocs: 0, referenceChunks: 0, projectTasks: 0, projectTaskLogs: 0 }
     const deletedDocs = new Set((this._getDeletedIds().referenceDocs || []).map(String))
+
+    if (scope.includes('users')) {
+      try {
+        const { data, error } = await sb.from('tb_user').select('*')
+        if (error) return { ok: false, reason: this._fmtSbError(error) }
+        const local = this._data.users || []
+        const have = new Set(local.map(u => String(u.id)))
+        const deletedUsers = new Set((this._getDeletedIds().users || []).map(String))
+        const incoming = (data || []).filter(u => u && u.id != null && !have.has(String(u.id)) && !deletedUsers.has(String(u.id)))
+        incoming.forEach(u => local.push(this._normalizeRemoteRow(u)))
+        this._data.users = local
+        added.users = incoming.length
+      } catch (e) { console.warn('pullFromSupabase users:', e && e.message) }
+    }
 
     if (scope.includes('referenceDocs')) {
       try {
@@ -1012,7 +1026,7 @@ const Store = {
       } catch (e) {}
     }
 
-    if (added.referenceDocs || added.referenceChunks || added.projectTasks || added.projectTaskLogs) {
+    if (added.users || added.referenceDocs || added.referenceChunks || added.projectTasks || added.projectTaskLogs) {
       this._save()
       this._notify()
     }

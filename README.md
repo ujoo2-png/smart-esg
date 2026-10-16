@@ -2,7 +2,7 @@
 
 지속가능경영보고서(ESG) 작성 · 평가 · 공시를 지원하는 웹 애플리케이션입니다.
 
-- 버전: **v2.4.1** (BUILD 73)
+- 버전: **v2.5.0** (BUILD 74)
 - 데이터: `localStorage`(원본) + Supabase(미러 동기화)
 - 별도 빌드 도구 없이 브라우저에서 바로 실행되는 정적 앱
 
@@ -17,6 +17,7 @@
 - **AI 보고서** — 초안 생성 2단계 파이프라인, 마스킹 적용, 생성 이력 검토
 - **보고서 편집기** — HTML 생성·인쇄·다운로드, 참고자료 대비 진행방향 피드백
 - **보고서 작성기** — 기존 자료(docx/pptx/pdf) 불러오기·항목 자동 분할, **좌측 실시간 PPT 미리보기**(보고서를 표지·목차·섹션 슬라이드로 즉시 렌더, 페이지 이동 시 편집 섹션 연동) + 우측 섹션별 편집·원클릭 AI(다듬기·이어쓰기·선택문장·GRI/ISSB·컴플라이언스), **전체 등록 참고자료 RAG 근거 검색**(문서 지정 불필요), 섹션 순서 이동·이전/다음 섹션 이동, 문체/분량/형식 프리셋, 자동 임시저장(블러·언로드 시 즉시 저장), 버전 비교·되돌리기, AI 어시스턴트, PPTX 생성
+- **차세대 문서 편집기** — 블록 기반 리치 에디터(`editor.js`)를 보고서 작성기 본문과 참고자료 뷰어에 공용 적용. 제목/본문/목록/인용/코드/표/구분선 블록 추가·삭제·드래그 정렬, `/` 슬래시 삽입 메뉴, 도구상자 서식(굵게·기울임·밑줄·취소선·링크·서식 지우기), 글자·단어 수·읽는 시간 통계, 찾기·바꾸기(일괄 치환), 블록 단위 AI 다듬기
 - **AI 연결 설정** — 제공자(open 내부 게이트웨이/OpenAI/Anthropic/**Gemini**/**Groq**/Ollama/사용자 지정)·엔드포인트·모델·API 키·온도·최대 토큰을 설정 화면에서 관리, 연결 테스트 지원. **폴백 체인**(예: Groq → Gemini → Ollama)으로 앞선 제공자 장애 시 자동 재시도하여 무료 조합으로도 가용성 확보. 엔드포인트 장애 시 점검류는 키워드 기반 로컬 점검으로 자동 대체(더미 데이터 반환 제거)
 - **프로젝트 관리(WBS)** — 대/중/소 3단계 계층, 계획/실적 일정, 단순 완료율 진도율·간트·캘린더·타임라인
 - **대시보드** — 총점/필러/증빙/AI/GHG/협력사/예산/Scope 분포 등 13종 카드
@@ -32,7 +33,7 @@
 |------|------|
 | 데이터 레이어 | `store.js`, `supabase.js`, `migration.sql` |
 | 도메인 로직 | `indicator.js`, `evidence.js`, `ghg.js`, `ai.js`, `report.js`, `gri.js`, `risk.js`, `monitor.js`, `issa.js`, `submit.js`, `supplier.js`, `supplierRisk.js`, `api-integration.js`, `reference.js` |
-| UI | `app.js`, `dashboard.js`, `components.js`, `index.html`, `style.css` |
+| UI | `app.js`, `dashboard.js`, `components.js`, `editor.js`(블록 리치 에디터), `index.html`, `style.css` |
 | 인증 | `auth.js` |
 | 스토리지/변환 | `storage-adapter.js`, `mdconvert.js` |
 | 서버리스 | `supabase/functions/` (Edge Functions: `sign-upload`, `sign-download`, `remove-object`, `convert`) |
