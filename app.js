@@ -6494,11 +6494,12 @@
       opencode: { endpoint: '/api/opencode/generate', model: 'big-pickle', hint: '내부 게이트웨이(open). 별도 키 없이 동작하는 호스팅 환경에서 사용합니다.' },
       openai: { endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', hint: 'OpenAI 호환 Chat Completions API. API 키가 필요합니다.' },
       anthropic: { endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-3-5-sonnet-latest', hint: 'Anthropic Messages API. API 키가 필요합니다.' },
-      gemini: { endpoint: '', model: 'gemini-1.5-flash', hint: 'Google Gemini. 엔드포인트를 비우면 모델명으로 자동 생성합니다. (API 키 필요)' },
-      ollama: { endpoint: 'http://localhost:11434/api/chat', model: 'llama3.1', hint: '로컬 Ollama 서버. 같은 PC에서 실행 중일 때 사용합니다.' },
+      gemini: { endpoint: '', model: 'gemini-1.5-flash', hint: 'Google Gemini. 엔드포인트를 비우면 모델명으로 자동 생성합니다. (무료 티어, API 키 필요)' },
+      groq: { endpoint: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', hint: 'Groq 무료 티어. OpenAI 호환 API로 응답이 매우 빠릅니다. (console.groq.com에서 API 키 발급)' },
+      ollama: { endpoint: 'http://localhost:11434/api/chat', model: 'llama3.1', hint: '로컬 Ollama 서버. 같은 PC에서 실행 중일 때 사용합니다. (완전 무료·데이터 외부 유출 없음)' },
       custom: { endpoint: cfg.endpoint, model: cfg.model, hint: 'OpenAI 호환 엔드포인트를 직접 지정합니다.' }
     }
-    const state = { ...cfg }
+    const state = { ...cfg, fallbacks: (cfg.fallbacks || []).map(f => ({ ...f })) }
     const inputStyle = 'width:100%;padding:9px 11px;border:1px solid #e4e7eb;border-radius:8px;font-size:13px;outline:none'
     const labelStyle = 'font-size:12px;font-weight:600;color:#374151;margin-bottom:5px;display:block'
     const status = el('div', { style: 'font-size:12px;min-height:20px;margin-top:10px;color:#6b7280;line-height:1.6' })
@@ -6517,19 +6518,54 @@
     const hint = el('div', { style: 'font-size:12px;color:#9ca3af;line-height:1.6;margin-top:6px' }, presets[state.provider]?.hint || '')
 
     const save = () => {
-      Store.setAIConfig({ provider: state.provider, endpoint: state.endpoint, model: state.model, apiKey: state.apiKey, temperature: state.temperature, maxTokens: state.maxTokens })
+      Store.setAIConfig({
+        provider: state.provider, endpoint: state.endpoint, model: state.model, apiKey: state.apiKey,
+        temperature: state.temperature, maxTokens: state.maxTokens,
+        fallbacks: state.fallbacks.map(f => ({ provider: f.provider, endpoint: f.endpoint || '', model: f.model || '', apiKey: f.apiKey || '' }))
+      })
       showToast('AI 연결 설정을 저장했습니다.', 'success')
-      status.style.color = '#059669'; status.textContent = '저장됨 · ' + state.provider + ' · ' + state.model
+      status.style.color = '#059669'; status.textContent = '저장됨 · ' + state.provider + ' · ' + state.model + (state.fallbacks.length ? ' (+폴백 ' + state.fallbacks.length + '단계)' : '')
     }
     const test = async () => {
       save()
       status.style.color = '#6b7280'; status.textContent = '연결 테스트 중...'
       const r = await AI.testConnection()
-      if (r.ok) { status.style.color = '#059669'; status.textContent = '✅ 연결 성공 · 응답: ' + r.sample }
-      else { status.style.color = '#dc2626'; status.textContent = '❌ ' + r.error }
+      if (r.ok) {
+        status.style.color = '#059669'
+        const fbUsed = r.tried && r.tried.length
+        status.textContent = '✅ 연결 성공 · 사용 제공자: ' + r.provider + (fbUsed ? ' (앞선 ' + fbUsed + '개 실패 후 폴백)' : '') + ' · 응답: ' + r.sample
+      } else { status.style.color = '#dc2626'; status.textContent = '❌ ' + r.error }
     }
 
     const field = (label, control) => el('div', { style: { flex: '1 1 240px', minWidth: 200 } }, el('label', { style: labelStyle }, label), control)
+
+    const fbContainer = el('div', { style: 'display:flex;flex-direction:column;gap:10px' })
+    const renderFallbackRows = () => {
+      fbContainer.innerHTML = ''
+      if (!state.fallbacks.length) {
+        fbContainer.append(el('div', { style: 'font-size:12px;color:#9ca3af;padding:4px 0' }, '폴백 없음 — 기본 제공자만 사용합니다. (장애 대비용으로 추가를 권장)'))
+        return
+      }
+      state.fallbacks.forEach((fb, idx) => {
+        const provSel = el('select', { style: inputStyle, onChange: e => { fb.provider = e.target.value; const p = presets[fb.provider]; if (p) { fb.endpoint = p.endpoint; fb.model = p.model } renderFallbackRows() } },
+          Object.keys(presets).filter(k => k !== 'custom').map(k => el('option', { value: k, selected: fb.provider === k }, k)))
+        const epIn = el('input', { type: 'text', value: fb.endpoint || '', placeholder: '엔드포인트 (비우면 기본값)', style: inputStyle, onInput: e => { fb.endpoint = e.target.value } })
+        const mdIn = el('input', { type: 'text', value: fb.model || '', placeholder: '모델', style: inputStyle, onInput: e => { fb.model = e.target.value } })
+        const kyIn = el('input', { type: 'password', value: fb.apiKey || '', placeholder: 'API 키', style: inputStyle, onInput: e => { fb.apiKey = e.target.value } })
+        fbContainer.append(el('div', { style: 'border:1px solid #e4e7eb;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;background:#FCFDFE' },
+          el('div', { style: 'display:flex;gap:8px;align-items:center' },
+            el('span', { style: 'font-size:12px;font-weight:800;color:#0f766e;min-width:28px' }, '#' + (idx + 1)),
+            el('div', { style: 'flex:1' }, provSel),
+            el('button', { className: 'btn btn-sm btn-secondary', disabled: idx === 0, title: '위로', onClick: () => { const t = state.fallbacks[idx - 1]; state.fallbacks[idx - 1] = state.fallbacks[idx]; state.fallbacks[idx] = t; renderFallbackRows() } }, '↑'),
+            el('button', { className: 'btn btn-sm btn-secondary', disabled: idx === state.fallbacks.length - 1, title: '아래로', onClick: () => { const t = state.fallbacks[idx + 1]; state.fallbacks[idx + 1] = state.fallbacks[idx]; state.fallbacks[idx] = t; renderFallbackRows() } }, '↓'),
+            el('button', { className: 'btn btn-sm btn-secondary', title: '삭제', onClick: () => { state.fallbacks.splice(idx, 1); renderFallbackRows() } }, '✕')),
+          el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+            el('div', { style: 'flex:1 1 220px' }, epIn),
+            el('div', { style: 'flex:1 1 150px' }, mdIn),
+            el('div', { style: 'flex:1 1 150px' }, kyIn))))
+      })
+    }
+    renderFallbackRows()
 
     c.innerHTML = ''
     c.append(
@@ -6548,6 +6584,13 @@
           el('div', { style: 'display:flex;gap:14px;flex-wrap:wrap' },
             field('Temperature', tempInput),
             field('Max tokens', maxInput)),
+          el('div', { style: 'border-top:1px dashed #e4e7eb;padding-top:14px;display:flex;flex-direction:column;gap:8px' },
+            el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' },
+              el('div', {},
+                el('div', { style: 'font-size:13px;font-weight:800;color:#0f3d3e' }, '🔁 폴백 체인 (자동 재시도)'),
+                el('div', { style: 'font-size:11.5px;color:#6b7280;margin-top:2px' }, '기본 제공자가 실패하면 위에서부터 순서대로 다음 제공자를 시도합니다. 무료 조합 예: Groq → Gemini → Ollama')),
+              el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { state.fallbacks.push({ provider: 'groq', endpoint: presets.groq.endpoint, model: presets.groq.model, apiKey: '' }); renderFallbackRows() } }, '＋ 폴백 추가')),
+            fbContainer),
           el('div', { style: 'display:flex;gap:8px' },
             el('button', { className: 'btn btn-primary', onClick: save }, '💾 저장'),
             el('button', { className: 'btn btn-secondary', onClick: test }, '🔌 연결 테스트')),

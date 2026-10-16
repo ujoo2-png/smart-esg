@@ -399,13 +399,48 @@ ${evidenceExcerpts}
     return data.choices?.[0]?.message?.content || data.output_text || data.reply || ''
   },
 
+  _defaultModel(provider) {
+    const m = { opencode: 'big-pickle', openai: 'gpt-4o-mini', anthropic: 'claude-3-5-sonnet-latest', gemini: 'gemini-1.5-flash', groq: 'llama-3.3-70b-versatile', ollama: 'llama3.1' }
+    return m[provider] || 'big-pickle'
+  },
+
+  _defaultEndpoint(provider, model, apiKey) {
+    if (provider === 'anthropic') return 'https://api.anthropic.com/v1/messages'
+    if (provider === 'gemini') return 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(apiKey || '')
+    if (provider === 'ollama') return 'http://localhost:11434/api/chat'
+    if (provider === 'openai') return 'https://api.openai.com/v1/chat/completions'
+    if (provider === 'groq') return 'https://api.groq.com/openai/v1/chat/completions'
+    return '/api/opencode/generate'
+  },
+
+  _providerConfig(base, entry) {
+    const e = entry || {}
+    const provider = e.provider || base.provider || 'opencode'
+    const same = provider === (base.provider || 'opencode')
+    const model = e.model || (same ? base.model : this._defaultModel(provider))
+    const apiKey = (e.apiKey != null && e.apiKey !== '') ? e.apiKey : (same ? base.apiKey : '')
+    let endpoint = e.endpoint
+    if (endpoint == null || endpoint === '') endpoint = this._defaultEndpoint(provider, model, apiKey)
+    return {
+      provider, endpoint, model, apiKey,
+      temperature: e.temperature != null ? e.temperature : base.temperature,
+      maxTokens: e.maxTokens != null ? e.maxTokens : base.maxTokens
+    }
+  },
+
+  _providerChain(cfg) {
+    const chain = [this._providerConfig(cfg, null)]
+    ;(cfg.fallbacks || []).forEach(fb => { if (fb && fb.provider) chain.push(this._providerConfig(cfg, fb)) })
+    return chain
+  },
+
   _buildAIRequest(cfg, messages) {
     const provider = cfg.provider || 'opencode'
     if (provider === 'anthropic') {
       const system = (messages.find(m => m.role === 'system') || {}).content || ''
       const rest = messages.filter(m => m.role !== 'system')
       return {
-        url: cfg.endpoint || 'https://api.anthropic.com/v1/messages',
+        url: cfg.endpoint || this._defaultEndpoint(provider, cfg.model, cfg.apiKey),
         headers: { 'Content-Type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' },
         body: { model: cfg.model, max_tokens: cfg.maxTokens, system, messages: rest }
       }
@@ -413,26 +448,22 @@ ${evidenceExcerpts}
     if (provider === 'gemini') {
       const sys = (messages.find(m => m.role === 'system') || {}).content
       const contents = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
-      const url = cfg.endpoint || ('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(cfg.model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey))
+      const url = cfg.endpoint || this._defaultEndpoint(provider, cfg.model, cfg.apiKey)
       return { url, headers: { 'Content-Type': 'application/json' }, body: { contents, systemInstruction: sys ? { parts: [{ text: sys }] } : undefined, generationConfig: { temperature: cfg.temperature, maxOutputTokens: cfg.maxTokens } } }
     }
     const headers = { 'Content-Type': 'application/json' }
     if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey
-    const defaultUrl = provider === 'ollama' ? 'http://localhost:11434/api/chat'
-      : provider === 'openai' ? 'https://api.openai.com/v1/chat/completions'
-      : '/api/opencode/generate'
-    return { url: cfg.endpoint || defaultUrl, headers, body: { model: cfg.model, messages, temperature: cfg.temperature, max_tokens: cfg.maxTokens, stream: false } }
+    return { url: cfg.endpoint || this._defaultEndpoint(provider, cfg.model, cfg.apiKey), headers, body: { model: cfg.model, messages, temperature: cfg.temperature, max_tokens: cfg.maxTokens, stream: false } }
   },
 
-  async _callAI(messages) {
-    const cfg = this._aiConfig()
-    if (!cfg.endpoint) throw this._aiError('AI 엔드포인트가 설정되지 않았습니다. [설정 › AI 연결]에서 구성하세요.')
+  async _callProvider(cfg, messages) {
+    if (!cfg.endpoint) throw this._aiError('엔드포인트 없음')
     const req = this._buildAIRequest(cfg, messages)
     let response
     try {
       response = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body) })
     } catch (err) {
-      throw this._aiError('AI 서버에 연결할 수 없습니다 (' + (err && err.message) + '). [설정 › AI 연결]을 확인하세요.')
+      throw this._aiError('연결 불가 (' + (err && err.message) + ')')
     }
     if (!response.ok) {
       let detail = ''
@@ -440,22 +471,45 @@ ${evidenceExcerpts}
         const j = await response.json()
         detail = j.error?.message || (typeof j.error === 'string' ? j.error : '') || j.message || ''
       } catch (e) {}
-      throw this._aiError('AI 호출 실패 (' + response.status + ')' + (detail ? ': ' + detail : ''))
+      throw this._aiError('HTTP ' + response.status + (detail ? ': ' + detail : ''))
     }
     const data = await response.json()
     const text = this._extractText(data, cfg.provider)
-    if (!text || !String(text).trim()) throw this._aiError('AI 응답이 비어 있습니다.')
+    if (!text || !String(text).trim()) throw this._aiError('빈 응답')
     return text
   },
 
+  async _callAI(messages) {
+    const cfg = this._aiConfig()
+    const chain = this._providerChain(cfg)
+    const errors = []
+    for (let i = 0; i < chain.length; i++) {
+      const c = chain[i]
+      try {
+        const text = await this._callProvider(c, messages)
+        this._lastProvider = c.provider
+        return text
+      } catch (e) {
+        errors.push(c.provider + ' → ' + e.message)
+      }
+    }
+    throw this._aiError('모든 AI 연결에 실패했습니다 — ' + errors.join(' | ') + '  ·  [설정 › AI 연결]을 확인하세요.')
+  },
+
   async testConnection() {
-    try {
-      const raw = await this._callAI([
-        { role: 'system', content: '연결 테스트입니다. 다른 말 없이 정확히 "OK"만 출력하세요.' },
-        { role: 'user', content: 'OK' }
-      ])
-      return { ok: true, sample: String(raw).trim().slice(0, 160) }
-    } catch (e) { return { ok: false, error: e.message } }
+    const cfg = this._aiConfig()
+    const chain = this._providerChain(cfg)
+    const tried = []
+    for (const c of chain) {
+      try {
+        const raw = await this._callProvider(c, [
+          { role: 'system', content: '연결 테스트입니다. 다른 말 없이 정확히 "OK"만 출력하세요.' },
+          { role: 'user', content: 'OK' }
+        ])
+        return { ok: true, provider: c.provider, sample: String(raw).trim().slice(0, 160), tried }
+      } catch (e) { tried.push({ provider: c.provider, error: e.message }) }
+    }
+    return { ok: false, error: tried.map(t => t.provider + ': ' + t.error).join(' | '), tried }
   },
 
   _localNormalize(text) {

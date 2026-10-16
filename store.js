@@ -1360,13 +1360,20 @@ const Store = {
   // ==== AI Connection ====
   getAIConfig() {
     const cfg = this.data.aiConfig || {}
+    const provider = cfg.provider || 'opencode'
+    const endpoint = cfg.endpoint != null && cfg.endpoint !== ''
+      ? cfg.endpoint
+      : (provider === 'opencode' ? '/api/opencode/generate' : '')
     return {
-      provider: cfg.provider || 'opencode',
-      endpoint: cfg.endpoint || '/api/opencode/generate',
+      provider,
+      endpoint,
       model: cfg.model || 'big-pickle',
       apiKey: cfg.apiKey || '',
       temperature: cfg.temperature != null ? cfg.temperature : 0.3,
-      maxTokens: cfg.maxTokens != null ? cfg.maxTokens : 2000
+      maxTokens: cfg.maxTokens != null ? cfg.maxTokens : 2000,
+      fallbacks: Array.isArray(cfg.fallbacks)
+        ? cfg.fallbacks.filter(f => f && f.provider).map(f => ({ provider: f.provider, endpoint: f.endpoint || '', model: f.model || '', apiKey: f.apiKey || '' }))
+        : []
     }
   },
   setAIConfig(cfg) { this.data.aiConfig = { ...(this.data.aiConfig || {}), ...cfg }; this._save(); return this.getAIConfig() },
