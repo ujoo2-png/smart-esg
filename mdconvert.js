@@ -274,7 +274,7 @@ const MdConvert = {
   },
 
   async convert(file, storagePath) {
-    if (StorageAdapter.isRemote && !this._remoteDown) {
+    if (StorageAdapter.isRemote && storagePath && !this._remoteDown) {
       try {
         const res = await fetch(this._fnUrl(), {
           method: 'POST',

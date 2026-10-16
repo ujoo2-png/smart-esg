@@ -60,16 +60,26 @@ const Reference = {
 
   async create({ title, source_org, industry, year, file, tags }) {
     const doc = Store.addReferenceDoc({ title: title || file.name, source_org: source_org || '', industry: industry || '', year: year || null, file_name: file.name, file_type: this.detectType(file.name), mime_type: file.type || '', file_size: file.size, tags: tags || [], owner_id: Store.getCurrentUser()?.id ?? null })
+    const path = this.storagePath(doc, file.name)
+    let uploadWarning = ''
+    Store.updateReferenceDoc(doc.id, { status: 'uploading', storage_path: path })
     try {
-      const path = this.storagePath(doc, file.name)
-      Store.updateReferenceDoc(doc.id, { status: 'uploading', storage_path: path })
-      await StorageAdapter.upload(path, file)
+      const up = await StorageAdapter.upload(path, file)
+      if (up && up.mode === 'local' && StorageAdapter.isRemote) uploadWarning = 'Supabase 저장소 업로드 실패 → 이 브라우저에 임시 저장됨'
+    } catch (e) {
+      uploadWarning = e.localFallback
+        ? '저장소 업로드 실패 → 이 브라우저에 임시 저장됨 · ' + e.message
+        : '원본 저장 실패 · ' + e.message
+    }
+    Store.updateReferenceDoc(doc.id, { storage_error: uploadWarning || null })
+    try {
       Store.updateReferenceDoc(doc.id, { status: 'converting' })
-      const result = await MdConvert.convert(file, path)
+      const result = await MdConvert.convert(file, uploadWarning ? null : path)
       this._applyConversion(doc.id, result)
+      Store.updateReferenceDoc(doc.id, { storage_error: uploadWarning || null })
       return Store.getReferenceDoc(doc.id)
     } catch (e) {
-      Store.updateReferenceDoc(doc.id, { status: 'error', error: e.message })
+      Store.updateReferenceDoc(doc.id, { status: 'error', error: e.message, storage_error: uploadWarning || null })
       throw e
     }
   },
@@ -83,15 +93,16 @@ const Reference = {
   async recreate(docId) {
     const doc = Store.getReferenceDoc(docId)
     if (!doc) throw new Error('참고자료를 찾을 수 없습니다.')
-    if (!doc.storage_path) { Store.updateReferenceDoc(docId, { status: 'error', error: '원본 파일이 없습니다.' }); return }
+    if (!doc.storage_path) { Store.updateReferenceDoc(docId, { status: 'error', error: '원본 파일이 없습니다. 다시 업로드하세요.' }); throw new Error('원본 파일이 없습니다. 다시 업로드하세요.') }
     try {
       Store.updateReferenceDoc(docId, { status: 'converting', error: null })
       const blob = await StorageAdapter.getBlob(doc.storage_path)
       const file = new File([blob], doc.file_name, { type: doc.mime_type })
-      const result = await MdConvert.convert(file, doc.storage_path)
+      const result = await MdConvert.convert(file, doc.storage_error ? null : doc.storage_path)
       this._applyConversion(docId, result)
     } catch (e) {
       Store.updateReferenceDoc(docId, { status: 'error', error: e.message })
+      throw e
     }
   },
 

@@ -35,6 +35,7 @@
   }
 
   let _loadingCount = 0
+  let _loadingSafety = null
   function showLoading(text) {
     let ov = document.getElementById('loading-overlay')
     if (!ov) {
@@ -47,10 +48,18 @@
     if (txt) txt.textContent = text || '처리 중...'
     ov.style.display = 'block'
     _loadingCount++
+    clearTimeout(_loadingSafety)
+    _loadingSafety = setTimeout(_forceHideLoading, 120000)
+  }
+  function _forceHideLoading() {
+    _loadingCount = 0
+    clearTimeout(_loadingSafety)
+    const ov = document.getElementById('loading-overlay')
+    if (ov) ov.style.display = 'none'
   }
   function hideLoading() {
     _loadingCount = Math.max(0, _loadingCount - 1)
-    if (_loadingCount === 0) { const ov = document.getElementById('loading-overlay'); if (ov) ov.style.display = 'none' }
+    if (_loadingCount === 0) { clearTimeout(_loadingSafety); const ov = document.getElementById('loading-overlay'); if (ov) ov.style.display = 'none' }
   }
 
   function toggleNotifPanel() {
@@ -4033,7 +4042,7 @@
     }
 
     const rows = filtered.map(d => el('tr', {},
-      el('td', {}, el('div', { style: { fontWeight: 600 } }, d.title || d.file_name || '(제목 없음)', d.scanned ? el('span', { className: 'chip chip-warn', style: 'margin-left:6px' }, '스캔본') : null), el('div', { style: { fontSize: 12, color: '#9ca3af' } }, [Reference.typeLabel(d.file_name), d.file_name, d.engine].filter(Boolean).join(' · '))),
+      el('td', {}, el('div', { style: { fontWeight: 600 } }, d.title || d.file_name || '(제목 없음)', d.scanned ? el('span', { className: 'chip chip-warn', style: 'margin-left:6px' }, '스캔본') : null, d.storage_error ? el('span', { className: 'chip chip-warn', style: 'margin-left:6px', title: d.storage_error }, '저장소 ⚠') : null), el('div', { style: { fontSize: 12, color: '#9ca3af' } }, [Reference.typeLabel(d.file_name), d.file_name, d.engine].filter(Boolean).join(' · ')), d.error ? el('div', { style: { fontSize: 11, color: '#dc2626', marginTop: 2 } }, d.error) : null, d.storage_error ? el('div', { style: { fontSize: 11, color: '#d97706', marginTop: 2 } }, d.storage_error) : null),
       el('td', {}, d.source_org || '-'),
       el('td', {}, d.year || '-'),
       el('td', {}, el('span', { style: { display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, color: '#fff', background: Reference.statusColor(d.status) } }, Reference.statusLabel(d.status))),
@@ -4149,6 +4158,11 @@
     modal('참고자료 업로드', form)
     document.getElementById('modal-save').onclick = async () => {
       if (!file) { showToast('파일을 선택하세요.', 'error'); return }
+      const MAX_MB = 50
+      if (StorageAdapter.isRemote && file.size > MAX_MB * 1024 * 1024) {
+        const mb = (file.size / 1024 / 1024).toFixed(1)
+        showToast('파일이 ' + mb + 'MB로 Supabase Storage 기본 제한(' + MAX_MB + 'MB)을 초과합니다. 대시보드에서 제한을 늘리거나 로컬 저장 모드로 전환하세요.', 'warning')
+      }
       const payload = {
         title: titleInput.value.trim(),
         source_org: orgInput.value.trim(),
@@ -4160,8 +4174,9 @@
       closeModal()
       showLoading('업로드 및 변환 중...')
       try {
-        await Reference.create(payload)
-        showToast('참고자료가 등록되었습니다.')
+        const saved = await Reference.create(payload)
+        if (saved && saved.status === 'ready' && saved.storage_error) showToast('등록됨 · 저장소 경고: ' + saved.storage_error, 'warning')
+        else showToast('참고자료가 등록되었습니다.')
       } catch (e) {
         showToast('등록 실패: ' + e.message, 'error')
       } finally {
@@ -4213,8 +4228,8 @@
 
   async function reconvertReference(id) {
     showLoading('재변환 중...')
-    try { await Reference.recreate(id); showToast('재변환 요청 완료.') }
-    catch (e) { showToast('실패: ' + e.message, 'error') }
+    try { await Reference.recreate(id); showToast('재변환 완료.') }
+    catch (e) { showToast('재변환 실패: ' + e.message, 'error') }
     finally { hideLoading(); renderReferences() }
   }
 
@@ -4231,13 +4246,14 @@
   function openStorageSettings() {
     const mode = StorageAdapter.mode
     const remoteReady = typeof SUPABASE_CONFIG !== 'undefined' && !!SUPABASE_CONFIG.url && !SUPABASE_CONFIG.url.includes('your-project')
-    const policySql = 'insert into storage.buckets (id, name, public)\nvalues (\'references\', \'references\', false)\non conflict (id) do nothing;\n\ncreate policy "references_all" on storage.objects\n  for all to anon, authenticated\n  using (bucket_id = \'references\')\n  with check (bucket_id = \'references\');'
+    const policySql = 'insert into storage.buckets (id, name, public)\nvalues (\'references\', \'references\', false)\non conflict (id) do update set public = false;\n\ndrop policy if exists "references_all" on storage.objects;\ncreate policy "references_all" on storage.objects\n  for all to anon, authenticated\n  using (bucket_id = \'references\')\n  with check (bucket_id = \'references\');'
     const note = el('div', { id: 'storage-remote-note', style: { display: mode !== 'local' ? 'block' : 'none', fontSize: 12, lineHeight: 1.6, color: remoteReady ? '#6B7280' : '#dc2626', background: '#f8fafc', padding: '10px 12px', borderRadius: 8 } },
       remoteReady
         ? el('div', {},
             el('div', {}, '백엔드: Supabase Storage · 버킷: ' + StorageAdapter._bucket),
             el('div', { style: { marginTop: 4, color: '#6B7280' } }, 'Supabase 대시보드 → Storage에서 "' + StorageAdapter._bucket + '" 버킷을 생성하고, 아래 정책 SQL을 SQL Editor에서 실행하세요.'),
-            el('button', { type: 'button', className: 'btn btn-secondary', style: 'margin-top: 8px; font-size: 12px; padding: 5px 10px', onClick: e => { navigator.clipboard.writeText(policySql).then(() => showToast('정책 SQL을 복사했습니다.')).catch(() => showToast('복사 실패', 'error')) } }, '정책 SQL 복사')
+            el('button', { type: 'button', className: 'btn btn-secondary', style: { marginTop: 8, fontSize: 12, padding: '5px 10px' }, onClick: e => { navigator.clipboard.writeText(policySql).then(() => showToast('정책 SQL을 복사했습니다.')).catch(() => showToast('복사 실패', 'error')) } }, '정책 SQL 복사'),
+            el('div', { style: { marginTop: 8, color: '#9CA3AF' } }, '업로드 400 오류 원인: ① 버킷 미생성 ② Storage 정책(RLS) 미설정 ③ 파일 크기 제한(기본 50MB) 초과 ④ 버킷 공개/비공개 설정 불일치')
           )
         : '⚠ supabase.js의 URL/anonKey가 placeholder입니다. 원격 저장을 사용하려면 실제 값을 설정하세요.')
     const form = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 } },
