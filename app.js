@@ -523,6 +523,7 @@
     })
     initKeepAlive()
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && _evidencePreviewId) { _evidencePreviewId = null; const c = document.getElementById('page-evidence'); if (c) renderEvidenceMgmt() } })
+    window.addEventListener('beforeunload', () => { const wp = document.getElementById('page-writer'); if (wp && wp.classList.contains('active')) { clearTimeout(_writerAutosaveTimer); _flushWriterInput() } })
   }
 
   // ==================== Navigation ====================
@@ -4291,10 +4292,11 @@
   let _writerDocId = null
   let _writerSectionId = null
   let _writerPreset = { tone: 'formal', length: 'normal', format: 'prose' }
-  let _writerRefDocId = null
   let _writerChat = []
   let _writerAutosaveTimer = null
   let _writerSkipFlush = false
+  let _previewIndex = 0
+  let _previewSectionId = null
 
   function _flushWriterInput() {
     const ta = document.getElementById('writer-input')
@@ -4339,6 +4341,8 @@
     const total = sections.length
     const written = sections.filter(s => (s.content || '').trim()).length
     const progress = total ? Math.round(written / total * 100) : 0
+    const refDocs = Reference.getAll().filter(d => Store.canSeeOwned('referenceDocs', d))
+    const chunkCount = Store.getReferenceChunks().length
     c.append(el('div', { className: 'card' },
       el('div', { className: 'writer-summary' },
         el('div', { className: 'writer-title' },
@@ -4346,25 +4350,132 @@
           el('span', { className: 'badge-ver' }, 'v' + (doc.version || 1))),
         el('div', { className: 'chip-row' },
           el('span', { className: 'chip chip-muted' }, `진도 ${progress}% · ${written}/${total} 섹션`),
+          el('span', { className: 'chip chip-muted', title: '보고서 전체가 참고자료 색인을 RAG 방식으로 검색합니다' }, `📚 색인 ${refDocs.length}건 · ${chunkCount}청크`),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: openWriterVersions }, '🗂 버전·되돌리기'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: exportWriterPptx }, '📤 PPTX'),
           el('button', { className: 'btn btn-sm btn-primary', onClick: saveWriterDoc }, '💾 저장(버전)'))),
       el('div', { className: 'progress-track' },
         el('div', { className: 'progress-fill', style: 'width:' + progress + '%' }))))
 
-    const grid = el('div', { className: 'writer-grid' })
-    grid.append(renderWriterRefPane(sections.find(s => s.id === _writerSectionId)))
+    const slides = _writerBuildSlides(doc, sections)
+    if (_previewSectionId !== _writerSectionId || _previewIndex >= slides.length) {
+      _previewIndex = _firstSlideForSection(slides, _writerSectionId)
+      _previewSectionId = _writerSectionId
+    }
+    if (_previewIndex < 0) _previewIndex = 0
 
+    const grid = el('div', { className: 'writer-grid' })
+    grid.append(renderWriterPreview(doc, slides))
+
+    const curIdx = sections.findIndex(s => String(s.id) === String(_writerSectionId))
     const main = el('div', { className: 'writer-main' },
       el('div', { className: 'writer-secbar' },
-        el('strong', {}, '섹션'),
-        el('select', { className: 'select-sm', style: 'flex:1;min-width:180px', onChange: e => { _flushWriterInput(); _writerSkipFlush = true; _writerSectionId = isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value); renderWriter() } },
+        el('button', { className: 'btn btn-sm btn-secondary', title: '이전 섹션', disabled: curIdx <= 0, onClick: () => _writerSelectSection(sections[Math.max(0, curIdx - 1)].id) }, '◀'),
+        el('select', { className: 'select-sm', style: 'flex:1;min-width:160px', onChange: e => _writerSelectSection(isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value)) },
           sections.length ? sections.map(s => el('option', { value: String(s.id), selected: s.id === _writerSectionId }, (s.title || '(제목 없음)') + ((s.content || '').trim() ? '' : ' · 미작성'))) : el('option', { value: '' }, '섹션 없음')
         ),
+        el('button', { className: 'btn btn-sm btn-secondary', title: '다음 섹션', disabled: curIdx < 0 || curIdx >= sections.length - 1, onClick: () => _writerSelectSection(sections[Math.min(sections.length - 1, curIdx + 1)].id) }, '▶'),
+        el('button', { className: 'btn btn-sm btn-secondary', title: '위로 이동', disabled: curIdx <= 0, onClick: () => moveWriterSection(sections, curIdx, -1) }, '↑'),
+        el('button', { className: 'btn btn-sm btn-secondary', title: '아래로 이동', disabled: curIdx < 0 || curIdx >= sections.length - 1, onClick: () => moveWriterSection(sections, curIdx, 1) }, '↓'),
         el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openAddSection(doc.id) }, '＋ 섹션')))
     main.append(renderWriterEditor(sections.find(s => s.id === _writerSectionId)))
     grid.append(main)
     c.append(grid)
+  }
+
+  function _writerBuildSlides(doc, sections) {
+    const slides = [{ kind: 'cover', title: doc.title || '(제목 없음)', version: doc.version || 1 }]
+    if (!sections.length) return slides
+    slides.push({ kind: 'toc', titles: sections.map(s => s.title || '(제목 없음)') })
+    sections.forEach(s => {
+      const chunks = PptxExport._chunk((s.content || '').trim() || '(내용 없음)', 900)
+      chunks.forEach((ck, ci) => slides.push({ kind: 'section', sectionId: s.id, title: s.title || '(제목 없음)', content: ck, part: ci + 1, parts: chunks.length }))
+    })
+    return slides
+  }
+
+  function _firstSlideForSection(slides, sectionId) {
+    const i = slides.findIndex(s => s.sectionId != null && String(s.sectionId) === String(sectionId))
+    return i < 0 ? 0 : i
+  }
+
+  function _writerSelectSection(sectionId) {
+    if (sectionId == null || sectionId === '') return
+    _flushWriterInput()
+    _writerSkipFlush = true
+    _writerSectionId = sectionId
+    _previewSectionId = null
+    renderWriter()
+  }
+
+  function moveWriterSection(sections, idx, delta) {
+    const j = idx + delta
+    if (idx < 0 || j < 0 || j >= sections.length) return
+    const ids = sections.map(s => s.id)
+    const tmp = ids[idx]; ids[idx] = ids[j]; ids[j] = tmp
+    Store.setReportSectionOrder(ids)
+    _writerSkipFlush = true
+    _previewSectionId = null
+    renderWriter()
+  }
+
+  function renderWriterPreview(doc, slides) {
+    const slide = slides[_previewIndex] || slides[0] || { kind: 'cover' }
+    const stage = el('div', { className: 'writer-preview-stage' })
+    if (slide.kind === 'cover') {
+      stage.append(el('div', { className: 'pv-slide pv-cover' },
+        el('div', { className: 'pv-cover-top' },
+          el('div', { className: 'pv-cover-title' }, slide.title),
+          el('div', { className: 'pv-cover-sub' }, '지속가능경영보고서')),
+        el('div', { className: 'pv-cover-line' }),
+        el('div', { className: 'pv-cover-meta' }, '버전 v' + (slide.version || 1) + ' · ' + new Date().toLocaleDateString('ko-KR'))))
+    } else if (slide.kind === 'toc') {
+      stage.append(el('div', { className: 'pv-slide' },
+        el('div', { className: 'pv-accent' }),
+        el('div', { className: 'pv-title' }, '목차'),
+        el('div', { className: 'pv-body' }, ...slide.titles.map((t, i) => el('div', { className: 'pv-toc-item' }, (i + 1) + '. ' + t)))))
+    } else {
+      stage.append(el('div', { className: 'pv-slide' },
+        el('div', { className: 'pv-accent' }),
+        el('div', { className: 'pv-sidebar' }),
+        el('div', { className: 'pv-title' }, slide.title + (slide.part > 1 ? ' (계속)' : '')),
+        el('div', { className: 'pv-body' }, slide.content),
+        el('div', { className: 'pv-foot' }, 'v' + (doc.version || 1) + '  ·  ' + slide.part + '/' + slide.parts)))
+    }
+
+    const jump = el('select', { className: 'select-sm', style: 'max-width:220px', onChange: e => {
+      const i = parseInt(e.target.value)
+      if (!isNaN(i)) _writerPreviewNav(slides, i)
+    } }, slides.map((s, i) => el('option', { value: String(i), selected: i === _previewIndex }, _writerSlideLabel(s, i))))
+
+    return el('div', { className: 'card writer-preview' },
+      el('div', { className: 'writer-preview-head' },
+        el('strong', {}, '🖥 PPT 미리보기'),
+        el('span', { className: 'writer-preview-page' }, (_previewIndex + 1) + ' / ' + slides.length)),
+      stage,
+      el('div', { className: 'writer-preview-nav' },
+        el('button', { className: 'btn btn-sm btn-secondary', disabled: _previewIndex <= 0, onClick: () => _writerPreviewNav(slides, _previewIndex - 1) }, '◀ 이전'),
+        jump,
+        el('button', { className: 'btn btn-sm btn-secondary', disabled: _previewIndex >= slides.length - 1, onClick: () => _writerPreviewNav(slides, _previewIndex + 1) }, '다음 ▶')))
+  }
+
+  function _writerSlideLabel(s, i) {
+    if (s.kind === 'cover') return (i + 1) + '. 표지'
+    if (s.kind === 'toc') return (i + 1) + '. 목차'
+    return (i + 1) + '. ' + s.title + (s.parts > 1 ? ' (' + s.part + ')' : '')
+  }
+
+  function _writerPreviewNav(slides, index) {
+    const next = Math.max(0, Math.min(slides.length - 1, index))
+    _previewIndex = next
+    const slide = slides[next]
+    if (slide && slide.sectionId != null && String(slide.sectionId) !== String(_writerSectionId)) {
+      _flushWriterInput()
+      _writerSkipFlush = true
+      _writerSectionId = slide.sectionId
+      _previewSectionId = slide.sectionId
+    }
+    renderWriter()
   }
 
   function _fbKindLabel(kind) {
@@ -4388,7 +4499,8 @@
           const s2 = document.getElementById('writer-autosave')
           if (s2) s2.textContent = '자동 저장됨 ' + new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
         }, 1200)
-      }
+      },
+      onBlur: () => { clearTimeout(_writerAutosaveTimer); Store.updateReportSection(section.id, { content: ta.value }) }
     })
     ta.value = section.content || ''
     const all = Store.getFeedback(section.doc_id).filter(f => f.section_id === section.id)
@@ -4406,6 +4518,7 @@
           el('span', { id: 'writer-count', className: 'writer-count' }, (ta.value.length) + '자'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: () => deleteWriterSection(section.id) }, '섹션 삭제'))),
       el('div', { className: 'writer-ai-tools' },
+        aiBtn('🔎 전체 참고자료 근거', () => showWriterEvidence(section, ta.value)),
         aiBtn('🤖 참조자료로 다듬기', () => runWriterPolish(section, ta.value)),
         aiBtn('💬 AI 피드백', () => runWriterFeedback(section, ta.value)),
         aiBtn('✨ 이어쓰기', () => runWriterContinue(section, ta.value)),
@@ -4458,34 +4571,22 @@
     )
   }
 
-  function renderWriterRefPane(section) {
+  function showWriterEvidence(section, content) {
+    const refs = findRefsForSection(section.title, content || section.content || '', 12)
     const refDocs = Reference.getAll().filter(d => Store.canSeeOwned('referenceDocs', d))
-    if (_writerRefDocId && !refDocs.find(d => String(d.id) === String(_writerRefDocId))) _writerRefDocId = null
-    if (!_writerRefDocId && refDocs.length) _writerRefDocId = refDocs[refDocs.length - 1].id
-    const doc = _writerRefDocId ? Store.getReferenceDoc(_writerRefDocId) : null
-
-    const pane = el('div', { className: 'card writer-refpane' },
-      el('div', { className: 'writer-refpane-head' },
-        el('strong', {}, '📚 참고자료'),
-        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { if (section) runWriterRefPeek(section) } }, '이 섹션 근거')),
-      refDocs.length ? el('select', { className: 'select-sm', style: 'width:calc(100% - 24px);margin:12px 12px 0', onChange: e => { _writerRefDocId = e.target.value || null; renderWriter() } },
-        refDocs.map(d => el('option', { value: String(d.id), selected: String(d.id) === String(_writerRefDocId) }, d.title || d.file_name || '(제목 없음)')))
-        : el('div', { className: 'rd-empty', style: 'padding:12px' }, '등록된 참고자료가 없습니다.'),
-      el('div', { id: 'writer-ref-body', className: 'writer-refpane-body' },
-        doc ? (doc.markdown || '').slice(0, 20000) : (refDocs.length ? '문서를 선택하세요.' : '자료를 먼저 업로드하세요.')))
-    return pane
-  }
-
-  async function runWriterRefPeek(section) {
-    const body = document.getElementById('writer-ref-body')
-    if (!body) return
-    const refs = findRefsForSection(section.title, section.content || '', 8)
-    if (!refs.length) { body.textContent = '이 섹션과 연관된 참고 근거를 찾지 못했습니다.'; return }
-    body.innerHTML = ''
-    refs.forEach((r, i) => body.append(el('div', { className: 'refpeek-item' },
-      el('div', { className: 'refpeek-meta' }, '[' + (i + 1) + '] ' + (r.source_org || '') + ' ' + (r.title || '') + (r.page ? ' p.' + r.page : '')),
-      el('div', { className: 'refpeek-text' }, (r.content || '').slice(0, 600)))))
-    Store.addFeedbackItem({ doc_id: section.doc_id, section_id: section.id, kind: 'coverage', message: '참고 근거 ' + refs.length + '건을 참고자료 패널에 표시했습니다.' })
+    if (!refDocs.length) { showToast('등록된 참고자료가 없습니다. [참고자료]에서 먼저 업로드하세요.', 'error'); return }
+    const wrap = el('div', {},
+      el('div', { style: { fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.7 } },
+        '등록된 참고자료 ' + refDocs.length + '건 전체(색인 ' + Store.getReferenceChunks().length + '청크)를 RAG 방식으로 검색한 결과입니다. 특정 문서를 지정할 필요 없이 섹션 제목·본문과 가장 관련 있는 근거를 자동으로 찾습니다.'),
+      refs.length
+        ? el('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, refs.map((r, i) =>
+            el('div', { className: 'refpeek-item' },
+              el('div', { className: 'refpeek-meta' }, '[' + (i + 1) + '] ' + (r.source_org || '') + ' ' + (r.title || '') + (r.page ? ' p.' + r.page : '') + (r.section_title ? ' · ' + r.section_title : '')),
+              el('div', { className: 'refpeek-text' }, (r.content || '').slice(0, 700)))))
+        : el('div', { style: { padding: 16, color: '#9ca3af', textAlign: 'center' } }, '이 섹션과 연관된 근거를 찾지 못했습니다. 내용을 더 작성하거나 참고자료를 추가하세요.'))
+    modal('🔎 전체 참고자료 근거 — ' + (section.title || ''), wrap)
+    const saveBtn = document.getElementById('modal-save')
+    if (saveBtn) { saveBtn.textContent = '닫기'; saveBtn.onclick = () => closeModal() }
   }
 
   async function runWriterContinue(section, content) {
@@ -6384,6 +6485,76 @@
     c.append(table)
   }
 
+  // ==================== Settings: AI 연결 ====================
+  function renderAIConfig() {
+    const c = document.getElementById('aicfg-content')
+    if (!c) return
+    const cfg = Store.getAIConfig()
+    const presets = {
+      opencode: { endpoint: '/api/opencode/generate', model: 'big-pickle', hint: '내부 게이트웨이(open). 별도 키 없이 동작하는 호스팅 환경에서 사용합니다.' },
+      openai: { endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', hint: 'OpenAI 호환 Chat Completions API. API 키가 필요합니다.' },
+      anthropic: { endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-3-5-sonnet-latest', hint: 'Anthropic Messages API. API 키가 필요합니다.' },
+      gemini: { endpoint: '', model: 'gemini-1.5-flash', hint: 'Google Gemini. 엔드포인트를 비우면 모델명으로 자동 생성합니다. (API 키 필요)' },
+      ollama: { endpoint: 'http://localhost:11434/api/chat', model: 'llama3.1', hint: '로컬 Ollama 서버. 같은 PC에서 실행 중일 때 사용합니다.' },
+      custom: { endpoint: cfg.endpoint, model: cfg.model, hint: 'OpenAI 호환 엔드포인트를 직접 지정합니다.' }
+    }
+    const state = { ...cfg }
+    const inputStyle = 'width:100%;padding:9px 11px;border:1px solid #e4e7eb;border-radius:8px;font-size:13px;outline:none'
+    const labelStyle = 'font-size:12px;font-weight:600;color:#374151;margin-bottom:5px;display:block'
+    const status = el('div', { style: 'font-size:12px;min-height:20px;margin-top:10px;color:#6b7280;line-height:1.6' })
+
+    const providerSel = el('select', { id: 'aicfg-provider', style: inputStyle, onChange: e => {
+      state.provider = e.target.value
+      const p = presets[state.provider]
+      if (p) { state.endpoint = p.endpoint; state.model = p.model; endpointInput.value = p.endpoint; modelInput.value = p.model }
+      hint.textContent = p ? p.hint : ''
+    } }, Object.keys(presets).map(k => el('option', { value: k, selected: state.provider === k }, k)))
+    const endpointInput = el('input', { id: 'aicfg-endpoint', type: 'text', value: state.endpoint, style: inputStyle, placeholder: 'https://... 또는 /api/opencode/generate', onInput: e => { state.endpoint = e.target.value } })
+    const modelInput = el('input', { id: 'aicfg-model', type: 'text', value: state.model, style: inputStyle, onInput: e => { state.model = e.target.value } })
+    const keyInput = el('input', { id: 'aicfg-key', type: 'password', value: state.apiKey, style: inputStyle, placeholder: 'sk-... (이 브라우저에만 저장됩니다)', onInput: e => { state.apiKey = e.target.value } })
+    const tempInput = el('input', { id: 'aicfg-temp', type: 'number', min: 0, max: 2, step: 0.1, value: state.temperature, style: inputStyle, onInput: e => { state.temperature = parseFloat(e.target.value) } })
+    const maxInput = el('input', { id: 'aicfg-max', type: 'number', min: 256, max: 32000, step: 256, value: state.maxTokens, style: inputStyle, onInput: e => { state.maxTokens = parseInt(e.target.value) || 2000 } })
+    const hint = el('div', { style: 'font-size:12px;color:#9ca3af;line-height:1.6;margin-top:6px' }, presets[state.provider]?.hint || '')
+
+    const save = () => {
+      Store.setAIConfig({ provider: state.provider, endpoint: state.endpoint, model: state.model, apiKey: state.apiKey, temperature: state.temperature, maxTokens: state.maxTokens })
+      showToast('AI 연결 설정을 저장했습니다.', 'success')
+      status.style.color = '#059669'; status.textContent = '저장됨 · ' + state.provider + ' · ' + state.model
+    }
+    const test = async () => {
+      save()
+      status.style.color = '#6b7280'; status.textContent = '연결 테스트 중...'
+      const r = await AI.testConnection()
+      if (r.ok) { status.style.color = '#059669'; status.textContent = '✅ 연결 성공 · 응답: ' + r.sample }
+      else { status.style.color = '#dc2626'; status.textContent = '❌ ' + r.error }
+    }
+
+    const field = (label, control) => el('div', { style: { flex: '1 1 240px', minWidth: 200 } }, el('label', { style: labelStyle }, label), control)
+
+    c.innerHTML = ''
+    c.append(
+      el('div', { className: 'card' },
+        el('div', { className: 'card-header' }, el('h3', {}, '🤖 AI 연결 설정')),
+        el('div', { style: 'padding:16px;display:flex;flex-direction:column;gap:14px' },
+          el('div', { style: 'font-size:12px;color:#6b7280;line-height:1.7;padding:12px;background:#F8FAFC;border-radius:8px' },
+            '보고서 작성기·AI 초안·컴플라이언스 점검 등 모든 AI 기능이 이 연결을 사용합니다. ',
+            el('strong', {}, '엔드포인트가 잘못되거나 서버에 연결할 수 없으면 AI 기능은 오류를 표시하며, 점검류는 키워드 기반 로컬 점검으로 자동 대체됩니다.'),
+            ' API 키는 서버로만 전송되며 이 브라우저(localStorage)에만 저장되고 Supabase에는 동기화되지 않습니다.'),
+          field('제공자', providerSel),
+          hint,
+          field('엔드포인트 URL', endpointInput),
+          field('모델', modelInput),
+          field('API 키 (선택)', keyInput),
+          el('div', { style: 'display:flex;gap:14px;flex-wrap:wrap' },
+            field('Temperature', tempInput),
+            field('Max tokens', maxInput)),
+          el('div', { style: 'display:flex;gap:8px' },
+            el('button', { className: 'btn btn-primary', onClick: save }, '💾 저장'),
+            el('button', { className: 'btn btn-secondary', onClick: test }, '🔌 연결 테스트')),
+          status))
+    )
+  }
+
   // ==================== Settings: Users ====================
   function switchSettingsTab(tabId) {
     document.querySelectorAll('#page-settings .tab').forEach(t => t.classList.remove('active'))
@@ -6402,6 +6573,7 @@
     if (tabId === 'tab-departments') renderDepartments()
     if (tabId === 'tab-weights') renderWeights()
     if (tabId === 'tab-agencies') renderAgencies()
+    if (tabId === 'tab-aicfg') renderAIConfig()
     if (tabId === 'tab-audit') renderAuditLogs()
   }
 
@@ -6765,6 +6937,7 @@
   window.renderCompanies = renderCompanies
   window.renderDepartments = renderDepartments
   window.renderWeights = renderWeights
+  window.renderAIConfig = renderAIConfig
   window.openAddCompany = openAddCompany
   window.openAddDepartment = openAddDepartment
   window.editDepartment = editDepartment

@@ -384,33 +384,87 @@ ${evidenceExcerpts}
     }
   },
 
-  async _callAI(messages) {
-    try {
-      const response = await fetch('/api/opencode/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'big-pickle',
-          messages,
-          temperature: 0.3,
-          max_tokens: 2000
-        })
-      })
-      if (!response.ok) throw new Error(`AI 호출 실패: ${response.status}`)
-      const data = await response.json()
-      return data.choices?.[0]?.message?.content || ''
-    } catch (err) {
-      console.warn('AI API 호출 실패, 더미 데이터 반환:', err.message)
-      const indicatorHint = messages.find(m => m.role === 'user')?.content?.match(/지표코드: (.+)/)?.[1] || ''
-      return JSON.stringify({
-        draft_text: `[AI 오프라인 모드] 증빙 데이터를 기반으로 보고서 초안을 생성해야 합니다.\n\n지표: ${indicatorHint}\n\nAPI 연결 후 실제 초기가 생성됩니다.`,
-        pillar_coverage: { policy: false, action: false, result: false },
-        missing_pillars: ['policy', 'action', 'result'],
-        cited_evidence_ids: [],
-        unsupported_claims_flagged: [],
-        confidence: 'LOW'
-      })
+  _aiConfig() {
+    try { if (typeof Store !== 'undefined' && Store.getAIConfig) return Store.getAIConfig() } catch (e) {}
+    return { provider: 'opencode', endpoint: '/api/opencode/generate', model: 'big-pickle', apiKey: '', temperature: 0.3, maxTokens: 2000 }
+  },
+
+  _aiError(message) { const err = new Error(message); err.ai = true; return err },
+
+  _extractText(data, provider) {
+    if (!data) return ''
+    if (provider === 'anthropic') return (data.content || []).map(c => c.text || '').join('')
+    if (provider === 'gemini') return ((data.candidates || [])[0]?.content?.parts || []).map(p => p.text || '').join('')
+    if (provider === 'ollama') return data.message?.content || data.response || ''
+    return data.choices?.[0]?.message?.content || data.output_text || data.reply || ''
+  },
+
+  _buildAIRequest(cfg, messages) {
+    const provider = cfg.provider || 'opencode'
+    if (provider === 'anthropic') {
+      const system = (messages.find(m => m.role === 'system') || {}).content || ''
+      const rest = messages.filter(m => m.role !== 'system')
+      return {
+        url: cfg.endpoint || 'https://api.anthropic.com/v1/messages',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' },
+        body: { model: cfg.model, max_tokens: cfg.maxTokens, system, messages: rest }
+      }
     }
+    if (provider === 'gemini') {
+      const sys = (messages.find(m => m.role === 'system') || {}).content
+      const contents = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+      const url = cfg.endpoint || ('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(cfg.model) + ':generateContent?key=' + encodeURIComponent(cfg.apiKey))
+      return { url, headers: { 'Content-Type': 'application/json' }, body: { contents, systemInstruction: sys ? { parts: [{ text: sys }] } : undefined, generationConfig: { temperature: cfg.temperature, maxOutputTokens: cfg.maxTokens } } }
+    }
+    const headers = { 'Content-Type': 'application/json' }
+    if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey
+    const defaultUrl = provider === 'ollama' ? 'http://localhost:11434/api/chat'
+      : provider === 'openai' ? 'https://api.openai.com/v1/chat/completions'
+      : '/api/opencode/generate'
+    return { url: cfg.endpoint || defaultUrl, headers, body: { model: cfg.model, messages, temperature: cfg.temperature, max_tokens: cfg.maxTokens, stream: false } }
+  },
+
+  async _callAI(messages) {
+    const cfg = this._aiConfig()
+    if (!cfg.endpoint) throw this._aiError('AI 엔드포인트가 설정되지 않았습니다. [설정 › AI 연결]에서 구성하세요.')
+    const req = this._buildAIRequest(cfg, messages)
+    let response
+    try {
+      response = await fetch(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify(req.body) })
+    } catch (err) {
+      throw this._aiError('AI 서버에 연결할 수 없습니다 (' + (err && err.message) + '). [설정 › AI 연결]을 확인하세요.')
+    }
+    if (!response.ok) {
+      let detail = ''
+      try {
+        const j = await response.json()
+        detail = j.error?.message || (typeof j.error === 'string' ? j.error : '') || j.message || ''
+      } catch (e) {}
+      throw this._aiError('AI 호출 실패 (' + response.status + ')' + (detail ? ': ' + detail : ''))
+    }
+    const data = await response.json()
+    const text = this._extractText(data, cfg.provider)
+    if (!text || !String(text).trim()) throw this._aiError('AI 응답이 비어 있습니다.')
+    return text
+  },
+
+  async testConnection() {
+    try {
+      const raw = await this._callAI([
+        { role: 'system', content: '연결 테스트입니다. 다른 말 없이 정확히 "OK"만 출력하세요.' },
+        { role: 'user', content: 'OK' }
+      ])
+      return { ok: true, sample: String(raw).trim().slice(0, 160) }
+    } catch (e) { return { ok: false, error: e.message } }
+  },
+
+  _localNormalize(text) {
+    return String(text || '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\s+([,.!?;:)\]])/g, '$1')
+      .replace(/([,.!?;:])(?=\S)/g, '$1 ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
   },
 
   approveDraft(draftId, reviewerId, feedback = '') {
@@ -638,9 +692,11 @@ ${text}
         { role: 'user', content: userPrompt }
       ])
       const parsed = this._safeParseJson(raw)
-      return { draft_text: parsed?.draft_text || raw || '' }
+      const out = String(parsed?.draft_text || raw || '').trim()
+      if (out) return { draft_text: out }
+      return { draft_text: this._localNormalize(text), offline: true, note: 'AI 응답 없음 → 로컬 정리만 적용' }
     } catch (err) {
-      return { error: err.message }
+      return { draft_text: this._localNormalize(text), offline: true, note: 'AI 미연결 → 로컬 정리만 적용' }
     }
   },
 
@@ -716,9 +772,36 @@ ${(content || '').slice(0, 4000)}
       if (parsed && (Array.isArray(parsed.covered) || Array.isArray(parsed.gaps))) {
         return { covered: parsed.covered || [], gaps: parsed.gaps || [], summary: parsed.summary || '' }
       }
-      return { covered: [], gaps: [], summary: '분석 결과를 해석하지 못했습니다.' }
+      return this._ruleCoverageCheck(content)
     } catch (err) {
-      return { error: err.message }
+      return this._ruleCoverageCheck(content)
+    }
+  },
+
+  _ruleCoverageCheck(content) {
+    const t = String(content || '')
+    const defs = [
+      { standard: 'GRI 2', label: '조직·거버넌스', re: /(거버넌스|이사회|지배구조|위원회|조직 개요|경영진)/ },
+      { standard: 'GRI 3', label: '중대성 평가', re: /(중대성|중대 이슈|우선순위|이해관계자|매트릭스)/ },
+      { standard: 'GRI 205', label: '반부패·윤리', re: /(반부패|부패|윤리|청렴|공정거래|내부고발)/ },
+      { standard: 'GRI 302', label: '에너지', re: /(에너지|전력|재생에너지|kwh|mwh|에너지 사용)/i },
+      { standard: 'GRI 305', label: '온실가스 배출', re: /(배출|온실가스|탄소|scope|스코프|tco2|넷제로|감축)/i },
+      { standard: 'GRI 401', label: '고용·인권', re: /(고용|채용|근로|정규직|인력|인권|다양성|차별)/ },
+      { standard: 'GRI 403', label: '안전보건', re: /(안전|보건|재해|산업재해|ltifr|사고율)/i },
+      { standard: 'GRI 413', label: '지역사회', re: /(지역사회|사회공헌|기부|봉사|상생)/ },
+      { standard: 'ISSB S1', label: '지속가능성 재무공시', re: /(지속가능성|재무영향|리스크와 기회|통제|내부통제)/ },
+      { standard: 'ISSB S2', label: '기후 관련 공시', re: /(기후|전환계획|시나리오|목표|감축|기후 리스크)/ },
+      { standard: 'TCFD', label: '기후 리스크 관리', re: /(리스크 관리|위험 관리|전략|시나리오 분석|감독)/ }
+    ]
+    const covered = [], gaps = []
+    defs.forEach(d => {
+      if (d.re.test(t)) covered.push({ standard: d.standard, label: d.label })
+      else gaps.push({ standard: d.standard, label: d.label, hint: '관련 정책·조치·성과 서술 또는 수치를 보강하세요.' })
+    })
+    return {
+      covered,
+      gaps: gaps.slice(0, 6),
+      summary: 'AI 미연결 상태로 키워드 기반 점검을 수행했습니다. (충족 ' + covered.length + '/' + defs.length + ' 항목) · [설정 › AI 연결] 후 정밀 분석을 사용하세요.'
     }
   },
 

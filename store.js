@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.4.0'
+const APP_VERSION = 'v2.4.1'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -577,7 +577,8 @@ const Store = {
       reportDocs: [],
       reportDocSections: [],
       reportFeedback: [],
-      reportDocVersions: []
+      reportDocVersions: [],
+      aiConfig: null
     }
   },
 
@@ -1355,6 +1356,25 @@ const Store = {
   addFeedbackItem(fb) { this.data.reportFeedback.push({ id: Date.now() + Math.random(), status: 'open', created_at: new Date().toISOString(), ...fb }); this._save(); return fb },
   updateFeedbackItem(id, updates) { const i = (this.data.reportFeedback || []).findIndex(f => f.id === id); if (i > -1) { Object.assign(this.data.reportFeedback[i], updates); this._save() } },
   deleteFeedbackItem(id) { this.data.reportFeedback = (this.data.reportFeedback || []).filter(f => f.id !== id); this._save() },
+
+  // ==== AI Connection ====
+  getAIConfig() {
+    const cfg = this.data.aiConfig || {}
+    return {
+      provider: cfg.provider || 'opencode',
+      endpoint: cfg.endpoint || '/api/opencode/generate',
+      model: cfg.model || 'big-pickle',
+      apiKey: cfg.apiKey || '',
+      temperature: cfg.temperature != null ? cfg.temperature : 0.3,
+      maxTokens: cfg.maxTokens != null ? cfg.maxTokens : 2000
+    }
+  },
+  setAIConfig(cfg) { this.data.aiConfig = { ...(this.data.aiConfig || {}), ...cfg }; this._save(); return this.getAIConfig() },
+  setReportSectionOrder(ids) {
+    const arr = this.data.reportDocSections || []
+    ids.forEach((id, i) => { const s = arr.find(x => x.id === id); if (s) s.sort_order = i + 1 })
+    this._save()
+  },
 
   // ==== Agency Master ====
   getAgencyMaster() { return this.data.agencyMaster || [] },
