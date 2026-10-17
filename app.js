@@ -6578,8 +6578,8 @@
     }
     const state = { ...cfg, fallbacks: (cfg.fallbacks || []).map(f => ({ ...f })) }
     const inputStyle = 'width:100%;padding:9px 11px;border:1px solid #e4e7eb;border-radius:8px;font-size:13px;outline:none'
-    const labelStyle = 'font-size:12px;font-weight:600;color:#374151;margin-bottom:5px;display:block'
-    const status = el('div', { style: 'font-size:12px;min-height:20px;margin-top:10px;color:#6b7280;line-height:1.6' })
+    const labelStyle = 'font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;display:block'
+    const status = el('div', { style: 'font-size:12px;min-height:20px;margin-top:2px;color:#6b7280;line-height:1.6' })
 
     const providerSel = el('select', { id: 'aicfg-provider', style: inputStyle, onChange: e => {
       state.provider = e.target.value
@@ -6592,7 +6592,7 @@
     const keyInput = el('input', { id: 'aicfg-key', type: 'password', value: state.apiKey, style: inputStyle, placeholder: 'sk-... (이 브라우저에만 저장됩니다)', onInput: e => { state.apiKey = e.target.value } })
     const tempInput = el('input', { id: 'aicfg-temp', type: 'number', min: 0, max: 2, step: 0.1, value: state.temperature, style: inputStyle, onInput: e => { state.temperature = parseFloat(e.target.value) } })
     const maxInput = el('input', { id: 'aicfg-max', type: 'number', min: 256, max: 32000, step: 256, value: state.maxTokens, style: inputStyle, onInput: e => { state.maxTokens = parseInt(e.target.value) || 2000 } })
-    const hint = el('div', { style: 'font-size:12px;color:#9ca3af;line-height:1.6;margin-top:6px' }, presets[state.provider]?.hint || '')
+    const hint = el('div', { style: 'font-size:12px;color:#9ca3af;line-height:1.6;margin-top:-2px;margin-bottom:2px' }, presets[state.provider]?.hint || '')
 
     const save = () => {
       Store.setAIConfig({
@@ -6614,7 +6614,7 @@
       } else { status.style.color = '#dc2626'; status.textContent = '❌ ' + r.error }
     }
 
-    const field = (label, control) => el('div', { style: { flex: '1 1 240px', minWidth: 200 } }, el('label', { style: labelStyle }, label), control)
+    const field = (label, control, extra) => el('div', { style: Object.assign({ minWidth: 0 }, extra || {}) }, el('label', { style: labelStyle }, label), control)
 
     const fbContainer = el('div', { style: 'display:flex;flex-direction:column;gap:10px' })
     const renderFallbackRows = () => {
@@ -6648,8 +6648,8 @@
     c.append(
       el('div', { className: 'card' },
         el('div', { className: 'card-header' }, el('h3', {}, '🤖 AI 연결 설정')),
-        el('div', { style: 'padding:16px;display:flex;flex-direction:column;gap:14px' },
-          el('div', { style: 'font-size:12px;color:#6b7280;line-height:1.7;padding:12px;background:#F8FAFC;border-radius:8px' },
+        el('div', { style: 'padding:16px;display:flex;flex-direction:column;gap:10px' },
+          el('div', { style: 'font-size:12px;color:#6b7280;line-height:1.7;padding:10px 12px;background:#F8FAFC;border-radius:8px' },
             '보고서 작성기·AI 초안·컴플라이언스 점검 등 모든 AI 기능이 이 연결을 사용합니다. ',
             el('strong', {}, '엔드포인트가 잘못되거나 서버에 연결할 수 없으면 AI 기능은 오류를 표시하며, 점검류는 키워드 기반 로컬 점검으로 자동 대체됩니다.'),
             ' API 키는 서버로만 전송되며 이 브라우저(localStorage)에만 저장되고 Supabase에는 동기화되지 않습니다.'),
@@ -6659,9 +6659,9 @@
           field('모델', modelInput),
           field('API 키 (선택)', keyInput),
           el('div', { style: 'display:flex;gap:14px;flex-wrap:wrap' },
-            field('Temperature', tempInput),
-            field('Max tokens', maxInput)),
-          el('div', { style: 'border-top:1px dashed #e4e7eb;padding-top:14px;display:flex;flex-direction:column;gap:8px' },
+            field('Temperature', tempInput, { flex: '1 1 140px' }),
+            field('Max tokens', maxInput, { flex: '1 1 140px' })),
+          el('div', { style: 'border-top:1px dashed #e4e7eb;padding-top:12px;margin-top:2px;display:flex;flex-direction:column;gap:8px' },
             el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' },
               el('div', {},
                 el('div', { style: 'font-size:13px;font-weight:800;color:#0f3d3e' }, '🔁 폴백 체인 (자동 재시도)'),
