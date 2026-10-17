@@ -222,12 +222,25 @@
     _emit() { this.onChange(htmlFromBlocks(this.blocks), this.blocks, textFromBlocks(this.blocks)) }
     _updateStats() {
       const s = stats(this.blocks)
-      const el = this.root.querySelector('.rte-stats')
-      if (el) el.textContent = `${s.words}단어 · ${s.chars}자 · 약 ${s.reading}분 · ${s.blocks}블록`
+      const node = this.root.querySelector('.rte-stats')
+      if (node) node.textContent = `${s.words}단어 · ${s.chars}자 · 약 ${s.reading}분 · ${s.blocks}블록`
+    }
+    _focusActive() {
+      const self = this
+      setTimeout(() => {
+        if (!window.getSelection) return
+        const bodies = self.root.querySelectorAll('.rte-block')
+        const bd = bodies[self._active]
+        if (!bd || !bd.isContentEditable) return
+        bd.focus()
+        const range = document.createRange()
+        range.selectNodeContents(bd); range.collapse(false)
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range)
+      }, 0)
     }
 
     _toolbar() {
-      const btn = (title, label, fn) => el('button', { className: 'rte-btn', title, onClick: fn }, label)
+      const btn = (title, label, fn) => el('button', { className: 'rte-btn', title, onMousedown: e => e.preventDefault(), onClick: fn }, label)
       const cmd = (c, v) => () => { this._exec(c, v) }
       const type = (t) => () => { this.setActiveType(t) }
       return el('div', { className: 'rte-toolbar' },
@@ -253,7 +266,7 @@
           btn('구분선', '—', () => this.insertBlock('divider'))),
         el('div', { className: 'rte-sep' }),
         el('div', { className: 'rte-group' },
-          btn('링크', '🔗', cmd('createLink', promptLink)),
+          btn('링크', '🔗', () => this._exec('createLink', promptLink())),
           this.showFind && btn('찾기/바꾸기', '🔍', () => { this._findOpen = !this._findOpen; this.refresh() }),
           btn('블록 추가', '＋', () => this.insertBlockAfter(this._active))),
         el('div', { className: 'rte-spacer' }),
@@ -301,16 +314,14 @@
     }
 
     _exec(cmd, val) {
-      const active = this.root.querySelector('.rte-block.is-active')
-      if (active) active.focus()
       try { document.execCommand(cmd, false, val) } catch (e) {}
-      this._syncActiveFromDOM(); this.refresh(); this._emit()
+      this._syncAllFromDOM(); this.refresh(); this._emit(); this._focusActive()
     }
 
     setActiveType(type) {
       const idx = this._active
       if (type === 'bullets' || type === 'numbers') this._execList(type)
-      else { setBlockType(this.blocks, idx, type); this.refresh(); this._emit() }
+      else { setBlockType(this.blocks, idx, type); this.refresh(); this._emit(); this._focusActive() }
     }
 
     _execList(type) {
@@ -319,12 +330,12 @@
       if (!b) return
       if (b.type === type) setBlockType(this.blocks, idx, 'p')
       else setBlockType(this.blocks, idx, type)
-      this.refresh(); this._emit()
+      this.refresh(); this._emit(); this._focusActive()
     }
 
-    insertBlock(type) { insertBlock(this.blocks, this._active + 1, mkBlock(type, type === 'table' ? '' : '')); if (type === 'table') this.blocks[this._active + 1].rows = [['&nbsp;', '&nbsp;'], ['&nbsp;', '&nbsp;']]; this.refresh(); this._emit() }
-    insertBlockAfter(i) { insertBlock(this.blocks, i + 1, mkBlock('p', '')); this._active = i + 1; this.refresh(); this._emit() }
-    insertTable() { insertBlock(this.blocks, this._active + 1, { id: uid(), type: 'table', rows: [['&nbsp;', '&nbsp;'], ['&nbsp;', '&nbsp;']] }); this.refresh(); this._emit() }
+    insertBlock(type) { insertBlock(this.blocks, this._active + 1, mkBlock(type, '')); if (type === 'table') this.blocks[this._active + 1].rows = [['&nbsp;', '&nbsp;'], ['&nbsp;', '&nbsp;']]; this.refresh(); this._emit(); this._focusActive() }
+    insertBlockAfter(i) { insertBlock(this.blocks, i + 1, mkBlock('p', '')); this._active = i + 1; this.refresh(); this._emit(); this._focusActive() }
+    insertTable() { insertBlock(this.blocks, this._active + 1, { id: uid(), type: 'table', rows: [['&nbsp;', '&nbsp;'], ['&nbsp;', '&nbsp;']] }); this.refresh(); this._emit(); this._focusActive() }
 
     _blockList() {
       const list = el('div', { className: 'rte-list' })
@@ -396,7 +407,23 @@
       if (b && body._listType) this._syncList(body, i)
       else if (b && body._table) this._syncTable(body, i)
     }
-    _syncActiveFromDOM() { const a = this.root.querySelector('.rte-block.is-active'); if (a && a._idx != null) this._active = a._idx }
+    _syncAllFromDOM() {
+      const bodies = this.root.querySelectorAll('.rte-block')
+      Array.prototype.forEach.call(bodies, bd => {
+        const i = bd._idx
+        if (i == null) return
+        const b = this.blocks[i]
+        if (!b) return
+        if (bd._listType) this._syncList(bd, i)
+        else if (bd._table) this._syncTable(bd, i)
+        else if (bd.isContentEditable) b.html = bd.innerHTML
+      })
+    }
+    _syncActiveFromDOM() {
+      const row = this.root.querySelector('.rte-row.is-active')
+      const bd = row && row.querySelector('.rte-block')
+      if (bd && bd._idx != null) this._active = bd._idx
+    }
 
     _onKey(e, body, i) {
       if (e.key === 'Enter' && !e.shiftKey) {
