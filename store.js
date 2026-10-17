@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.6.0'
+const APP_VERSION = 'v2.9.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -35,7 +35,10 @@ const SB_SYNC_MAP = {
   reportDocs: ['tb_report_doc', ['id', 'title', 'status', 'progress', 'version', 'source_file', 'source_type', 'owner_id', 'created_at', 'updated_at']],
   reportDocSections: ['tb_report_doc_section', ['id', 'doc_id', 'title', 'content', 'sort_order', 'status', 'indicator_refs', 'created_at', 'updated_at']],
   reportFeedback: ['tb_report_feedback', ['id', 'doc_id', 'section_id', 'kind', 'message', 'suggestion', 'reference_title', 'page', 'status', 'created_at']],
-  reportDocVersions: ['tb_report_doc_version', ['id', 'doc_id', 'version', 'title', 'section_count', 'note', 'created_at']]
+  reportDocVersions: ['tb_report_doc_version', ['id', 'doc_id', 'version', 'title', 'section_count', 'note', 'created_at']],
+  dmaProjects: ['tb_dma_project', ['id', 'title', 'year', 'boundary', 'threshold', 'status', 'source', 'contract_version', 'assessment_id', 'approved_by', 'approved_at', 'notes', 'created_at']],
+  dmaStakeholders: ['tb_dma_stakeholder', ['id', 'project_id', 'name', 'type', 'influence', 'interest', 'engagement', 'source', 'created_at']],
+  dmaIROs: ['tb_dma_iro', ['id', 'project_id', 'type', 'topic', 'issue_code', 'dimension', 'theme_group', 'quadrant', 'reliability', 'sample_n', 'sample_error_pct', 'statement', 'value_chain', 'likelihood', 'impact_score', 'financial_score', 'evidence_ids', 'rationale', 'source', 'created_at']]
 }
 
 const OWNER_FIELD = {
@@ -954,8 +957,8 @@ const Store = {
   async pullFromSupabase(opts) {
     const sb = getSupabase ? getSupabase() : null
     if (!sb) return { ok: false, reason: 'no-supabase' }
-    const scope = (opts && opts.tables) || ['users', 'referenceDocs', 'referenceChunks', 'projectTasks', 'projectTaskLogs']
-    const added = { users: 0, referenceDocs: 0, referenceChunks: 0, projectTasks: 0, projectTaskLogs: 0 }
+    const scope = (opts && opts.tables) || ['users', 'referenceDocs', 'referenceChunks', 'projectTasks', 'projectTaskLogs', 'dmaProjects', 'dmaStakeholders', 'dmaIROs']
+    const added = { users: 0, referenceDocs: 0, referenceChunks: 0, projectTasks: 0, projectTaskLogs: 0, dmaProjects: 0, dmaStakeholders: 0, dmaIROs: 0 }
     const deletedDocs = new Set((this._getDeletedIds().referenceDocs || []).map(String))
 
     if (scope.includes('users')) {
@@ -1028,7 +1031,52 @@ const Store = {
       } catch (e) {}
     }
 
-    if (added.users || added.referenceDocs || added.referenceChunks || added.projectTasks || added.projectTaskLogs) {
+    if (scope.includes('dmaProjects')) {
+      try {
+        const { data, error } = await sb.from('tb_dma_project').select('*')
+        if (!error) {
+          const local = this._data.dmaProjects || []
+          const have = new Set(local.map(p => String(p.id)))
+          const del = new Set((this._getDeletedIds().dmaProjects || []).map(String))
+          const incoming = (data || []).filter(p => p && p.id != null && !have.has(String(p.id)) && !del.has(String(p.id)))
+          incoming.forEach(p => local.push(this._normalizeRemoteRow(p)))
+          this._data.dmaProjects = local
+          added.dmaProjects = incoming.length
+        }
+      } catch (e) {}
+    }
+
+    if (scope.includes('dmaStakeholders')) {
+      try {
+        const { data, error } = await sb.from('tb_dma_stakeholder').select('*')
+        if (!error) {
+          const local = this._data.dmaStakeholders || []
+          const have = new Set(local.map(s => String(s.id)))
+          const del = new Set((this._getDeletedIds().dmaStakeholders || []).map(String))
+          const incoming = (data || []).filter(s => s && s.id != null && !have.has(String(s.id)) && !del.has(String(s.id)))
+          incoming.forEach(s => local.push(this._normalizeRemoteRow(s)))
+          this._data.dmaStakeholders = local
+          added.dmaStakeholders = incoming.length
+        }
+      } catch (e) {}
+    }
+
+    if (scope.includes('dmaIROs')) {
+      try {
+        const { data, error } = await sb.from('tb_dma_iro').select('*')
+        if (!error) {
+          const local = this._data.dmaIROs || []
+          const have = new Set(local.map(r => String(r.id)))
+          const del = new Set((this._getDeletedIds().dmaIROs || []).map(String))
+          const incoming = (data || []).filter(r => r && r.id != null && !have.has(String(r.id)) && !del.has(String(r.id)))
+          incoming.forEach(r => local.push(this._normalizeRemoteRow(r)))
+          this._data.dmaIROs = local
+          added.dmaIROs = incoming.length
+        }
+      } catch (e) {}
+    }
+
+    if (added.users || added.referenceDocs || added.referenceChunks || added.projectTasks || added.projectTaskLogs || added.dmaProjects || added.dmaStakeholders || added.dmaIROs) {
       this._save()
       this._notify()
     }
@@ -1408,7 +1456,7 @@ const Store = {
   // ==== Double Materiality Assessment (DMA, 이중중대성평가) ====
   getDmaProjects() { return this.data.dmaProjects || [] },
   getDmaProject(id) { const nid = this._normId(id); return (this.data.dmaProjects || []).find(p => this._normId(p.id) === nid) || null },
-  addDmaProject(p) { if (!this.data.dmaProjects) this.data.dmaProjects = []; const proj = { id: Date.now(), year: new Date().getFullYear(), boundary: '', threshold: 3, status: 'draft', created_at: new Date().toISOString(), ...p }; this.data.dmaProjects.push(proj); this._save(); return proj },
+  addDmaProject(p) { if (!this.data.dmaProjects) this.data.dmaProjects = []; const proj = { id: Date.now(), year: new Date().getFullYear(), boundary: '', threshold: 3, status: 'draft', source: '', contract_version: '', assessment_id: '', approved_by: '', approved_at: '', notes: '', created_at: new Date().toISOString(), ...p }; this.data.dmaProjects.push(proj); this._save(); return proj },
   updateDmaProject(id, updates) { const nid = this._normId(id); const i = (this.data.dmaProjects || []).findIndex(p => this._normId(p.id) === nid); if (i > -1) { Object.assign(this.data.dmaProjects[i], updates); this._save() } },
   deleteDmaProject(id) { const nid = this._normId(id); (this.data.dmaStakeholders || []).filter(s => this._normId(s.project_id) === nid).forEach(s => this._addDeletedId('dmaStakeholders', s.id)); (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) === nid).forEach(r => this._addDeletedId('dmaIROs', r.id)); this.data.dmaProjects = (this.data.dmaProjects || []).filter(p => this._normId(p.id) !== nid); this.data.dmaStakeholders = (this.data.dmaStakeholders || []).filter(s => this._normId(s.project_id) !== nid); this.data.dmaIROs = (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) !== nid); this._addDeletedId('dmaProjects', id); this._save() },
 
@@ -1418,10 +1466,81 @@ const Store = {
   deleteDmaStakeholder(id) { this.data.dmaStakeholders = (this.data.dmaStakeholders || []).filter(x => x.id !== id); this._addDeletedId('dmaStakeholders', id); this._save() },
 
   getDmaIROs(projectId) { const nid = this._normId(projectId); return (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) === nid) },
-  addDmaIRO(r) { if (!this.data.dmaIROs) this.data.dmaIROs = []; const row = { id: Date.now() + Math.random(), type: 'Impact', topic: '', statement: '', value_chain: '자사', likelihood: 3, impact_score: 3, financial_score: 3, evidence_ids: [], rationale: '', source: '', created_at: new Date().toISOString(), ...r }; this.data.dmaIROs.push(row); this._save(); return row },
+  addDmaIRO(r) { if (!this.data.dmaIROs) this.data.dmaIROs = []; const row = { id: Date.now() + Math.random(), type: 'Impact', topic: '', issue_code: '', dimension: '', theme_group: '', quadrant: '', reliability: '', sample_n: 0, sample_error_pct: null, statement: '', value_chain: '자사', likelihood: 3, impact_score: 3, financial_score: 3, evidence_ids: [], rationale: '', source: '', created_at: new Date().toISOString(), ...r }; this.data.dmaIROs.push(row); this._save(); return row },
   updateDmaIRO(id, updates) { const i = (this.data.dmaIROs || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.dmaIROs[i], updates); this._save() } },
   deleteDmaIRO(id) { this.data.dmaIROs = (this.data.dmaIROs || []).filter(x => x.id !== id); this._addDeletedId('dmaIROs', id); this._save() },
   clearDmaIROs(projectId) { const nid = this._normId(projectId); (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) === nid).forEach(r => this._addDeletedId('dmaIROs', r.id)); this.data.dmaIROs = (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) !== nid); this._save() },
+
+  // ==== Materiality App 연계 (materiality-result.json 계약) ====
+  importMaterialityResult(payload) {
+    const p = (payload && typeof payload === 'object') ? payload : {}
+    const a = p.assessment || {}
+    const issues = Array.isArray(p.issues) ? p.issues : []
+    if (!issues.length) throw new Error('가져올 이슈(issues)가 없습니다.')
+    const dimToType = d => d === 'FINANCIAL' ? 'Risk' : d === 'OPPORTUNITY' ? 'Opportunity' : 'Impact'
+    const groupToType = g => ({ EMPLOYEE: 'internal', INVESTOR: 'investor', CUSTOMER: 'customer', PARTNER: 'supplier', COMMUNITY: 'community' })[g] || 'external'
+    const th = a.thresholds || {}
+    const proj = this.addDmaProject({
+      title: (a.year ? a.year + ' ' : '') + '이중중대성평가 (설문 연계)',
+      year: a.year || new Date().getFullYear(),
+      boundary: a.boundary || '',
+      threshold: Number(th.impact) || 3,
+      status: a.status === 'FINALIZED' ? 'final' : 'draft',
+      source: 'materiality-app',
+      contract_version: p.contract_version || '',
+      assessment_id: a.assessment_id || '',
+      approved_by: a.approved_by || '',
+      approved_at: a.approved_at || '',
+      notes: 'Materiality App(' + (p.source_version || '-') + ') 결과 임포트'
+    })
+    ;(p.stakeholder_groups || []).forEach(g => this.addDmaStakeholder({
+      project_id: proj.id,
+      name: g.name || g.group_type || '이해관계자',
+      type: groupToType(g.group_type),
+      influence: Number(g.weight) >= 1 ? 4 : 3,
+      interest: 3,
+      engagement: g.respondents ? ('설문 응답 ' + g.respondents + '명') : '',
+      source: 'materiality-app'
+    }))
+    const wsMap = {}
+    ;(p.iro_worksheets || []).forEach(w => { if (w && w.theme_group) wsMap[w.theme_group] = w })
+    issues.forEach(it => {
+      const ws = wsMap[it.theme_group]
+      const parts = []
+      if (it.evidence_note) parts.push(it.evidence_note)
+      if (ws) {
+        const d = []
+        if (ws.scale != null) d.push('규모 ' + ws.scale)
+        if (ws.scope != null) d.push('범위 ' + ws.scope)
+        if (ws.irremediability != null) d.push('치유불가 ' + ws.irremediability)
+        if (ws.likelihood != null) d.push('발생확률 ' + ws.likelihood)
+        if (ws.time_horizon) d.push('기간 ' + ws.time_horizon)
+        if (ws.analyst_note) d.push(ws.analyst_note)
+        if (d.length) parts.push('[내부 IRO] ' + d.join('·'))
+      }
+      this.addDmaIRO({
+        project_id: proj.id,
+        topic: it.esrs_topic || '',
+        issue_code: it.issue_code || '',
+        dimension: it.dimension || '',
+        theme_group: it.theme_group || '',
+        quadrant: it.quadrant || '',
+        reliability: it.reliability || '',
+        sample_n: Number(it.sample_n) || 0,
+        sample_error_pct: (it.sample_error_pct == null ? null : Number(it.sample_error_pct)),
+        type: dimToType(it.dimension),
+        statement: it.issue_name || it.issue_code || '',
+        value_chain: it.value_chain || '자사',
+        impact_score: Math.round(Number(it.impact_score) || 0),
+        financial_score: Math.round(Number(it.financial_score) || 0),
+        likelihood: 3,
+        rationale: parts.join(' / '),
+        source: 'materiality-app'
+      })
+    })
+    this.addAuditLog({ category: '이중중대성평가', action: '설문결과 임포트', detail: (a.year || '') + ' · 이슈 ' + issues.length + '건 · 승인자 ' + (a.approved_by || '-') })
+    return proj
+  },
 
   // ==== Import API Data (ERP 연동) ====
   importApiData(category, rows) {

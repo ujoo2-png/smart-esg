@@ -640,39 +640,59 @@
     try {
       const ghg = Store.getGHGActivities() || []
       const noCalc = ghg.filter(a => !a.calculated_emission && !a.co2eq)
-      if (noCalc.length) issues.push({ level: 'high', text: `온실가스 배출량 미산정 활동 ${noCalc.length}건`, page: 'ghg' })
+      if (noCalc.length) issues.push({ level: 'high', code: 'GHG_NO_CALC', text: `온실가스 배출량 미산정 활동 ${noCalc.length}건`, page: 'ghg' })
 
       const items = Store.getAssessmentItems() || []
       const noVal = items.filter(i => i.actual_value === '' || i.actual_value == null)
-      if (noVal.length) issues.push({ level: 'medium', text: `평가 항목 실적값 미입력 ${noVal.length}건`, page: 'assessment' })
+      if (noVal.length) issues.push({ level: 'medium', code: 'NO_ACTUAL_VALUE', text: `평가 항목 실적값 미입력 ${noVal.length}건`, page: 'assessment' })
 
       const kssbNames = (Store.getIndicators() || []).filter(i => i.authority_code === 'KSSB').map(i => i.indicator_name)
+      const dmaProjects = Store.getDmaProjects() || []
       let unlinked = 0
-      ;(Store.getDmaProjects() || []).forEach(p => {
+      dmaProjects.forEach(p => {
         _dmaMaterial(p).forEach(r => {
           const name = '[중대성] ' + (r.statement || r.topic || '이슈')
           if (!kssbNames.includes(name)) unlinked++
         })
       })
-      if (unlinked) issues.push({ level: 'high', text: `중대 이슈의 지표 연계 누락 ${unlinked}건`, page: 'dma' })
+      if (unlinked) issues.push({ level: 'high', code: 'DMA_UNLINKED_INDICATOR', text: `중대 이슈의 지표 연계 누락 ${unlinked}건`, page: 'dma' })
+
+      let noTarget = 0, lowResp = 0, anomaly = 0, missingIro = 0, readyToFinalize = 0
+      dmaProjects.forEach(p => {
+        const iros = Store.getDmaIROs(p.id) || []
+        if (!iros.length) return
+        if ((Store.getDmaStakeholders(p.id) || []).length === 0) noTarget++
+        lowResp += iros.filter(r => r.source === 'materiality-app' && r.reliability === 'LOW').length
+        anomaly += iros.filter(r => r.sample_error_pct != null && Number(r.sample_error_pct) > 15).length
+        const th = p.threshold || 3
+        const mat = iros.filter(r => _dmaIsMaterial(r, th))
+        const noReason = mat.filter(r => !r.rationale || !String(r.rationale).trim())
+        missingIro += noReason.length
+        if (p.status === 'draft' && mat.length && noReason.length === 0) readyToFinalize++
+      })
+      if (noTarget) issues.push({ level: 'medium', code: 'NO_TARGET_SELECTION', text: `이해관계자(참여 대상) 미등록 중대성 프로젝트 ${noTarget}건`, page: 'dma' })
+      if (lowResp) issues.push({ level: 'medium', code: 'LOW_RESPONSE_RATE', text: `표본 신뢰도 낮음(설문 신뢰도 LOW) 이슈 ${lowResp}건`, page: 'dma' })
+      if (anomaly) issues.push({ level: 'medium', code: 'ANOMALOUS_RESPONSES', text: `응답 편차 큰 이슈(표본오차 15% 초과) ${anomaly}건`, page: 'dma' })
+      if (missingIro) issues.push({ level: 'high', code: 'MISSING_IRO', text: `중대 이슈의 평가 근거 미작성 ${missingIro}건`, page: 'dma' })
+      if (readyToFinalize) issues.push({ level: 'low', code: 'READY_TO_FINALIZE', text: `확정 가능한 중대성 프로젝트 ${readyToFinalize}건 (중대 이슈 근거 완비)`, page: 'dma' })
 
       const suppliers = Store.getSuppliers() || []
       const risky = suppliers.filter(s => (s.last_vsme_grade && ['C', 'D'].includes(s.last_vsme_grade)) || (s.last_vsme_score != null && s.last_vsme_score < 60))
       if (risky.length) {
         const noDate = risky.filter(s => !s.last_vsme_date).length
-        issues.push({ level: 'medium', text: `고위험 협력사 ${risky.length}개 (미평가 ${noDate}개)`, page: 'supplier' })
+        issues.push({ level: 'medium', code: 'RISKY_SUPPLIER', text: `고위험 협력사 ${risky.length}개 (미평가 ${noDate}개)`, page: 'supplier' })
       }
 
       if (typeof ISSA !== 'undefined') {
         const cid = (Store.getCompanies() || [])[0]?.id
         const a = cid != null ? ISSA.getAssurance(cid) : null
         const openF = (a?.findings || []).filter(f => f.status === 'open')
-        if (openF.length) issues.push({ level: 'high', text: `미해결 보증 지적사항 ${openF.length}건`, page: 'issa' })
+        if (openF.length) issues.push({ level: 'high', code: 'OPEN_ASSURANCE_FINDING', text: `미해결 보증 지적사항 ${openF.length}건`, page: 'issa' })
       }
 
       const docs = Store.getReportDocs() || []
       const emptyDocs = docs.filter(d => (Store.getReportDocSections(d.id) || []).length === 0)
-      if (emptyDocs.length) issues.push({ level: 'low', text: `본문 섹션이 없는 보고서 ${emptyDocs.length}건`, page: 'writer' })
+      if (emptyDocs.length) issues.push({ level: 'low', code: 'EMPTY_REPORT_DOC', text: `본문 섹션이 없는 보고서 ${emptyDocs.length}건`, page: 'writer' })
     } catch (e) {}
     return issues
   }
@@ -7390,11 +7410,86 @@
       { type: 'Impact', statement: '부패·공정경쟁 위반이 시장 질서에 미치는 영향', value_chain: '자사' },
       { type: 'Risk', statement: '컴플라이언스 위반에 따른 제재·평판 리스크', value_chain: '자사' } ] }
   ]
+
+  const MAT_CONTRACT_VERSION = '1.0'
+  const MAT_THEME_GROUPS = [
+    { code: 'SAFETY', name: '산업안전', topic: 'S1', pillar: 'S', gri: 'GRI 403' },
+    { code: 'SUPPLY_CHAIN', name: '공급망', topic: 'S2', pillar: 'S', gri: 'GRI 308' },
+    { code: 'ENERGY_GHG', name: '에너지·온실가스', topic: 'E1', pillar: 'E', gri: 'GRI 302, 305' },
+    { code: 'WATER_WASTE_CHEM', name: '수자원·폐기물·화학물질', topic: 'E3', pillar: 'E', gri: 'GRI 303, 306' },
+    { code: 'QUALITY', name: '제품품질', topic: 'S4', pillar: 'S', gri: 'GRI 416' },
+    { code: 'PRODUCT_SAFETY_DEV', name: '제품안전·개발투자', topic: 'S4', pillar: 'S', gri: 'GRI 416' },
+    { code: 'LOCAL_ENV', name: '지역환경', topic: 'E2', pillar: 'E', gri: 'GRI 304' },
+    { code: 'CERT_PROCESS', name: '인증·공정검증', topic: 'G1', pillar: 'G', gri: 'GRI 416' },
+    { code: 'ETHICS_ESG_FINANCE', name: '윤리경영·ESG금융', topic: 'G1', pillar: 'G', gri: 'GRI 205, 206' },
+    { code: 'COMMUNITY', name: '지역사회', topic: 'S3', pillar: 'S', gri: 'GRI 413' },
+    { code: 'INFO_SECURITY', name: '정보보안', topic: 'G1', pillar: 'G', gri: 'GRI 418' },
+    { code: 'HUMAN_RIGHTS', name: '인권', topic: 'S1', pillar: 'S', gri: 'GRI 406, 407' },
+    { code: 'REPUTATION_QUALITY', name: '평판·신뢰', topic: 'S4', pillar: 'S', gri: 'GRI 416' },
+    { code: 'CAPABILITY', name: '기술경쟁력·국산화', topic: 'G1', pillar: 'G', gri: '-' }
+  ]
+  const MAT_ISSUE_POOL = [
+    { code: 'ISS-01', name: '산업안전 및 근로자 건강', dim: 'IMPACT', theme: 'SAFETY' },
+    { code: 'ISS-02', name: '협력사 및 공급망의 노동·안전 수준', dim: 'IMPACT', theme: 'SUPPLY_CHAIN' },
+    { code: 'ISS-03', name: '에너지 사용 및 온실가스 배출', dim: 'IMPACT', theme: 'ENERGY_GHG' },
+    { code: 'ISS-04', name: '물 사용량 및 폐수 관리', dim: 'IMPACT', theme: 'WATER_WASTE_CHEM' },
+    { code: 'ISS-05', name: '폐기물, 스크랩, 재활용', dim: 'IMPACT', theme: 'WATER_WASTE_CHEM' },
+    { code: 'ISS-06', name: '화학물질 및 유해물질 관리', dim: 'IMPACT', theme: 'WATER_WASTE_CHEM' },
+    { code: 'ISS-07', name: '제품 안전성 및 품질 신뢰성', dim: 'IMPACT', theme: 'QUALITY' },
+    { code: 'ISS-08', name: '고객 공정에서의 제품 사용 중 안전성', dim: 'IMPACT', theme: 'PRODUCT_SAFETY_DEV' },
+    { code: 'ISS-09', name: '소음, 악취, 분진 등 지역환경 영향', dim: 'IMPACT', theme: 'LOCAL_ENV' },
+    { code: 'ISS-10', name: '공정 변경 시 환경·안전 검증 수준', dim: 'IMPACT', theme: 'CERT_PROCESS' },
+    { code: 'ISS-11', name: '윤리경영 및 공정거래', dim: 'IMPACT', theme: 'ETHICS_ESG_FINANCE' },
+    { code: 'ISS-12', name: '지역사회 고용 및 지역경제 기여', dim: 'IMPACT', theme: 'COMMUNITY' },
+    { code: 'ISS-13', name: '개인정보 및 정보보안', dim: 'IMPACT', theme: 'INFO_SECURITY' },
+    { code: 'ISS-14', name: '인권, 차별, 다양성, 괴롭힘 예방', dim: 'IMPACT', theme: 'HUMAN_RIGHTS' },
+    { code: 'ISS-15', name: '품질사고 시 고객 신뢰 훼손 가능성', dim: 'IMPACT', theme: 'REPUTATION_QUALITY' },
+    { code: 'ISS-21', name: '산업재해로 인한 생산중단, 손해배상, 보험료 상승', dim: 'FINANCIAL', theme: 'SAFETY' },
+    { code: 'ISS-22', name: '고객사 품질 요구 미충족으로 인한 수주 상실', dim: 'FINANCIAL', theme: 'QUALITY' },
+    { code: 'ISS-23', name: '고객 ESG 요구로 인한 거래 조건 변화', dim: 'FINANCIAL', theme: 'ETHICS_ESG_FINANCE' },
+    { code: 'ISS-24', name: '에너지 비용 상승 및 효율개선 투자 필요', dim: 'FINANCIAL', theme: 'ENERGY_GHG' },
+    { code: 'ISS-25', name: '물·폐기물·화학물질 규제로 인한 설비 투자 부담', dim: 'FINANCIAL', theme: 'WATER_WASTE_CHEM' },
+    { code: 'ISS-26', name: '소재(PFAS·불소계 등) 규제 변화에 따른 대체 소재 대응 필요', dim: 'FINANCIAL', theme: 'WATER_WASTE_CHEM' },
+    { code: 'ISS-27', name: '신제품 개발 및 테스트 설비 투자 필요', dim: 'FINANCIAL', theme: 'PRODUCT_SAFETY_DEV' },
+    { code: 'ISS-28', name: '공급망 차질, 협력사 품질 문제, 납기 지연', dim: 'FINANCIAL', theme: 'SUPPLY_CHAIN' },
+    { code: 'ISS-29', name: '인증 미확보로 인한 고객 승인 지연 또는 상실', dim: 'FINANCIAL', theme: 'CERT_PROCESS' },
+    { code: 'ISS-30', name: '리콜, 반품, 클레임, A/S 비용 증가', dim: 'FINANCIAL', theme: 'QUALITY' },
+    { code: 'ISS-31', name: '자금조달, 은행평가, 투자유치 조건 변화', dim: 'FINANCIAL', theme: 'ETHICS_ESG_FINANCE' },
+    { code: 'ISS-32', name: '고객의 국산화 요구, 기술내재화 요구 대응 능력', dim: 'FINANCIAL', theme: 'CAPABILITY' },
+    { code: 'ISS-33', name: '수출, 해외 고객 대응 시 규격/인증 요건 충족 필요', dim: 'FINANCIAL', theme: 'CERT_PROCESS' },
+    { code: 'ISS-34', name: '데이터 유출, 기술유출, 영업비밀 유출 위험', dim: 'FINANCIAL', theme: 'INFO_SECURITY' },
+    { code: 'ISS-35', name: '평판 악화로 인한 매출 감소 및 신규고객 확보 저하', dim: 'FINANCIAL', theme: 'REPUTATION_QUALITY' },
+    { code: 'ISS-41', name: '에너지 효율 향상', dim: 'OPPORTUNITY', theme: 'ENERGY_GHG' },
+    { code: 'ISS-42', name: '친환경/저배출 소재 적용', dim: 'OPPORTUNITY', theme: 'WATER_WASTE_CHEM' },
+    { code: 'ISS-43', name: '불소계 소재 대체 대응', dim: 'OPPORTUNITY', theme: 'WATER_WASTE_CHEM' },
+    { code: 'ISS-44', name: '고객 맞춤형 설계 역량 강화', dim: 'OPPORTUNITY', theme: 'PRODUCT_SAFETY_DEV' },
+    { code: 'ISS-45', name: '테스트/검증 인프라 고도화', dim: 'OPPORTUNITY', theme: 'CERT_PROCESS' },
+    { code: 'ISS-46', name: '국산화 및 공급망 안정성 강화', dim: 'OPPORTUNITY', theme: 'SUPPLY_CHAIN' },
+    { code: 'ISS-47', name: '품질 데이터 및 추적관리 강화', dim: 'OPPORTUNITY', theme: 'QUALITY' },
+    { code: 'ISS-48', name: 'ESG 대응을 통한 수주 경쟁력 확보', dim: 'OPPORTUNITY', theme: 'ETHICS_ESG_FINANCE' }
+  ]
   let _dmaProjectId = null
   let _dmaTab = 'overview'
 
   function _dmaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
   function _dmaTopic(code) { return DMA_ESRS.find(t => t.code === code) || null }
+  function _matTheme(code) { return MAT_THEME_GROUPS.find(t => t.code === code) || null }
+  function _matIssue(code) { return MAT_ISSUE_POOL.find(i => i.code === code) || null }
+  function _matPillar(p) { return p === 'E' ? '환경' : p === 'S' ? '사회' : p === 'G' ? '지배구조' : '기타' }
+  function _matDimType(d) { return d === 'FINANCIAL' ? 'Risk' : d === 'OPPORTUNITY' ? 'Opportunity' : 'Impact' }
+  function _dmaQuadrant(r, th) { const i = (r.impact_score || 0) >= th, f = (r.financial_score || 0) >= th; return i && f ? 'DOUBLE' : i ? 'IMPACT_ONLY' : f ? 'FINANCIAL_ONLY' : 'NONE' }
+  function _dmaQuadrantLabel(q) { return { DOUBLE: '이중', IMPACT_ONLY: '영향', FINANCIAL_ONLY: '재무', NONE: '비중대' }[q] || '-' }
+  function _dmaReliabilityColor(v) { return v === 'HIGH' ? '#047857' : v === 'MEDIUM' ? '#b45309' : v === 'LOW' ? '#dc2626' : '#9ca3af' }
+  function _dmaReliabilityCell(r) {
+    if (!r.reliability) return el('td', { style: 'text-align:center;color:#9ca3af;font-size:11px' }, '-')
+    const c = _dmaReliabilityColor(r.reliability)
+    return el('td', { style: 'text-align:center' }, el('span', { style: `font-size:11px;padding:2px 8px;border-radius:10px;background:${c}1a;color:${c}` }, r.reliability))
+  }
+  function _dmaSampleCell(r) {
+    const n = r.sample_n || 0, e = r.sample_error_pct
+    if (!n && (e == null)) return el('td', { style: 'text-align:center;color:#9ca3af;font-size:11px' }, '-')
+    return el('td', { style: 'text-align:center;font-size:11px;color:#6b7280' }, `${n}명${e != null ? ' · ±' + (Math.round(Number(e) * 10) / 10) + '%' : ''}`)
+  }
   function _dmaCurrentProject() {
     const projects = Store.getDmaProjects()
     if (!projects.length) return null
@@ -7428,6 +7523,8 @@
       el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '🎯 이중중대성평가'),
       selector,
       el('div', { style: 'flex:1' }),
+      el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaImportMateriality() }, '⬆ 설문 결과 가져오기'),
+      el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaExportBundle(project) }, '⬇ 연계 번들 내보내기'),
       el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openDmaProjectModal(project.id) }, '⚙ 평가 설정'),
       el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openDmaProjectModal() }, '＋ 새 평가')))
 
@@ -7490,6 +7587,7 @@
           el('div', {}, el('strong', {}, '연도: '), String(project.year || '-')),
           el('div', {}, el('strong', {}, '보고 경계: '), project.boundary || '미입력'),
           el('div', {}, el('strong', {}, '상태: '), project.status === 'final' ? '확정' : '작성중'),
+          project.source === 'materiality-app' ? el('div', {}, el('strong', {}, '출처: '), '설문 앱 연계' + (project.contract_version ? ' (계약 v' + project.contract_version + ')' : '') + (project.approved_by ? ' · 승인자 ' + project.approved_by : '')) : null,
           project.notes ? el('div', {}, el('strong', {}, '메모: '), project.notes) : null)))
   }
 
@@ -7560,13 +7658,14 @@
   function _renderDmaIROs(host, project) {
     const list = Store.getDmaIROs(project.id)
     const th = project.threshold || 3
+    const locked = project.status === 'final'
     const header = el('div', { className: 'card-header', style: 'flex-wrap:wrap;gap:8px' },
       el('h3', {}, '중대 이슈(IRO) 도출'),
-      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      locked ? el('span', { style: 'font-size:12px;color:#047857;padding:4px 10px;border-radius:10px;background:#dcfce7' }, '🔒 확정됨 · 수정 잠금') : el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
         el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaSeedEsrs(project.id) }, '📚 ESRS 주요 IRO 불러오기'),
         el('button', { className: 'btn btn-sm btn-secondary', id: 'dmaAiBtn', onClick: () => _dmaGenerateIROs(project.id) }, '🤖 AI로 IRO 후보 생성'),
         el('button', { className: 'btn btn-sm btn-primary', onClick: () => openDmaIroModal(project.id) }, '＋ IRO 추가')))
-    const hint = el('div', { style: 'padding:8px 20px;font-size:11.5px;color:#9ca3af' }, '점수(1~5) 기준 · 영향: 규모·범위·치유불가능성 / 재무: 재무적 크기·발생확률 · 임계값 ' + th + ' 이상이면 중대 이슈로 판정')
+    const hint = el('div', { style: 'padding:8px 20px;font-size:11.5px;color:#9ca3af' }, '점수(1~5) 기준 · 영향: 규모·범위·치유불가능성 / 재무: 재무적 크기·발생확률 · 임계값 ' + th + ' 이상이면 중대 이슈로 판정' + (locked ? ' · 확정 상태에서는 수정하려면 평가 설정에서 상태를 작성중으로 변경하세요' : ''))
     let body
     if (list.length) {
       const thead = el('thead', {}, el('tr', {},
@@ -7585,8 +7684,9 @@
           el('td', { style: 'text-align:center' }, String(r.financial_score ?? '-')),
           el('td', { style: 'text-align:center' }, el('span', { style: `font-size:11px;padding:2px 8px;border-radius:10px;background:${isMat ? '#dcfce7' : '#f3f4f6'};color:${isMat ? '#047857' : '#6b7280'}` }, isMat ? '중대' : '비중대')),
           el('td', {},
-            el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => openDmaIroModal(project.id, r.id) }, '수정'),
-            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('삭제?')) { Store.deleteDmaIRO(r.id); renderDMA() } } }, '삭제')))
+            locked ? el('span', { style: 'font-size:11px;color:#9ca3af' }, r.source === 'materiality-app' ? '설문 연계' : '-') : el('span', {},
+              el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => openDmaIroModal(project.id, r.id) }, '수정'),
+              el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('삭제?')) { Store.deleteDmaIRO(r.id); renderDMA() } } }, '삭제'))))
       })
       body = el('div', { className: 'table-wrap' }, el('table', { className: 'table-dense' }, thead, el('tbody', {}, ...rows)))
     } else {
@@ -7728,15 +7828,19 @@
     const mat = _dmaMaterial(project)
     const th = project.threshold || 3
     const table = mat.length ? el('div', { className: 'table-wrap' }, el('table', { className: 'table-dense' },
-      el('thead', {}, el('tr', {}, el('th', { style: 'width:60px' }, '토픽'), el('th', {}, '중대 이슈'), el('th', { style: 'width:120px' }, 'GRI 연계'), el('th', { style: 'width:56px;text-align:center' }, '영향'), el('th', { style: 'width:56px;text-align:center' }, '재무'))),
+      el('thead', {}, el('tr', {}, el('th', { style: 'width:60px' }, '토픽'), el('th', {}, '중대 이슈'), el('th', { style: 'width:120px' }, 'GRI 연계'), el('th', { style: 'width:56px;text-align:center' }, '영향'), el('th', { style: 'width:56px;text-align:center' }, '재무'), el('th', { style: 'width:72px;text-align:center' }, '구분'), el('th', { style: 'width:76px;text-align:center' }, '신뢰도'), el('th', { style: 'width:110px;text-align:center' }, '표본'))),
       el('tbody', {}, ...mat.sort((a, b) => Math.max(b.impact_score, b.financial_score) - Math.max(a.impact_score, a.financial_score)).map(r => {
         const tp = _dmaTopic(r.topic)
+        const q = _dmaQuadrant(r, th)
         return el('tr', {},
           el('td', {}, tp ? tp.code : (r.topic || '-')),
           el('td', { style: 'font-size:12px' }, r.statement || '-'),
           el('td', { style: 'font-size:11px;color:#6b7280' }, tp ? tp.gri : '-'),
           el('td', { style: 'text-align:center' }, String(r.impact_score ?? '-')),
-          el('td', { style: 'text-align:center' }, String(r.financial_score ?? '-')))
+          el('td', { style: 'text-align:center' }, String(r.financial_score ?? '-')),
+          el('td', { style: 'text-align:center' }, el('span', { style: `font-size:11px;padding:2px 8px;border-radius:10px;background:${q === 'DOUBLE' ? '#dcfce7' : '#e0f2fe'};color:${q === 'DOUBLE' ? '#047857' : '#0369a1'}` }, _dmaQuadrantLabel(q))),
+          _dmaReliabilityCell(r),
+          _dmaSampleCell(r))
       })))) : el('p', { style: 'padding:20px;color:#9CA3AF;text-align:center' }, '중대 이슈가 없습니다. IRO 점수를 조정하거나 임계값을 낮춰보세요.')
     host.append(el('div', { className: 'card' },
       el('div', { className: 'card-header', style: 'flex-wrap:wrap;gap:8px' },
@@ -7758,11 +7862,92 @@
     const iros = Store.getDmaIROs(project.id)
     if (!iros.length) return alert('내보낼 IRO가 없습니다.')
     const th = project.threshold || 3
-    const rows = [['topic', 'type', 'statement', 'value_chain', 'impact_score', 'financial_score', 'material']]
-    iros.forEach(r => { const tp = _dmaTopic(r.topic); rows.push([r.topic || '', r.type, '"' + String(r.statement || '').replace(/"/g, '""') + '"', r.value_chain || '', r.impact_score, r.financial_score, _dmaIsMaterial(r, th) ? 'Y' : 'N']) })
+    const rows = [['topic', 'issue_code', 'type', 'dimension', 'statement', 'value_chain', 'impact_score', 'financial_score', 'quadrant', 'reliability', 'sample_n', 'sample_error_pct', 'material']]
+    iros.forEach(r => { rows.push([r.topic || '', r.issue_code || '', r.type, r.dimension || '', '"' + String(r.statement || '').replace(/"/g, '""') + '"', r.value_chain || '', r.impact_score, r.financial_score, _dmaQuadrant(r, th), r.reliability || '', r.sample_n || 0, (r.sample_error_pct == null ? '' : r.sample_error_pct), _dmaIsMaterial(r, th) ? 'Y' : 'N']) })
     const csv = '\uFEFF' + rows.map(r => r.join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `DMA_${project.year || ''}_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url)
+  }
+
+  function _dmaBuildBundle(project) {
+    const iros = Store.getDmaIROs(project.id)
+    const th = project.threshold || 3
+    const issues = iros.map(r => {
+      const tp = _dmaTopic(r.topic)
+      const mg = _matTheme(r.theme_group)
+      return {
+        issue_code: r.issue_code || '',
+        issue_name: r.statement || '',
+        theme_group: r.theme_group || '',
+        esrs_topic: r.topic || '',
+        pillar: tp ? tp.pillar : (mg ? _matPillar(mg.pillar) : ''),
+        gri_code: tp ? tp.gri : (mg ? mg.gri : ''),
+        dimension: r.dimension || '',
+        impact_score: r.impact_score ?? 0,
+        financial_score: r.financial_score ?? 0,
+        quadrant: _dmaQuadrant(r, th),
+        material: _dmaIsMaterial(r, th),
+        reliability: r.reliability || '',
+        sample_n: r.sample_n || 0,
+        sample_error_pct: (r.sample_error_pct == null ? null : r.sample_error_pct),
+        evidence_note: r.rationale || ''
+      }
+    })
+    return {
+      contract_version: MAT_CONTRACT_VERSION,
+      source_app: 'smart-esg',
+      source_version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''),
+      exported_at: new Date().toISOString(),
+      assessment: {
+        assessment_id: project.assessment_id || String(project.id),
+        year: project.year || new Date().getFullYear(),
+        method: 'DOUBLE_MATERIALITY',
+        status: project.status === 'final' ? 'FINALIZED' : 'DRAFT',
+        approved_by: project.approved_by || '',
+        approved_at: project.approved_at || '',
+        boundary: project.boundary || '',
+        thresholds: { impact: th, financial: th }
+      },
+      stakeholder_groups: Store.getDmaStakeholders(project.id).map(s => ({ group_type: s.type || '', name: s.name || '', weight: 1, respondents: 0 })),
+      issues,
+      exclusions: [],
+      iro_worksheets: []
+    }
+  }
+
+  function _dmaExportBundle(project) {
+    const bundle = _dmaBuildBundle(project)
+    const fname = `materiality-result-${project.year || ''}-${(typeof APP_VERSION !== 'undefined' ? APP_VERSION.replace(/^v/, '') : '')}.json`
+    _downloadTextFile(fname, JSON.stringify(bundle, null, 2), 'application/json;charset=utf-8')
+    Store.addAuditLog({ category: '이중중대성평가', action: '연계 번들 내보내기', user_id: currentUser?.id || null, user_name: currentUser?.name || '', detail: `프로젝트 ${project.year || project.id} · 이슈 ${bundle.issues.length}건` })
+    showToast('연계 번들(materiality-result.json)을 내려받았습니다.', 'success')
+  }
+
+  function _dmaImportMateriality() {
+    const inp = document.createElement('input')
+    inp.type = 'file'
+    inp.accept = '.json,application/json'
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]
+      if (!f) return
+      const reader = new FileReader()
+      reader.onload = () => _dmaImportBundleText(String(reader.result || ''))
+      reader.readAsText(f)
+    }
+    inp.click()
+  }
+
+  function _dmaImportBundleText(text) {
+    let payload
+    try { payload = JSON.parse(text) } catch (e) { return alert('JSON 파싱 실패: ' + (e && e.message)) }
+    if (!payload || typeof payload !== 'object') return alert('잘못된 파일입니다.')
+    if (!Array.isArray(payload.issues) || !payload.issues.length) return alert('이슈(issues) 데이터가 없습니다. Materiality App에서 내보낸 materiality-result.json인지 확인하세요.')
+    try {
+      const proj = Store.importMaterialityResult(payload)
+      _dmaProjectId = proj.id
+      renderDMA()
+      showToast(`설문 결과를 가져왔습니다. (이슈 ${payload.issues.length}건 · ${payload.assessment?.year || ''})`, 'success')
+    } catch (e) { alert('가져오기 실패: ' + (e && e.message)) }
   }
 
   function _dmaLinkToIndicators(project) {
@@ -7828,6 +8013,10 @@
   window.openDmaProjectModal = openDmaProjectModal
   window.openDmaStakeholderModal = openDmaStakeholderModal
   window.openDmaIroModal = openDmaIroModal
+  window._dmaImportMateriality = _dmaImportMateriality
+  window._dmaImportBundleText = _dmaImportBundleText
+  window._dmaExportBundle = _dmaExportBundle
+  window._dmaBuildBundle = _dmaBuildBundle
   window.renderIndicators = renderIndicators
   window.renderDashboard = renderDashboard
   window.renderNextActions = renderNextActions

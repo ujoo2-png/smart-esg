@@ -2,7 +2,7 @@
 
 지속가능경영보고서(ESG) 작성 · 평가 · 공시를 지원하는 웹 애플리케이션입니다.
 
-- 버전: **v2.6.0** (BUILD 75)
+- 버전: **v2.9.0** (BUILD 79)
 - 데이터: `localStorage`(원본) + Supabase(미러 동기화)
 - 별도 빌드 도구 없이 브라우저에서 바로 실행되는 정적 앱
 
@@ -11,9 +11,11 @@
 ## 주요 기능
 
 - **이중중대성평가(DMA)** — ESRS 11개 주제 기반 IRO(영향·리스크·기회) 도출, 이해관계자 참여, 영향·재무 2축 매트릭스, 임계값 기반 중대성 판정, KSSB 지표 연계, CSV 내보내기
+- **중대성평가 앱 연계** — 별도「중대성평가 모듈(v1.7.0)」에서 실시한 이해관계자 설문 결과를 표준 계약(`materiality-result.json`, contract v1.0)으로 가져와 이슈·점수·ESRS 토픽·구분(이중/영향/재무)·신뢰도·표본수를 DMA로 이관. 결과·연계 탭에서 구분(사분면) 확인, 확정(FINALIZED) 평가는 수정 잠금, 양방향 번들 내보내기 지원
+- **DMA 동기화** — 이중중대성평가(프로젝트·이해관계자·IRO)를 Supabase 미러에 동기화(로컬→원격 push + 원격→로컬 pull). `tb_dma_project`/`tb_dma_stakeholder`/`tb_dma_iro` 테이블 필요(`migration-dma.sql` 증분 적용 또는 `migration.sql` 전체)
 - **프로세스 워크플로우** — ① 기준·맥락 → ② 데이터 수집 → ③ 이중중대성평가 → ④ 지표·증빙 → ⑤ 초안 작성 → ⑥ 검증·보증 → ⑦ 제출·공시 7단계. 상단 프로세스 바(현재 위치·진행률 자동 표시) + 전체 구조도 페이지
 - **보증(AA1000AS v3 / ISSA 5000)** — 프레임워크 선택, AA1000AS 4대 원칙(포용성·중대성·대응성·영향) 자기평가, Type 1/2·Moderate/High, 적합성 기준 선택, 내재적 한계·후속 사건, 경영진 보고서 초안, 보증 증빙 패키지 원클릭 내보내기
-- **다음 할 일 & 데이터 품질** — 대시보드에서 미완료 프로세스 단계와 데이터 품질 이슈(배출량 미산정·실적값 미입력·지표 연계 누락·고위험 협력사·미해결 지적·빈 문서)를 자동 점검·안내
+- **다음 할 일 & 데이터 품질** — 대시보드에서 미완료 프로세스 단계와 데이터 품질 이슈(배출량 미산정·실적값 미입력·지표 연계 누락·중대성 대상 미선정·표본 신뢰도 낮음·응답 편차 큼·중대 이슈 근거 미작성·확정 가능 중대성 프로젝트·고위험 협력사·미해결 지적·빈 문서)를 코드 기반으로 자동 점검·안내
 - **지표 관리** — EcoVadis / KSSB(제1·2호) / KCGS / NICE / K-ESG 기관별 지표, 중요성(비핵심) 토글
 - **평가** — P-A-R 필러 가중치 점수 산정, 평가 이력, 승인 워크플로우
 - **증빙 관리** — 업로드(5MB)·태깅·상태·만료일·민감정보, 증빙-문장 강제 연결
@@ -35,7 +37,7 @@
 
 | 영역 | 파일 |
 |------|------|
-| 데이터 레이어 | `store.js`, `supabase.js`, `migration.sql` |
+| 데이터 레이어 | `store.js`, `supabase.js`, `migration.sql`, `migration-dma.sql` |
 | 도메인 로직 | `indicator.js`, `evidence.js`, `ghg.js`, `ai.js`, `report.js`, `gri.js`, `risk.js`, `monitor.js`, `issa.js`, `submit.js`, `supplier.js`, `supplierRisk.js`, `api-integration.js`, `reference.js` |
 | UI | `app.js`, `dashboard.js`, `components.js`, `editor.js`(블록 리치 에디터), `index.html`, `style.css` |
 | 인증 | `auth.js` |
@@ -49,6 +51,7 @@
 
 1. Supabase 프로젝트를 준비하고 `migration.sql`을 SQL Editor에서 실행합니다.
    - 미러 모드 스키마(`id` TEXT, 제약/트리거 없음, RLS 비활성)입니다.
+   - 기존 DB를 리셋하지 않고 DMA 테이블만 추가하려면 `migration-dma.sql`을 대신 실행합니다.
 2. `supabase.js`의 `SUPABASE_CONFIG`에 본인 프로젝트의 `url` / `anonKey` / `jwtKey`를 입력합니다.
 3. `index.html`을 브라우저로 열거나 정적 호스팅에 배포합니다.
 

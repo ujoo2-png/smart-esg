@@ -26,7 +26,8 @@ DROP TABLE IF EXISTS
     tb_weight_param, tb_rating_threshold, tb_agency_master, tb_data_masking_rule,
     tb_project_budget, tb_risk_register, tb_ghg_summary, tb_reference_doc,
     tb_report_doc, tb_report_doc_section, tb_report_feedback, tb_reference_chunk,
-    tb_project_task, tb_project_task_log
+    tb_project_task, tb_project_task_log,
+    tb_dma_project, tb_dma_stakeholder, tb_dma_iro
     CASCADE;
 
 DROP FUNCTION IF EXISTS calculate_co2eq() CASCADE;
@@ -817,6 +818,64 @@ FROM (VALUES
 ) AS m(src_code, tgt_code, type, conf)
 JOIN tb_indicator_master s ON s.agency_code='ECOVADIS' AND s.indicator_code=m.src_code
 JOIN tb_indicator_master t ON t.agency_code='KSSB' AND t.indicator_code=m.tgt_code;
+
+-- ============================================================
+-- 15-1. 이중중대성평가(DMA) 테이블
+-- ============================================================
+
+-- DMA 프로젝트 (평가 사이클 단위)
+CREATE TABLE IF NOT EXISTS tb_dma_project (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    title TEXT,
+    year INT,
+    boundary TEXT,
+    threshold INT DEFAULT 3,
+    status TEXT DEFAULT 'draft',
+    source TEXT,
+    contract_version TEXT,
+    assessment_id TEXT,
+    approved_by TEXT,
+    approved_at TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- DMA 이해관계자 참여
+CREATE TABLE IF NOT EXISTS tb_dma_stakeholder (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    project_id TEXT,
+    name TEXT,
+    type TEXT,
+    influence INT,
+    interest INT,
+    engagement TEXT,
+    source TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- DMA 이슈(IRO: 영향·리스크·기회)
+CREATE TABLE IF NOT EXISTS tb_dma_iro (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    project_id TEXT,
+    type TEXT,
+    topic TEXT,
+    issue_code TEXT,
+    dimension TEXT,
+    theme_group TEXT,
+    quadrant TEXT,
+    reliability TEXT,
+    sample_n INT,
+    sample_error_pct DECIMAL,
+    statement TEXT,
+    value_chain TEXT,
+    likelihood INT,
+    impact_score INT,
+    financial_score INT,
+    evidence_ids JSONB DEFAULT '[]'::jsonb,
+    rationale TEXT,
+    source TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
 
 -- ============================================================
 -- 16. RLS 비활성 + 권한 부여 (미러: anon 키로 읽기/쓰기 허용)
