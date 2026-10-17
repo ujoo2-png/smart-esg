@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>중대성평가 모듈 — Smart ESG (standalone)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">Smart ESG <span class="brand-sub">중대성평가 모듈</span></div>
+    <nav class="nav">
+      <a class="nav-link" href="#/" data-section="#/">파이프라인</a>
+      <a class="nav-link" href="#/assessments">①평가사이클</a>
+      <a class="nav-link" href="#/stakeholders">이해관계자</a>
+      <a class="nav-link" href="#/issuepool">이슈풀</a>
+      <a class="nav-link" href="#/esrs-topics">ESRS토픽</a>
+      <a class="nav-link" href="#/survey-list">전체 설문</a>
+    </nav>
+    <button id="btn-reset-demo" class="btn ghost small">데모 초기화</button>
+    <span class="version-badge" id="version-badge"></span>
+  </div>
+</header>
+
+<main class="app-shell">
+  <div id="app-content"></div>
+</main>
+
+<footer class="footer-note">
+  standalone 프로토타입 (<span id="footer-version"></span>) — 데이터는 브라우저 localStorage에 저장됩니다. 추후 Smart ESG(Supabase) 연동 시
+  <code>js/store.js</code>의 <code>db.*</code> 함수 내부만 교체하면 됩니다. 변경 이력은 <code>CHANGELOG.md</code> 참고.
+</footer>
+
+<script src="js/version.js"></script>
+<script src="js/vendor/xlsx.full.min.js"></script>
+<script src="js/seed-data.js"></script>
+<script src="js/export-utils.js"></script>
+<script src="js/integration-export.js"></script>
+<script src="js/store.js"></script>
+<script src="js/matrix.js"></script>
+<script src="js/pages.js"></script>
+<script src="js/app.js"></script>
+<script src="js/smart-esg-bridge.js"></script>
+</body>
+</html>

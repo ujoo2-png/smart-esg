@@ -7470,6 +7470,10 @@
   ]
   let _dmaProjectId = null
   let _dmaTab = 'overview'
+  let _dmaAppFrame = null
+  let _dmaAppReqSeq = 0
+  const _dmaAppPending = {}
+  let _dmaAppListenerBound = false
 
   function _dmaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
   function _dmaTopic(code) { return DMA_ESRS.find(t => t.code === code) || null }
@@ -7502,6 +7506,91 @@
   function _dmaTypeColor(type) { return type === 'Risk' ? '#dc2626' : type === 'Opportunity' ? '#2563EB' : '#0f766e' }
   function _dmaTypeLabel(type) { return type === 'Risk' ? '리스크' : type === 'Opportunity' ? '기회' : '영향' }
 
+  // ==================== 설문·분석 앱(standalone) iframe 연계 ====================
+  function _dmaAppOnMessage(ev) {
+    const d = ev && ev.data
+    if (!d || typeof d !== 'object' || d.source !== 'materiality-app') return
+    if (d.type === 'MAT_APP_WANT_PICK') { _dmaAppPick(); return }
+    const pending = d.requestId ? _dmaAppPending[d.requestId] : null
+    if (!pending) return
+    delete _dmaAppPending[d.requestId]
+    if (d.type === 'MAT_APP_LIST_RESULT') pending.resolve(d.assessments || [])
+    else if (d.type === 'MAT_APP_BUNDLE') pending.resolve(d.bundle)
+    else if (d.type === 'MAT_APP_ERROR') pending.reject(new Error(d.error || '연계 앱 오류'))
+  }
+
+  function _dmaAppBindListener() {
+    if (_dmaAppListenerBound) return
+    if (!window || typeof window.addEventListener !== 'function') return
+    window.addEventListener('message', _dmaAppOnMessage)
+    _dmaAppListenerBound = true
+  }
+
+  function _dmaAppRequest(type, extra) {
+    return new Promise((resolve, reject) => {
+      const frame = _dmaAppFrame || document.querySelector('.dma-app-frame')
+      if (!frame || !frame.contentWindow) { reject(new Error('설문·분석 앱이 열려 있지 않습니다.')); return }
+      const requestId = 'dmareq' + (++_dmaAppReqSeq)
+      _dmaAppPending[requestId] = { resolve, reject }
+      frame.contentWindow.postMessage(Object.assign({ source: 'smart-esg', type, requestId }, extra || {}), '*')
+      setTimeout(() => { if (_dmaAppPending[requestId]) { delete _dmaAppPending[requestId]; reject(new Error('응답 시간 초과 — 앱을 불러오는 중이거나 열려 있지 않습니다.')) } }, 8000)
+    })
+  }
+
+  function _renderDmaApp(host, project) {
+    _dmaAppBindListener()
+    const src = 'materiality-app/index.html'
+    const frame = el('iframe', {
+      className: 'dma-app-frame',
+      src,
+      title: '이중중대성평가 설문·분석 앱',
+      style: 'width:100%;height:calc(100vh - 250px);min-height:640px;border:1px solid #e4e7eb;border-radius:12px;background:#fff;display:block',
+      onLoad: () => {}
+    })
+    _dmaAppFrame = frame
+    host.append(el('div', { className: 'card', style: 'padding:12px 16px 16px' },
+      el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px' },
+        el('div', { style: 'flex:1;min-width:240px' },
+          el('div', { style: 'font-weight:700;font-size:14px' }, '🧩 설문·분석 앱 (전체 기능)'),
+          el('div', { style: 'font-size:11.5px;color:#6b7280;margin-top:2px;line-height:1.6' }, '설문 문항 구성 · 실사 응답 · 결과 분석 · 사사분면 매트릭스(수동조정) · 가중치/임계값 설정을 이 화면에서 그대로 사용합니다. 데이터는 이 브라우저(localStorage)에 저장되며, 필요 시 아래 버튼으로 본편 이중중대성평가에 가져옵니다.')),
+        el('button', { className: 'btn btn-sm btn-primary', onClick: () => _dmaAppPick() }, '🔄 설문·분석 결과 가져오기'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaImportMateriality() }, '⬆ 파일로 가져오기'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { if (window.open) window.open(src, '_blank') } }, '↗ 새 창에서 열기')),
+      frame))
+  }
+
+  async function _dmaAppPick() {
+    if (_dmaTab !== 'app') { _dmaTab = 'app'; renderDMA() }
+    showToast('설문·분석 앱에서 평가 목록을 불러오는 중…', '')
+    let list
+    try { list = await _dmaAppRequest('MAT_APP_LIST') }
+    catch (e) { return showToast('앱 연동 실패: ' + ((e && e.message) || e), 'error') }
+    if (!list.length) return showToast('앱에 등록된 평가사이클이 없습니다. 앱에서 먼저 설문·분석을 진행하세요.', '')
+    _dmaAppShowPicker(list)
+  }
+
+  function _dmaAppShowPicker(list) {
+    modal('설문·분석 결과 가져오기',
+      el('div', {},
+        el('p', { style: 'font-size:12px;color:#6b7280;line-height:1.7' }, '앱에서 분석을 마친 평가사이클을 선택하면 결과(이슈·점수·신뢰도·이해관계자)를 새로운 이중중대성평가 프로젝트로 가져옵니다.'),
+        el('div', { className: 'form-group' }, el('label', {}, '평가사이클'),
+          el('select', { id: 'dmaAppPickSel', style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px' },
+            list.map((a, i) => el('option', { value: String(a.id), selected: i === 0 }, a.title + (a.status ? ' · ' + a.status : '')))))),
+      '가져오기')
+    document.getElementById('modal-save').onclick = () => {
+      const v = document.getElementById('dmaAppPickSel').value
+      closeModal()
+      _dmaAppImport(v)
+    }
+  }
+
+  async function _dmaAppImport(assessmentId) {
+    try {
+      const bundle = await _dmaAppRequest('MAT_APP_GET', { assessmentId })
+      _dmaImportBundleText(JSON.stringify(bundle))
+    } catch (e) { showToast('결과를 가져오지 못했습니다: ' + ((e && e.message) || e), 'error') }
+  }
+
   function renderDMA() {
     const c = document.getElementById('page-dma')
     if (!c) return
@@ -7528,7 +7617,7 @@
       el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openDmaProjectModal(project.id) }, '⚙ 평가 설정'),
       el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openDmaProjectModal() }, '＋ 새 평가')))
 
-    const tabs = [['overview', '① 개요'], ['stake', '② 이해관계자'], ['iro', '③ IRO'], ['matrix', '④ 매트릭스'], ['result', '⑤ 결과·연계']]
+    const tabs = [['overview', '① 개요'], ['stake', '② 이해관계자'], ['iro', '③ IRO'], ['matrix', '④ 매트릭스'], ['result', '⑤ 결과·연계'], ['app', '⑥ 전체 앱']]
     c.append(el('div', { className: 'tabs', style: 'margin:0 0 12px' },
       tabs.map(([id, label]) => el('button', { className: 'tab' + (_dmaTab === id ? ' active' : ''), onClick: () => { _dmaTab = id; renderDMA() } }, label))))
 
@@ -7539,6 +7628,7 @@
     else if (_dmaTab === 'iro') _renderDmaIROs(host, project)
     else if (_dmaTab === 'matrix') _renderDmaMatrix(host, project)
     else if (_dmaTab === 'result') _renderDmaResults(host, project)
+    else if (_dmaTab === 'app') _renderDmaApp(host, project)
   }
 
   function _dmaStepper(project) {
@@ -7945,6 +8035,7 @@
     try {
       const proj = Store.importMaterialityResult(payload)
       _dmaProjectId = proj.id
+      _dmaTab = 'overview'
       renderDMA()
       showToast(`설문 결과를 가져왔습니다. (이슈 ${payload.issues.length}건 · ${payload.assessment?.year || ''})`, 'success')
     } catch (e) { alert('가져오기 실패: ' + (e && e.message)) }
@@ -8017,6 +8108,7 @@
   window._dmaImportBundleText = _dmaImportBundleText
   window._dmaExportBundle = _dmaExportBundle
   window._dmaBuildBundle = _dmaBuildBundle
+  window._dmaAppPick = _dmaAppPick
   window.renderIndicators = renderIndicators
   window.renderDashboard = renderDashboard
   window.renderNextActions = renderNextActions

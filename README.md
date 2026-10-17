@@ -2,7 +2,7 @@
 
 지속가능경영보고서(ESG) 작성 · 평가 · 공시를 지원하는 웹 애플리케이션입니다.
 
-- 버전: **v2.9.0** (BUILD 79)
+- 버전: **v2.10.0** (BUILD 80)
 - 데이터: `localStorage`(원본) + Supabase(미러 동기화)
 - 별도 빌드 도구 없이 브라우저에서 바로 실행되는 정적 앱
 
@@ -12,6 +12,7 @@
 
 - **이중중대성평가(DMA)** — ESRS 11개 주제 기반 IRO(영향·리스크·기회) 도출, 이해관계자 참여, 영향·재무 2축 매트릭스, 임계값 기반 중대성 판정, KSSB 지표 연계, CSV 내보내기
 - **중대성평가 앱 연계** — 별도「중대성평가 모듈(v1.7.0)」에서 실시한 이해관계자 설문 결과를 표준 계약(`materiality-result.json`, contract v1.0)으로 가져와 이슈·점수·ESRS 토픽·구분(이중/영향/재무)·신뢰도·표본수를 DMA로 이관. 결과·연계 탭에서 구분(사분면) 확인, 확정(FINALIZED) 평가는 수정 잠금, 양방향 번들 내보내기 지원
+- **중대성평가 모듈 임베드(⑥ 전체 앱)** — 이중중대성평가 화면의 ⑥ 전체 앱 탭에 별도「중대성평가 모듈(v1.7.0)」을 iframe(`materiality-app/`)으로 그대로 임베드. 설문 문항 구성·실사 응답·결과 분석·사사분면 매트릭스(수동조정)·가중치/임계값 설정을 본편 안에서 그대로 사용. `postMessage` 브리지(`js/smart-esg-bridge.js`)로 분석 결과를 즉시 가져오기(🔄 설문·분석 결과 가져오기)·파일 가져오기·새 창 열기 지원
 - **DMA 동기화** — 이중중대성평가(프로젝트·이해관계자·IRO)를 Supabase 미러에 동기화(로컬→원격 push + 원격→로컬 pull). `tb_dma_project`/`tb_dma_stakeholder`/`tb_dma_iro` 테이블 필요(`migration-dma.sql` 증분 적용 또는 `migration.sql` 전체)
 - **프로세스 워크플로우** — ① 기준·맥락 → ② 데이터 수집 → ③ 이중중대성평가 → ④ 지표·증빙 → ⑤ 초안 작성 → ⑥ 검증·보증 → ⑦ 제출·공시 7단계. 상단 프로세스 바(현재 위치·진행률 자동 표시) + 전체 구조도 페이지
 - **보증(AA1000AS v3 / ISSA 5000)** — 프레임워크 선택, AA1000AS 4대 원칙(포용성·중대성·대응성·영향) 자기평가, Type 1/2·Moderate/High, 적합성 기준 선택, 내재적 한계·후속 사건, 경영진 보고서 초안, 보증 증빙 패키지 원클릭 내보내기
@@ -42,6 +43,7 @@
 | UI | `app.js`, `dashboard.js`, `components.js`, `editor.js`(블록 리치 에디터), `index.html`, `style.css` |
 | 인증 | `auth.js` |
 | 스토리지/변환 | `storage-adapter.js`, `mdconvert.js` |
+| 임베드 모듈 | `materiality-app/` (중대성평가 모듈 v1.7.0 standalone + `js/smart-esg-bridge.js`) |
 | 서버리스 | `supabase/functions/` (Edge Functions: `sign-upload`, `sign-download`, `remove-object`, `convert`) |
 | 문서 | `개발계획서.md`, `진행방향.md` |
 
