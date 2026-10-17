@@ -168,7 +168,7 @@ function isAdmin() { return currentUser && currentUser.role === 'admin' }
 function isManager() { return currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager') }
 
 const _rolePages = {
-  dashboard: 'viewer', assessment: 'user', indicator: 'viewer',
+  dashboard: 'viewer', structure: 'viewer', assessment: 'user', dma: 'user', indicator: 'viewer',
   evidence: 'viewer', ghg: 'user', supplier: 'manager',
   ai: 'manager', editor: 'manager', gri: 'viewer',
   references: 'user', writer: 'user',

@@ -364,10 +364,20 @@
 • 현재 ESG 평가 현황을 한눈에 확인합니다.<br>
 • 점수, 테마 레이더 차트, 증빙 진행률, AI 초안 현황, 온실가스 배출량, 항목별 완료율을 카드 형태로 보여줍니다.<br>
 • 평가를 먼저 생성해야 데이터가 표시됩니다.`,
+    structure: `<strong>🗺 전체 구조도</strong><br><br>
+• Smart ESG의 <strong>7단계 지속가능경영보고 프로세스</strong>를 한눈에 보여줍니다.<br>
+• ① 기준·맥락 → ② 데이터 수집 → ③ 이중중대성평가 → ④ 지표·증빙 → ⑤ 초안 작성 → ⑥ 검증·보증 → ⑦ 제출·공시.<br>
+• 각 카드를 누르면 해당 화면으로 이동하며, 상단 <strong>프로세스 바</strong>가 현재 위치를 표시합니다.<br>
+• 진행 여부(✓)는 저장된 데이터를 기준으로 자동 계산됩니다.`,
     assessment: `<strong>📋 ESG 평가</strong><br><br>
 • EcoVadis / KSSB / KCGS / NICE / K-ESG 기준의 평가를 생성·관리합니다.<br>
 • <strong>+ 새 평가</strong> 버튼으로 평가를 추가하고, 각 평가의 점수·등급을 입력·수정할 수 있습니다.<br>
 • 평가를 삭제하면 연결된 모든 데이터(항목·증빙·AI 초안)도 함께 삭제됩니다.`,
+    dma: `<strong>🎯 이중중대성평가 (Double Materiality)</strong><br><br>
+• <strong>영향(환경·사회)</strong>과 <strong>재무(기업가치)</strong> 두 관점에서 보고할 중대 이슈를 도출합니다.<br>
+• ① 사업 맥락·경계 → ② 이해관계자 참여 → ③ IRO 도출 → ④ 이중 평가·임계값 → ⑤ 결과·연계 순으로 진행합니다.<br>
+• IRO 탭의 <strong>🤖 AI로 IRO 후보 생성</strong>은 참고자료를 근거로 이슈를 제안합니다.<br>
+• 결과 탭에서 핵심 이슈를 <strong>지표로 연계</strong>하거나 CSV·보고서 작성기로 넘길 수 있습니다.` ,
     indicator: `<strong>📌 지표 관리</strong><br><br>
 • 평가 기관별 지표를 조회하고 활성/비활성 전환합니다.<br>
 • 상단 드롭다운으로 기관(EcoVadis 21개 항목, KSSB 등)을 전환할 수 있습니다.<br>
@@ -444,7 +454,19 @@
 • 리스크 레지스터에서 리스크를 등록하고 확률×영향 점수로 관리합니다.`,
     masking: `<strong>🔒 마스킹 설정 (S-15)</strong><br><br>
 • AI 외부 API 전송 전 적용할 민감정보 마스킹 규칙을 정의합니다.<br>
-• 전체마스킹/부분마스킹/집계치만허용 3가지 유형을 지원합니다.`
+• 전체마스킹/부분마스킹/집계치만허용 3가지 유형을 지원합니다.`,
+    publicdata: `<strong>🌐 공개자료 점검 (PUBLIC_DATA)</strong><br><br>
+• MSCI·Sustainalytics 등 <strong>공개자료 기반</strong> 평가기관 대응용 체크리스트입니다.<br>
+• 홈페이지 ESG 페이지, 사업보고서, 지속가능경영보고서, 정책 공개, 뉴스 모니터링, 등급 변동 6개 항목을 점검합니다.<br>
+• 항목을 클릭하면 완료 처리되고 상단에 기관별 준비율이 표시됩니다.`,
+    share: `<strong>🔗 외부 공유</strong><br><br>
+• 증빙·보고서를 외부 검증기관·컨설턴트에게 <strong>링크로 안전하게 공유</strong>합니다.<br>
+• 만료일과 권한(보기/편집)을 지정할 수 있고, 접근 기록이 남습니다.<br>
+• 공유 링크는 언제든 회수(revoke)할 수 있습니다.`,
+    project: `<strong>📅 업무 관리 (프로젝트)</strong><br><br>
+• ESG 보고서 발간·데이터 수집 등 <strong>업무를 WBS(작업분류체계)</strong>로 관리합니다.<br>
+• 담당자·기간·진행률·우선순위·의존관계를 설정하고 간트 형태로 확인합니다.<br>
+• 상태/진행률 변경 이력이 자동 기록되고, 지연 작업은 알림으로 안내됩니다.`
   }
 
   function _supabaseReady() {
@@ -527,6 +549,162 @@
     window.addEventListener('beforeunload', () => { const wp = document.getElementById('page-writer'); if (wp && wp.classList.contains('active')) { clearTimeout(_writerAutosaveTimer); _flushWriterInput() } })
   }
 
+  // ==================== Workflow ====================
+  const WORKFLOW_STEPS = [
+    { no: 1, id: 'context', icon: '🧭', label: '기준·맥락', page: 'project', pages: ['project', 'references', 'budget'], desc: '보고 기준·경계와 이해관계자 맥락, 참고자료를 설정합니다.' },
+    { no: 2, id: 'data', icon: '📥', label: '데이터 수집', page: 'ghg', pages: ['ghg', 'supplier', 'publicdata', 'api'], desc: '온실가스·에너지·협력사·공개자료 등 원천 데이터를 수집합니다.' },
+    { no: 3, id: 'materiality', icon: '🎯', label: '이중중대성평가', page: 'dma', pages: ['dma', 'assessment'], desc: '영향·재무 두 관점에서 보고할 중대 이슈를 도출합니다.' },
+    { no: 4, id: 'indicators', icon: '📊', label: '지표·증빙', page: 'indicator', pages: ['indicator', 'evidence', 'gri', 'kssb'], desc: '평가기준별 지표를 정하고 증빙으로 뒷받침합니다.' },
+    { no: 5, id: 'draft', icon: '✍️', label: '초안 작성', page: 'writer', pages: ['writer', 'editor', 'ai', 'aihistory'], desc: 'AI 초안과 편집기로 지속가능경영보고서를 작성합니다.' },
+    { no: 6, id: 'assurance', icon: '🛡️', label: '검증·보증', page: 'issa', pages: ['issa', 'risk', 'monitor'], desc: '내부 검증과 제3자 보증(AA1000AS·ISSA 5000)을 수행합니다.' },
+    { no: 7, id: 'disclose', icon: '🚀', label: '제출·공시', page: 'submit', pages: ['submit', 'share', 'masking'], desc: '평가기관 제출과 외부 공시를 진행합니다.' }
+  ]
+  function _wfStepOf(page) { return WORKFLOW_STEPS.findIndex(s => s.pages.indexOf(page) > -1) }
+  function _wfStepDone(id) {
+    try {
+      const cid = (Store.getCompanies() || [])[0]?.id
+      if (id === 'context') return (Store.getReferenceDocs() || []).length > 0
+      if (id === 'data') return (Store.getGHGActivities() || []).length > 0
+      if (id === 'materiality') { const ps = Store.getDmaProjects() || []; return ps.some(p => _dmaMaterial(p).length > 0) || (Store.getAssessments() || []).length > 0 }
+      if (id === 'indicators') return (Store.getIndicators() || []).length > 0
+      if (id === 'draft') return (Store.getReportDocs() || []).length > 0
+      if (id === 'assurance') return typeof ISSA !== 'undefined' && cid != null && !!ISSA.getAssurance(cid)
+      if (id === 'disclose') return typeof SUBMISSION !== 'undefined' && cid != null && SUBMISSION.getSubmissions(cid).length > 0
+    } catch (e) {}
+    return false
+  }
+  function renderWorkflowBar(activePage) {
+    const bar = document.getElementById('workflow-bar')
+    if (!bar) return
+    if (activePage === 'dashboard' || activePage === 'structure') { bar.style.display = 'none'; return }
+    const active = _wfStepOf(activePage)
+    if (active < 0) { bar.style.display = 'none'; return }
+    bar.style.display = ''
+    bar.innerHTML = ''
+    const doneCount = WORKFLOW_STEPS.filter(s => _wfStepDone(s.id)).length
+    const head = el('div', { className: 'wf-head' },
+      el('span', { className: 'wf-head-title' }, '🧭 지속가능경영보고 프로세스'),
+      el('span', { className: 'wf-head-prog' }, `진행률 ${Math.round(doneCount / WORKFLOW_STEPS.length * 100)}%`))
+    const track = el('div', { className: 'wf-track' })
+    WORKFLOW_STEPS.forEach((s, i) => {
+      const cls = i === active ? ' active' : (i < active ? ' done' : '')
+      const chip = el('button', { className: 'wf-chip' + cls, onClick: () => navigate(s.page), title: s.desc },
+        el('span', { className: 'wf-no' }, _wfStepDone(s.id) && i !== active ? '✓' : String(s.no)),
+        el('span', { className: 'wf-label' }, s.icon + ' ' + s.label))
+      track.append(chip)
+      if (i < WORKFLOW_STEPS.length - 1) track.append(el('span', { className: 'wf-arrow' }, '›'))
+    })
+    const desc = el('div', { className: 'wf-desc' }, WORKFLOW_STEPS[active].desc)
+    bar.append(head, track, desc)
+  }
+  function renderStructure() {
+    const c = document.getElementById('page-structure')
+    if (!c) return
+    c.innerHTML = ''
+    c.append(el('div', { className: 'card' },
+      el('div', { className: 'card-header' }, el('h3', {}, '🗺 전체 구조도')),
+      el('p', { style: 'padding:4px 20px 0;font-size:13px;color:#6b7280;line-height:1.75;margin:0' },
+        'Smart ESG는 7단계 지속가능경영보고 프로세스로 구성됩니다. 각 단계의 카드를 눌러 해당 업무 화면으로 이동하세요. 상단 프로세스 바는 현재 위치를 항상 표시합니다.')))
+    const flow = el('div', { className: 'wf-flow' })
+    WORKFLOW_STEPS.forEach((s, i) => {
+      const pages = s.pages.filter(p => p !== 'project' || true)
+      const card = el('div', { className: 'wf-flow-card' + (_wfStepDone(s.id) ? ' done' : '') },
+        el('div', { className: 'wf-flow-head' },
+          el('span', { className: 'wf-flow-no' }, String(s.no)),
+          el('span', { className: 'wf-flow-icon' }, s.icon),
+          el('span', { className: 'wf-flow-label' }, s.label),
+          _wfStepDone(s.id) ? el('span', { className: 'wf-flow-badge' }, '진행됨') : null),
+        el('p', { className: 'wf-flow-desc' }, s.desc),
+        el('div', { className: 'wf-flow-links' },
+          s.pages.map(p => {
+            const a = document.querySelector(`#nav a[data-page="${p}"]`)
+            const label = a ? a.querySelector('.nav-label')?.textContent : p
+            return el('button', { className: 'wf-link', onClick: () => navigate(p) }, label || p)
+          })))
+      flow.append(card)
+      if (i < WORKFLOW_STEPS.length - 1) flow.append(el('div', { className: 'wf-flow-arrow' }, '▼'))
+    })
+    c.append(flow)
+    c.append(el('div', { className: 'card', style: 'margin-top:4px' },
+      el('div', { className: 'card-header' }, el('h3', {}, '💡 거버넌스 3선 모델')),
+      el('div', { style: 'padding:16px 20px;font-size:13px;color:#374151;line-height:1.9' },
+        el('div', {}, '1선 (소관부서): 데이터 입력·1차 작성'),
+        el('div', {}, '2선 (ESG 주관부서): 검토·중대성 판단·내부통제'),
+        el('div', {}, '3선 (이사회·감사): 승인·보증 연계'),
+        el('p', { style: 'margin:12px 0 0;font-size:12px;color:#6b7280' }, '검증·보증 단계는 감사 보증 화면에서 관리합니다.'),
+        el('div', { style: 'margin-top:10px' }, el('button', { className: 'wf-link', onClick: () => navigate('issa') }, '감사 보증 바로가기')))))
+  }
+
+  function _dataQualityIssues() {
+    const issues = []
+    try {
+      const ghg = Store.getGHGActivities() || []
+      const noCalc = ghg.filter(a => !a.calculated_emission && !a.co2eq)
+      if (noCalc.length) issues.push({ level: 'high', text: `온실가스 배출량 미산정 활동 ${noCalc.length}건`, page: 'ghg' })
+
+      const items = Store.getAssessmentItems() || []
+      const noVal = items.filter(i => i.actual_value === '' || i.actual_value == null)
+      if (noVal.length) issues.push({ level: 'medium', text: `평가 항목 실적값 미입력 ${noVal.length}건`, page: 'assessment' })
+
+      const kssbNames = (Store.getIndicators() || []).filter(i => i.authority_code === 'KSSB').map(i => i.indicator_name)
+      let unlinked = 0
+      ;(Store.getDmaProjects() || []).forEach(p => {
+        _dmaMaterial(p).forEach(r => {
+          const name = '[중대성] ' + (r.statement || r.topic || '이슈')
+          if (!kssbNames.includes(name)) unlinked++
+        })
+      })
+      if (unlinked) issues.push({ level: 'high', text: `중대 이슈의 지표 연계 누락 ${unlinked}건`, page: 'dma' })
+
+      const suppliers = Store.getSuppliers() || []
+      const risky = suppliers.filter(s => (s.last_vsme_grade && ['C', 'D'].includes(s.last_vsme_grade)) || (s.last_vsme_score != null && s.last_vsme_score < 60))
+      if (risky.length) {
+        const noDate = risky.filter(s => !s.last_vsme_date).length
+        issues.push({ level: 'medium', text: `고위험 협력사 ${risky.length}개 (미평가 ${noDate}개)`, page: 'supplier' })
+      }
+
+      if (typeof ISSA !== 'undefined') {
+        const cid = (Store.getCompanies() || [])[0]?.id
+        const a = cid != null ? ISSA.getAssurance(cid) : null
+        const openF = (a?.findings || []).filter(f => f.status === 'open')
+        if (openF.length) issues.push({ level: 'high', text: `미해결 보증 지적사항 ${openF.length}건`, page: 'issa' })
+      }
+
+      const docs = Store.getReportDocs() || []
+      const emptyDocs = docs.filter(d => (Store.getReportDocSections(d.id) || []).length === 0)
+      if (emptyDocs.length) issues.push({ level: 'low', text: `본문 섹션이 없는 보고서 ${emptyDocs.length}건`, page: 'writer' })
+    } catch (e) {}
+    return issues
+  }
+  function renderNextActions() {
+    const doneCount = WORKFLOW_STEPS.filter(s => _wfStepDone(s.id)).length
+    const next = WORKFLOW_STEPS.find(s => !_wfStepDone(s.id))
+    const issues = _dataQualityIssues()
+    const lvlColor = { high: '#dc2626', medium: '#d97706', low: '#2563EB' }
+    const lvlBg = { high: '#fdf0f0', medium: '#fdf6e3', low: '#f0f4fa' }
+    const levelLabel = { high: '높음', medium: '보통', low: '낮음' }
+    return el('div', { className: 'card', style: 'padding:18px 20px' },
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:14px' },
+        el('h3', { style: 'margin:0;font-size:14px;color:var(--c-primary)' }, '🚀 다음 할 일 (Next Actions)'),
+        el('span', { style: 'font-size:11px;color:var(--c-text-muted)' }, `프로세스 진행률 ${Math.round(doneCount / WORKFLOW_STEPS.length * 100)}%`)),
+      next
+        ? el('div', { style: 'display:flex;align-items:center;gap:12px;padding:14px;background:#eef4fa;border-radius:10px;border:1px solid #dbe6f2' },
+            el('div', { style: 'font-size:24px' }, next.icon),
+            el('div', { style: 'flex:1' },
+              el('div', { style: 'font-size:13px;font-weight:700;color:#14213D' }, `${next.no}단계 · ${next.label}`),
+              el('div', { style: 'font-size:12px;color:#6b7280;margin-top:2px' }, next.desc)),
+            el('button', { className: 'btn btn-primary btn-sm', onClick: () => navigate(next.page) }, '시작하기 →'))
+        : el('div', { style: 'padding:14px;background:#ecfdf5;border-radius:10px;border:1px solid #a7f3d0;color:#047857;font-size:13px;font-weight:600' }, '🎉 7단계 프로세스를 모두 완료했습니다.'),
+      el('div', { style: 'font-size:12px;font-weight:600;color:#6B7280;margin:16px 0 8px' }, `⚠️ 데이터 품질 점검 (${issues.length}건)`),
+      issues.length
+        ? el('div', { style: 'display:flex;flex-direction:column;gap:6px' },
+            issues.map(it => el('div', { style: `display:flex;align-items:center;gap:8px;padding:8px 10px;background:${lvlBg[it.level]};border-radius:8px;cursor:pointer`, onClick: () => navigate(it.page) },
+              el('span', { style: `font-size:10px;font-weight:700;color:${lvlColor[it.level]};background:${lvlColor[it.level]}1a;padding:2px 6px;border-radius:8px;flex-shrink:0` }, levelLabel[it.level]),
+              el('span', { style: 'flex:1;font-size:12px;color:#374151' }, it.text),
+              el('span', { style: 'font-size:11px;color:#9ca3af' }, '이동 →'))))
+        : el('div', { style: 'padding:12px;text-align:center;color:#047857;font-size:12px;background:#ecfdf5;border-radius:8px' }, '발견된 데이터 품질 이슈가 없습니다.'))
+  }
+
   // ==================== Navigation ====================
   function navigate(page) {
     if (typeof canAccess === 'function' && !canAccess(page)) {
@@ -546,11 +724,14 @@
     const label = link ? link.textContent.replace(/^[^\s]+\s/, '') : page
     document.getElementById('page-title').textContent = label
     history.replaceState(null, '', '#' + page)
+    renderWorkflowBar(page)
     if (_helpOpen) showHelpFor(page)
 
     const _safe = (fn) => { try { fn() } catch (e) { console.error('Render error [' + page + ']:', e); const c = document.getElementById('page-' + page); if (c) { c.innerHTML = ''; c.append(el('div', { className: 'card' }, el('div', { style: 'padding:20px;color:#dc2626' }, el('h3', { style: 'margin:0 0 8px' }, '오류가 발생했습니다'), el('p', { style: 'margin:0 0 12px;font-size:13px' }, e.message), el('button', { className: 'btn btn-secondary', onClick: () => navigate(page) }, '다시 시도')))) } } }
     if (page === 'dashboard') { _safe(renderDashboard); setTimeout(() => _showFirstLoginProjectPopup(), 500) }
+    else if (page === 'structure') _safe(renderStructure)
     else if (page === 'assessment') _safe(renderAssessments)
+    else if (page === 'dma') _safe(renderDMA)
     else if (page === 'indicator') _safe(renderIndicators)
     else if (page === 'evidence') _safe(renderEvidenceMgmt)
     else if (page === 'ghg') _safe(renderGHG)
@@ -2298,7 +2479,9 @@
       el('div', { className: 'card' },
         el('div', { className: 'card-header' },
           el('h3', {}, `협력사 목록 (${suppliers.length}건)`),
-          el('button', { className: 'btn btn-primary', onClick: openAddSupplier }, '+ 협력사 추가')
+          el('div', { style: 'display:flex;gap:8px' },
+            el('button', { className: 'btn btn-secondary', onClick: openSupplierReminder }, '📨 미진단 리마인더'),
+            el('button', { className: 'btn btn-primary', onClick: openAddSupplier }, '+ 협력사 추가'))
         ),
         suppliers.length ? sortableTable('suppliers', [
           { label: '회사명', key: 'name', value: s => el('span', { style: 'font-weight:600' }, s.name || '-') },
@@ -2330,6 +2513,52 @@
 
   function openAddSupplier() { createSupplierModal() }
   function editSupplier(id) { const s = Supplier.getAll().find(x => x.id === id); if (s) createSupplierModal(s) }
+
+  function _downloadTextFile(filename, content, mime) {
+    const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function _supplierReminderText(s) {
+    const deadline = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+    const companyName = Store.data.companies?.[0]?.name || '당사'
+    return `${s.name} 담당자님께,
+
+안녕하세요. ${companyName}의 지속가능경영보고서 작성 및 공급망 ESG 실사와 관련하여 협력사 ESG 자가진단(VSME) 작성을 요청드립니다.
+
+- 대상 기업: ${s.name}${s.industry ? ' (' + s.industry + ')' : ''}
+- 요청 내용: VSME 자가진단 설문 응답 및 관련 증빙자료 제출
+- 회신 기한: ${deadline}
+
+작성해 주신 자료는 협력사 ESG 리스크 평가 및 공급망 실사(CSDDD 대응)에 활용됩니다. 문의사항이 있으시면 담당자에게 연락 주시기 바랍니다.
+
+감사합니다.`
+  }
+
+  function openSupplierReminder() {
+    const suppliers = (Supplier.getAll() || []).filter(s => !s.last_vsme_score)
+    if (!suppliers.length) return alert('미진단 협력사가 없습니다.')
+    const body = el('div', { style: 'max-height:440px;overflow-y:auto' },
+      el('p', { style: 'font-size:12px;color:#6b7280;margin:0 0 12px' }, `미진단 협력사 ${suppliers.length}개사에 대한 자가진단 요청/리마인더 초안입니다. 필요 시 수정하여 발송하세요.`),
+      ...suppliers.map(s => el('div', { style: 'margin-bottom:12px' },
+        el('div', { style: 'font-size:12px;font-weight:600;color:#1F2937;margin-bottom:4px' }, `${s.name}${s.email ? ' · ' + s.email : ''}`),
+        el('textarea', { readonly: true, rows: 6, style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:11px;line-height:1.5;resize:vertical', value: _supplierReminderText(s) })
+      ))
+    )
+    modal('📨 협력사 ESG 자가진단 리마인더', body, [
+      { label: '📥 전체 내려받기', className: 'btn btn-primary', onClick: () => {
+        const text = suppliers.map(s => `===== ${s.name}${s.email ? ' <' + s.email + '>' : ''} =====\n${_supplierReminderText(s)}`).join('\n\n\n')
+        _downloadTextFile(`협력사_자가진단_리마인더_${new Date().toISOString().slice(0, 10)}.txt`, text)
+        showToast('리마인더 파일이 생성되었습니다.', 'success')
+      } },
+      { label: '닫기', className: 'btn btn-secondary', onClick: closeModal }
+    ])
+  }
 
   function createSupplierModal(s) {
     const isEdit = !!s
@@ -3463,6 +3692,10 @@
     const closedFindings = assurance.findings?.filter(f => f.status === 'closed') || []
 
     const stageIdx = ISSA_STAGES.findIndex(x => x.key === assurance.stage)
+    const fwInfo = ISSA.getFramework(assurance.framework)
+    const isAA = assurance.framework === 'AA1000AS'
+    const aaPercent = ISSA.getAAPercent(assurance)
+    const principles = ISSA.getPrinciples(assurance)
     const stageHtml = ISSA_STAGES.map((s, i) => {
       const isDone = i < stageIdx
       const isCurrent = i === stageIdx
@@ -3498,10 +3731,12 @@
 
     c.append(
       el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eef1f4;background:#fff;border-radius:12px 12px 0 0' },
-        el('h3', { style: 'margin:0;font-size:16px' }, '🛡️ ISSA 5000 감사 보증'),
+        el('h3', { style: 'margin:0;font-size:16px' }, `🛡️ ${fwInfo.label} 감사 보증`),
         el('div', { style: 'display:flex;gap:12px;align-items:center' },
+          isAA ? el('span', { style: 'font-size:12px;padding:2px 8px;border-radius:10px;background:#7c3aed15;color:#7c3aed;font-weight:600' }, `원칙 ${aaPercent}%`) : null,
           el('span', { style: 'font-size:12px;color:#9CA3AF' }, `${completion}% 완료`),
-          el('span', { style: 'font-size:12px;padding:2px 8px;border-radius:10px;background:#1E3A5F15;color:#1E3A5F;font-weight:600' }, `${openFindings.length}건 미해결`)
+          el('span', { style: 'font-size:12px;padding:2px 8px;border-radius:10px;background:#1E3A5F15;color:#1E3A5F;font-weight:600' }, `${openFindings.length}건 미해결`),
+          el('button', { className: 'btn btn-sm', onClick: () => _exportAssurancePackage(companyId) }, '📦 증빙 패키지 내보내기')
         )
       ),
       el('div', { style: 'padding:20px;background:#F8FAFC;border-bottom:1px solid #eef1f4' },
@@ -3527,12 +3762,21 @@
             )
           ),
           el('div', { style: 'padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px' },
+            el('div', { className: 'form-group', style: 'grid-column:1/-1' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '보증 프레임워크'), el('select', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', onChange: e => { assurance.framework = e.target.value; ISSA.saveAssurance(assurance); renderISSA() } },
+              ASSURANCE_FRAMEWORKS.map(f => el('option', { value: f.key, selected: f.key === (assurance.framework || 'ISSA5000') }, `${f.label} — ${f.desc}`))
+            )),
             el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '감사인명'), el('input', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', value: assurance.auditor_name || '', onBlur: e => { assurance.auditor_name = e.target.value; ISSA.saveAssurance(assurance) } })),
             el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '감사기관'), el('input', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', value: assurance.auditor_firm || '', onBlur: e => { assurance.auditor_firm = e.target.value; ISSA.saveAssurance(assurance) } })),
             el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '면허번호'), el('input', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', value: assurance.auditor_license || '', onBlur: e => { assurance.auditor_license = e.target.value; ISSA.saveAssurance(assurance) } })),
-            el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '보증 수준'), el('select', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', onChange: e => { assurance.assurance_level = e.target.value; ISSA.saveAssurance(assurance); renderISSA() } },
-              ASSURANCE_LEVELS.map(l => el('option', { value: l.key, selected: l.key === assurance.assurance_level }, `${l.label} (${l.description})`))
-            )),
+            (assurance.framework === 'AA1000AS')
+              ? el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '보증 유형 (Type)'), el('select', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', onChange: e => { assurance.aa_type = e.target.value; ISSA.saveAssurance(assurance); renderISSA() } },
+                  AA1000_TYPES.map(t => el('option', { value: t.key, selected: t.key === (assurance.aa_type || 'Type2') }, `${t.label} — ${t.desc}`))))
+              : el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '보증 수준'), el('select', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', onChange: e => { assurance.assurance_level = e.target.value; ISSA.saveAssurance(assurance); renderISSA() } },
+                  ASSURANCE_LEVELS.map(l => el('option', { value: l.key, selected: l.key === assurance.assurance_level }, `${l.label} (${l.description})`)))),
+            (assurance.framework === 'AA1000AS')
+              ? el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '보증 수준 (Level)'), el('select', { style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', onChange: e => { assurance.aa_level = e.target.value; ISSA.saveAssurance(assurance); renderISSA() } },
+                  AA1000_LEVELS.map(l => el('option', { value: l.key, selected: l.key === (assurance.aa_level || 'moderate') }, `${l.label} (${l.desc})`))))
+              : null,
             el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '감사 시작일'), el('input', { type: 'date', style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', value: assurance.scope_start || '', onBlur: e => { assurance.scope_start = e.target.value; ISSA.saveAssurance(assurance) } })),
             el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '감사 종료일'), el('input', { type: 'date', style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', value: assurance.scope_end || '', onBlur: e => { assurance.scope_end = e.target.value; ISSA.saveAssurance(assurance) } })),
             el('div', { className: 'form-group' }, el('label', { style: 'font-size:11px;color:#9ca3af' }, '중대성 기준(%)'), el('input', { type: 'number', style: 'width:100%;padding:6px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', value: assurance.materiality_threshold || 10, onBlur: e => { assurance.materiality_threshold = parseInt(e.target.value) || 10; ISSA.saveAssurance(assurance) } })),
@@ -3569,14 +3813,62 @@
           el('div', { style: 'padding:12px;max-height:350px;overflow-y:auto', innerHTML: findingCards || '<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:12px">지적사항이 없습니다.</div>' })
         )
       ),
+      isAA ? el('div', { className: 'card', style: 'margin:0 20px 16px' },
+        el('div', { className: 'card-header' }, el('h3', { style: 'font-size:14px' }, `🧭 AA1000AS 4대 원칙 자기평가 (${aaPercent}%)`)),
+        el('div', { style: 'padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px' },
+          AA1000_PRINCIPLES.map(p => el('div', { style: 'padding:12px;border:1px solid #eef1f4;border-radius:8px;background:#F8FAFC' },
+            el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px' },
+              el('div', { style: 'font-size:12px;font-weight:600;color:#1F2937' }, p.label),
+              el('select', { style: 'padding:4px 8px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px', onChange: e => { principles[p.key].score = parseInt(e.target.value); ISSA.saveAssurance(assurance); renderISSA() } },
+                [1, 2, 3, 4, 5].map(v => el('option', { value: v, selected: v === principles[p.key].score }, `${v} / 5`)))
+            ),
+            el('div', { style: 'font-size:11px;color:#9ca3af;margin-bottom:6px' }, p.desc),
+            el('input', { placeholder: '평가 근거 / 코멘트', value: principles[p.key].note || '', style: 'width:100%;padding:5px 8px;border:1px solid #e4e7eb;border-radius:6px;font-size:11px', onBlur: e => { principles[p.key].note = e.target.value; ISSA.saveAssurance(assurance) } })
+          ))
+        )
+      ) : null,
+      el('div', { className: 'card', style: 'margin:0 20px 16px' },
+        el('div', { className: 'card-header' }, el('h3', { style: 'font-size:14px' }, '📐 적합성 기준 및 보증 서술')),
+        el('div', { style: 'padding:16px;display:flex;flex-direction:column;gap:12px' },
+          el('div', {},
+            el('div', { style: 'font-size:11px;color:#9ca3af;margin-bottom:6px' }, '적용한 적합성 기준 (Suitable Criteria)'),
+            el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px' },
+              SUITABLE_CRITERIA.map(cr => {
+                const on = (assurance.criteria || []).includes(cr)
+                return el('button', { type: 'button', className: 'btn btn-sm' + (on ? ' btn-primary' : ''), onClick: () => { ISSA.toggleCriterion(companyId, cr); renderISSA() } }, cr)
+              })
+            )
+          ),
+          el('div', {}, el('div', { style: 'font-size:11px;color:#9ca3af;margin-bottom:6px' }, '내재적 한계 및 범위 제한'), el('textarea', { rows: 2, style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px;resize:vertical', value: assurance.limitations || '', onBlur: e => { assurance.limitations = e.target.value; ISSA.saveAssurance(assurance) } })),
+          el('div', {}, el('div', { style: 'font-size:11px;color:#9ca3af;margin-bottom:6px' }, '보고기간 후 사건 (Subsequent Events)'), el('textarea', { rows: 2, style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px;resize:vertical', value: assurance.subsequent_events || '', onBlur: e => { assurance.subsequent_events = e.target.value; ISSA.saveAssurance(assurance) } })),
+          el('div', {}, el('div', { style: 'font-size:11px;color:#9ca3af;margin-bottom:6px' }, '경영진 추가 진술'), el('textarea', { rows: 2, style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:12px;resize:vertical', value: assurance.management_report || '', onBlur: e => { assurance.management_report = e.target.value; ISSA.saveAssurance(assurance) } }))
+        )
+      ),
       el('div', { className: 'card', style: 'margin:0 20px 20px' },
         el('div', { className: 'card-header' }, el('h3', { style: 'font-size:14px' }, '보증 의견서')),
         el('div', { innerHTML: ISSA.generateReport(companyId), style: 'padding:16px 20px;font-size:12px;line-height:1.7' })
+      ),
+      el('div', { className: 'card', style: 'margin:0 20px 20px' },
+        el('div', { className: 'card-header' }, el('h3', { style: 'font-size:14px' }, '경영진 보고서 (Management Report)')),
+        el('div', { style: 'padding:16px 20px;font-size:12px;line-height:1.7;white-space:pre-wrap' }, ISSA.generateManagementReport(assurance, companyName))
       )
     )
   }
 
   // ==================== 평가기관 제출 ====================
+  function _exportAssurancePackage(companyId) {
+    const html = ISSA.generatePackage(companyId)
+    const companyName = Store.data.companies?.[0]?.name || '회사명'
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `보증패키지_${companyName}_${new Date().toISOString().split('T')[0]}.html`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast('보증 패키지가 생성되었습니다.', 'success')
+  }
+
   function _downloadSubmission(submissionId) {
     const companyId = (Store.getCompanies()[0]?.id) || 'default'
     const submission = SUBMISSION.getSubmissions(companyId).find(s => s.id === submissionId)
@@ -6153,6 +6445,8 @@
     const projectCard = _renderDashboardProjectSummary()
     if (projectCard) c.append(projectCard)
 
+    c.append(renderNextActions())
+
     if (!assessments.length) {
       c.append(el('div', { style: 'text-align:center;padding:64px 40px' }, el('div', { style: 'font-size:46px;margin-bottom:16px' }, '📊'), el('h2', { style: 'margin:0 0 8px;color:var(--c-primary)' }, 'Smart ESG에 오신 것을 환영합니다'), el('p', { style: 'margin:0 0 24px;color:var(--c-text-muted);font-size:14px;line-height:1.6' }, 'ESG 평가를 시작하려면 먼저 평가를 생성하세요.'), el('button', { className: 'btn btn-primary', style: 'font-size:15px;padding:12px 32px', onClick: () => navigate('assessment') }, '+ 첫 번째 평가 만들기')))
       return
@@ -6616,6 +6910,38 @@
 
     const field = (label, control, extra) => el('div', { style: Object.assign({ minWidth: 0 }, extra || {}) }, el('label', { style: labelStyle }, label), control)
 
+    const _stepCard = (n, title, desc) => el('div', { style: 'flex:1 1 180px;min-width:160px;background:#fff;border:1px solid #e4e7eb;border-radius:10px;padding:12px 14px' },
+      el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px' },
+        el('span', { style: 'width:22px;height:22px;border-radius:50%;background:#0f766e;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0' }, String(n)),
+        el('span', { style: 'font-size:13px;font-weight:700;color:#0f3d3e' }, title)),
+      el('div', { style: 'font-size:12px;color:#6b7280;line-height:1.6' }, desc))
+
+    const wizardGuide = el('div', { style: 'display:none;padding:14px;background:linear-gradient(135deg,#f0fdfa 0%,#F8FAFC 100%);border:1px dashed #99f6e4;border-radius:12px' },
+      el('div', { style: 'font-weight:700;font-size:13px;color:#0f3d3e;margin-bottom:10px' }, '🎓 무료 AI(Groq) 5분 설정 안내'),
+      el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' },
+        _stepCard(1, '제공자 = groq', '아래 "제공자" 선택에서 groq을 고르면 주소·모델이 자동 입력됩니다.'),
+        _stepCard(2, 'API 키 발급', 'console.groq.com 접속 → 구글 로그인 → "Create API Key" 클릭 → 복사'),
+        _stepCard(3, '키 붙여넣기', '복사한 키를 아래 "API 키" 칸에 붙여넣고 저장하세요.'),
+        _stepCard(4, '연결 테스트', '"🔌 연결 테스트" 클릭 → ✅ 성공하면 끝!')),
+      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px' },
+        el('a', { href: 'https://console.groq.com/keys', target: '_blank', rel: 'noopener', className: 'btn btn-sm btn-secondary', style: 'text-decoration:none' }, '🔑 Groq 키 발급 페이지 열기'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => {
+          state.provider = 'groq'; state.endpoint = presets.groq.endpoint; state.model = presets.groq.model
+          providerSel.value = 'groq'; endpointInput.value = state.endpoint; modelInput.value = state.model
+          hint.textContent = presets.groq.hint
+          keyInput.focus()
+          status.style.color = '#0f766e'; status.textContent = 'Groq 기본값을 채웠습니다. 위에서 발급한 키를 API 키 칸에 붙여넣으세요.'
+        } }, '⚡ Groq 기본값 채우기'),
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => {
+          state.fallbacks = [
+            { provider: 'groq', endpoint: presets.groq.endpoint, model: presets.groq.model, apiKey: state.apiKey || '' },
+            { provider: 'gemini', endpoint: '', model: presets.gemini.model, apiKey: '' },
+            { provider: 'ollama', endpoint: presets.ollama.endpoint, model: presets.ollama.model, apiKey: '' }
+          ]
+          renderFallbackRows()
+          status.style.color = '#0f766e'; status.textContent = '폴백 체인을 Groq → Gemini → Ollama(무료 조합)로 설정했습니다. 저장을 누르세요.'
+        } }, '🪄 무료 폴백 자동 구성')))
+
     const fbContainer = el('div', { style: 'display:flex;flex-direction:column;gap:10px' })
     const renderFallbackRows = () => {
       fbContainer.innerHTML = ''
@@ -6647,12 +6973,15 @@
     c.innerHTML = ''
     c.append(
       el('div', { className: 'card' },
-        el('div', { className: 'card-header' }, el('h3', {}, '🤖 AI 연결 설정')),
+        el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center' },
+          el('h3', { style: 'margin:0' }, '🤖 AI 연결 설정'),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => { wizardGuide.style.display = wizardGuide.style.display === 'none' ? 'block' : 'none' } }, '🎓 무료로 시작 (Groq)')),
         el('div', { style: 'padding:16px;display:flex;flex-direction:column;gap:10px' },
           el('div', { style: 'font-size:12px;color:#6b7280;line-height:1.7;padding:10px 12px;background:#F8FAFC;border-radius:8px' },
             '보고서 작성기·AI 초안·컴플라이언스 점검 등 모든 AI 기능이 이 연결을 사용합니다. ',
             el('strong', {}, '엔드포인트가 잘못되거나 서버에 연결할 수 없으면 AI 기능은 오류를 표시하며, 점검류는 키워드 기반 로컬 점검으로 자동 대체됩니다.'),
             ' API 키는 서버로만 전송되며 이 브라우저(localStorage)에만 저장되고 Supabase에는 동기화되지 않습니다.'),
+          wizardGuide,
           field('제공자', providerSel),
           hint,
           field('엔드포인트 URL', endpointInput),
@@ -7029,6 +7358,449 @@
     // Overridden per modal
   }
 
+  // ==================== 이중중대성평가 (DMA) ====================
+  const DMA_ESRS = [
+    { code: 'E1', name: '기후변화', pillar: '환경', gri: 'GRI 305·302', iros: [
+      { type: 'Impact', statement: '온실가스 배출로 인한 기후변화 심화', value_chain: '자사' },
+      { type: 'Risk', statement: '탄소규제·배출권 비용 상승에 따른 재무 부담', value_chain: '자사' },
+      { type: 'Opportunity', statement: '재생에너지 전환·저탄소 제품으로 신시장 확대', value_chain: '하류' } ] },
+    { code: 'E2', name: '오염', pillar: '환경', gri: 'GRI 305-7', iros: [
+      { type: 'Impact', statement: '대기·수질 오염물질 배출로 지역 환경 훼손', value_chain: '자사' },
+      { type: 'Risk', statement: '환경규제 위반에 따른 과징금·조업정지 리스크', value_chain: '자사' } ] },
+    { code: 'E3', name: '물과 해양자원', pillar: '환경', gri: 'GRI 303', iros: [
+      { type: 'Impact', statement: '용수 과다 사용 및 폐수 방류로 수자원 고갈', value_chain: '상류' },
+      { type: 'Risk', statement: '물 스트레스 지역 사업장의 용수 확보 리스크', value_chain: '자사' } ] },
+    { code: 'E4', name: '생물다양성과 생태계', pillar: '환경', gri: 'GRI 304', iros: [
+      { type: 'Impact', statement: '사업장·공급망의 서식지 훼손으로 생물다양성 감소', value_chain: '상류' } ] },
+    { code: 'E5', name: '자원순환', pillar: '환경', gri: 'GRI 301·306', iros: [
+      { type: 'Impact', statement: '폐기물 발생 및 자원 소비 증가', value_chain: '자사' },
+      { type: 'Opportunity', statement: '재활용·순환소재 도입으로 원가 절감', value_chain: '자사' } ] },
+    { code: 'S1', name: '자사 인력', pillar: '사회', gri: 'GRI 401~409', iros: [
+      { type: 'Impact', statement: '고용 안정·안전한 근로환경 제공', value_chain: '자사' },
+      { type: 'Risk', statement: '산업재해·인력 이탈에 따른 생산성 저하', value_chain: '자사' } ] },
+    { code: 'S2', name: '가치사슬 내 근로자', pillar: '사회', gri: 'GRI 408·409·414', iros: [
+      { type: 'Impact', statement: '공급망 내 아동·강제노동 및 근로조건 문제', value_chain: '상류' },
+      { type: 'Risk', statement: '공급망 인권 리스크의 평판·거래 제한 영향', value_chain: '상류' } ] },
+    { code: 'S3', name: '지역사회', pillar: '사회', gri: 'GRI 411·413', iros: [
+      { type: 'Impact', statement: '지역사회 고용·경제 기여 또는 소음·교통 피해', value_chain: '자사' } ] },
+    { code: 'S4', name: '소비자와 최종사용자', pillar: '사회', gri: 'GRI 416~418', iros: [
+      { type: 'Impact', statement: '제품 안전·개인정보 보호 책임', value_chain: '하류' },
+      { type: 'Risk', statement: '제품 결함·리콜로 인한 비용과 신뢰 하락', value_chain: '하류' } ] },
+    { code: 'G1', name: '기업 행동', pillar: '지배구조', gri: 'GRI 205·206·207', iros: [
+      { type: 'Impact', statement: '부패·공정경쟁 위반이 시장 질서에 미치는 영향', value_chain: '자사' },
+      { type: 'Risk', statement: '컴플라이언스 위반에 따른 제재·평판 리스크', value_chain: '자사' } ] }
+  ]
+  let _dmaProjectId = null
+  let _dmaTab = 'overview'
+
+  function _dmaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+  function _dmaTopic(code) { return DMA_ESRS.find(t => t.code === code) || null }
+  function _dmaCurrentProject() {
+    const projects = Store.getDmaProjects()
+    if (!projects.length) return null
+    let p = projects.find(x => String(x.id) === String(_dmaProjectId))
+    if (!p) { p = projects[0]; _dmaProjectId = p.id }
+    return p
+  }
+  function _dmaIsMaterial(r, threshold) { return (r.impact_score || 0) >= threshold || (r.financial_score || 0) >= threshold }
+  function _dmaMaterial(project) { const th = project.threshold || 3; return Store.getDmaIROs(project.id).filter(r => _dmaIsMaterial(r, th)) }
+  function _dmaTypeColor(type) { return type === 'Risk' ? '#dc2626' : type === 'Opportunity' ? '#2563EB' : '#0f766e' }
+  function _dmaTypeLabel(type) { return type === 'Risk' ? '리스크' : type === 'Opportunity' ? '기회' : '영향' }
+
+  function renderDMA() {
+    const c = document.getElementById('page-dma')
+    if (!c) return
+    c.innerHTML = ''
+    const projects = Store.getDmaProjects()
+    if (!projects.length) {
+      c.append(el('div', { className: 'card', style: 'text-align:center;padding:48px 20px' },
+        el('div', { style: 'font-size:40px;margin-bottom:8px' }, '🎯'),
+        el('h3', { style: 'margin:0 0 6px' }, '이중중대성평가 (Double Materiality)'),
+        el('p', { style: 'color:#6b7280;font-size:13px;line-height:1.7;max-width:560px;margin:0 auto 16px' },
+          '영향(환경·사회에 미치는 영향)과 재무(기업 가치에 미치는 영향)를 함께 평가하여 보고할 중대 이슈를 도출합니다. GRI·ESRS 대응의 출발점입니다.'),
+        el('button', { className: 'btn btn-primary', onClick: () => openDmaProjectModal() }, '＋ 새 이중중대성평가 시작')))
+      return
+    }
+    const project = _dmaCurrentProject()
+    const selector = el('select', { style: 'padding:7px 11px;border:1px solid #e4e7eb;border-radius:8px;font-size:13px;min-width:220px', onChange: e => { _dmaProjectId = e.target.value; renderDMA() } },
+      projects.map(p => el('option', { value: String(p.id), selected: String(p.id) === String(project.id) }, `${p.year || ''} ${p.title || '이중중대성평가'}`)))
+    c.append(el('div', { className: 'card', style: 'padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' },
+      el('h3', { style: 'margin:0;font-size:15px;white-space:nowrap' }, '🎯 이중중대성평가'),
+      selector,
+      el('div', { style: 'flex:1' }),
+      el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openDmaProjectModal(project.id) }, '⚙ 평가 설정'),
+      el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openDmaProjectModal() }, '＋ 새 평가')))
+
+    const tabs = [['overview', '① 개요'], ['stake', '② 이해관계자'], ['iro', '③ IRO'], ['matrix', '④ 매트릭스'], ['result', '⑤ 결과·연계']]
+    c.append(el('div', { className: 'tabs', style: 'margin:0 0 12px' },
+      tabs.map(([id, label]) => el('button', { className: 'tab' + (_dmaTab === id ? ' active' : ''), onClick: () => { _dmaTab = id; renderDMA() } }, label))))
+
+    const host = el('div')
+    c.append(host)
+    if (_dmaTab === 'overview') _renderDmaOverview(host, project)
+    else if (_dmaTab === 'stake') _renderDmaStakeholders(host, project)
+    else if (_dmaTab === 'iro') _renderDmaIROs(host, project)
+    else if (_dmaTab === 'matrix') _renderDmaMatrix(host, project)
+    else if (_dmaTab === 'result') _renderDmaResults(host, project)
+  }
+
+  function _dmaStepper(project) {
+    const st = Store.getDmaStakeholders(project.id)
+    const iros = Store.getDmaIROs(project.id)
+    const mat = _dmaMaterial(project)
+    const steps = [
+      { n: '①', t: '사업 맥락·경계', done: !!project.boundary, hint: project.boundary || '보고 경계를 입력하세요' },
+      { n: '②', t: '이해관계자 참여', done: st.length > 0, hint: st.length ? st.length + '개 이해관계자' : '이해관계자를 등록하세요' },
+      { n: '③', t: 'IRO 도출', done: iros.length > 0, hint: iros.length ? iros.length + '개 IRO' : 'IRO를 도출하세요' },
+      { n: '④', t: '이중 평가·임계값', done: mat.length > 0, hint: '핵심 이슈 ' + mat.length + '개' }
+    ]
+    return el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' },
+      steps.map(s => el('div', { style: `flex:1 1 160px;min-width:140px;padding:12px;border-radius:10px;border:1px solid ${s.done ? '#99f6e4' : '#e4e7eb'};background:${s.done ? '#f0fdfa' : '#fff'}` },
+        el('div', { style: 'font-size:12px;color:#9ca3af' }, s.n),
+        el('div', { style: 'font-weight:700;font-size:13px;color:#1F2937;margin:2px 0' }, (s.done ? '✓ ' : '') + s.t),
+        el('div', { style: 'font-size:11px;color:#6b7280' }, s.hint))))
+  }
+
+  function _renderDmaOverview(host, project) {
+    const st = Store.getDmaStakeholders(project.id)
+    const iros = Store.getDmaIROs(project.id)
+    const mat = _dmaMaterial(project)
+    const byPillar = {}
+    iros.forEach(r => { const tp = _dmaTopic(r.topic) || { pillar: '기타' }; byPillar[tp.pillar] = (byPillar[tp.pillar] || 0) + 1 })
+    host.append(
+      _dmaStepper(project),
+      el('div', { className: 'card', style: 'margin-top:12px' },
+        el('div', { className: 'card-header' }, el('h3', {}, '평가 요약')),
+        el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:16px 20px' },
+          el('div', { className: 'stat-card' }, el('div', { className: 'stat-value' }, String(st.length)), el('div', { className: 'stat-label' }, '이해관계자')),
+          el('div', { className: 'stat-card' }, el('div', { className: 'stat-value' }, String(iros.length)), el('div', { className: 'stat-label' }, 'IRO')),
+          el('div', { className: 'stat-card' }, el('div', { className: 'stat-value', style: { color: '#0f766e' } }, String(mat.length)), el('div', { className: 'stat-label' }, '핵심(중대) 이슈')),
+          el('div', { className: 'stat-card' }, el('div', { className: 'stat-value' }, String(project.threshold || 3)), el('div', { className: 'stat-label' }, '임계값(1~5)'))),
+        Object.keys(byPillar).length ? el('div', { style: 'padding:0 20px 16px' },
+          el('div', { style: 'font-size:12px;font-weight:600;color:#6B7280;margin-bottom:8px' }, '필러별 IRO 분포'),
+          el('div', { style: 'display:flex;flex-direction:column;gap:6px' },
+            ...Object.entries(byPillar).map(([p, n]) => el('div', { style: 'display:flex;align-items:center;gap:8px;font-size:12px' },
+              el('span', { style: 'width:60px;color:#6b7280' }, p),
+              el('div', { style: 'flex:1;height:16px;background:#EEF1F4;border-radius:4px;overflow:hidden' },
+                el('div', { style: `width:${iros.length ? Math.round(n / iros.length * 100) : 0}%;height:100%;background:${p === '환경' ? '#059669' : p === '사회' ? '#2563EB' : p === '지배구조' ? '#7c3aed' : '#9CA3AF'}` })),
+              el('span', { style: 'width:28px;text-align:right;color:#9ca3af' }, String(n)))))) : null),
+      el('div', { className: 'card' },
+        el('div', { className: 'card-header' }, el('h3', {}, '평가 정보')),
+        el('div', { style: 'padding:16px 20px;display:flex;flex-direction:column;gap:8px;font-size:13px' },
+          el('div', {}, el('strong', {}, '연도: '), String(project.year || '-')),
+          el('div', {}, el('strong', {}, '보고 경계: '), project.boundary || '미입력'),
+          el('div', {}, el('strong', {}, '상태: '), project.status === 'final' ? '확정' : '작성중'),
+          project.notes ? el('div', {}, el('strong', {}, '메모: '), project.notes) : null)))
+  }
+
+  function _renderDmaStakeholders(host, project) {
+    const list = Store.getDmaStakeholders(project.id)
+    const typeLabel = { internal: '내부', external: '외부', supplier: '협력사', community: '지역사회', investor: '투자자', customer: '고객' }
+    const header = el('div', { className: 'card-header' },
+      el('h3', {}, '이해관계자 참여'),
+      el('div', { style: 'display:flex;gap:8px' },
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaSeedStakeholders(project.id) }, '기본 목록 불러오기'),
+        el('button', { className: 'btn btn-sm btn-primary', onClick: () => openDmaStakeholderModal(project.id) }, '＋ 이해관계자 추가')))
+    let body
+    if (list.length) {
+      const rows = list.map(s => el('tr', {},
+        el('td', {}, s.name || '-'),
+        el('td', {}, typeLabel[s.type] || s.type || '-'),
+        el('td', { style: 'text-align:center' }, String(s.influence || '-')),
+        el('td', { style: 'text-align:center' }, String(s.interest || '-')),
+        el('td', { style: 'font-size:11px' }, s.engagement || '-'),
+        el('td', {},
+          el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => openDmaStakeholderModal(project.id, s.id) }, '수정'),
+          el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('삭제?')) { Store.deleteDmaStakeholder(s.id); renderDMA() } } }, '삭제'))))
+      const thead = el('thead', {}, el('tr', {},
+        el('th', {}, '이해관계자'), el('th', { style: 'width:90px' }, '유형'),
+        el('th', { style: 'width:70px;text-align:center' }, '영향력'), el('th', { style: 'width:70px;text-align:center' }, '관심도'),
+        el('th', {}, '참여 방법'), el('th', { style: 'width:110px' }, '관리')))
+      body = el('div', { className: 'table-wrap' }, el('table', { className: 'table-dense' }, thead, el('tbody', {}, ...rows)))
+    } else {
+      body = el('p', { style: 'padding:20px;color:#9CA3AF;text-align:center' }, '등록된 이해관계자가 없습니다. "기본 목록 불러오기"로 시작하세요.')
+    }
+    host.append(el('div', { className: 'card' }, header, body))
+  }
+
+  function _dmaSeedStakeholders(projectId) {
+    const defaults = [
+      { name: '임직원', type: 'internal', influence: 4, interest: 4, engagement: '설문·간담회' },
+      { name: '협력사', type: 'supplier', influence: 4, interest: 3, engagement: '자가진단·실사' },
+      { name: '투자자·주주', type: 'investor', influence: 5, interest: 4, engagement: 'IR·공시' },
+      { name: '고객', type: 'customer', influence: 4, interest: 3, engagement: '설문·VOC' },
+      { name: '지역사회', type: 'community', influence: 3, interest: 3, engagement: '공청회·협의체' },
+      { name: '정부·규제기관', type: 'external', influence: 5, interest: 2, engagement: '공시·보고' }
+    ]
+    const existing = Store.getDmaStakeholders(projectId).map(s => s.name)
+    defaults.filter(d => !existing.includes(d.name)).forEach(d => Store.addDmaStakeholder({ project_id: projectId, ...d }))
+    showToast('기본 이해관계자를 불러왔습니다.', 'success')
+    renderDMA()
+  }
+
+  function openDmaStakeholderModal(projectId, id) {
+    const s = id ? Store.getDmaStakeholders(projectId).find(x => x.id === id) : null
+    const opts = [['internal', '내부'], ['external', '외부'], ['supplier', '협력사'], ['community', '지역사회'], ['investor', '투자자'], ['customer', '고객']]
+    modal(s ? '이해관계자 수정' : '이해관계자 추가', el('div', {},
+      el('div', { className: 'form-group' }, el('label', {}, '이해관계자 이름'), el('input', { id: 'dmaStName', value: s?.name || '' })),
+      el('div', { className: 'form-group' }, el('label', {}, '유형'), el('select', { id: 'dmaStType' }, opts.map(([v, l]) => el('option', { value: v, selected: (s?.type || 'external') === v }, l)))),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
+        el('div', { className: 'form-group' }, el('label', {}, '영향력(1~5)'), el('input', { type: 'number', id: 'dmaStInf', min: 1, max: 5, value: s?.influence ?? 3 })),
+        el('div', { className: 'form-group' }, el('label', {}, '관심도(1~5)'), el('input', { type: 'number', id: 'dmaStInt', min: 1, max: 5, value: s?.interest ?? 3 }))),
+      el('div', { className: 'form-group' }, el('label', {}, '참여 방법'), el('input', { id: 'dmaStEng', value: s?.engagement || '', placeholder: '예: 설문, 간담회, 실사' }))))
+    document.getElementById('modal-save').onclick = () => {
+      const data = { name: document.getElementById('dmaStName').value.trim(), type: document.getElementById('dmaStType').value, influence: parseInt(document.getElementById('dmaStInf').value) || 3, interest: parseInt(document.getElementById('dmaStInt').value) || 3, engagement: document.getElementById('dmaStEng').value.trim() }
+      if (!data.name) { alert('이름을 입력하세요.'); return }
+      if (s) Store.updateDmaStakeholder(s.id, data)
+      else Store.addDmaStakeholder({ project_id: projectId, ...data })
+      closeModal(); renderDMA()
+    }
+  }
+
+  function _renderDmaIROs(host, project) {
+    const list = Store.getDmaIROs(project.id)
+    const th = project.threshold || 3
+    const header = el('div', { className: 'card-header', style: 'flex-wrap:wrap;gap:8px' },
+      el('h3', {}, '중대 이슈(IRO) 도출'),
+      el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+        el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaSeedEsrs(project.id) }, '📚 ESRS 주요 IRO 불러오기'),
+        el('button', { className: 'btn btn-sm btn-secondary', id: 'dmaAiBtn', onClick: () => _dmaGenerateIROs(project.id) }, '🤖 AI로 IRO 후보 생성'),
+        el('button', { className: 'btn btn-sm btn-primary', onClick: () => openDmaIroModal(project.id) }, '＋ IRO 추가')))
+    const hint = el('div', { style: 'padding:8px 20px;font-size:11.5px;color:#9ca3af' }, '점수(1~5) 기준 · 영향: 규모·범위·치유불가능성 / 재무: 재무적 크기·발생확률 · 임계값 ' + th + ' 이상이면 중대 이슈로 판정')
+    let body
+    if (list.length) {
+      const thead = el('thead', {}, el('tr', {},
+        el('th', { style: 'width:60px' }, '토픽'), el('th', { style: 'width:70px' }, '유형'), el('th', {}, '영향·리스크·기회'),
+        el('th', { style: 'width:70px' }, '가치사슬'), el('th', { style: 'width:56px;text-align:center' }, '영향'), el('th', { style: 'width:56px;text-align:center' }, '재무'),
+        el('th', { style: 'width:60px;text-align:center' }, '판정'), el('th', { style: 'width:110px' }, '관리')))
+      const rows = list.map(r => {
+        const tp = _dmaTopic(r.topic)
+        const isMat = _dmaIsMaterial(r, th)
+        return el('tr', { style: isMat ? 'background:#f0fdfa' : '' },
+          el('td', {}, tp ? tp.code : (r.topic || '-')),
+          el('td', { style: `color:${_dmaTypeColor(r.type)};font-weight:600` }, _dmaTypeLabel(r.type)),
+          el('td', { style: 'font-size:12px' }, r.statement || '-'),
+          el('td', { style: 'font-size:11px' }, r.value_chain || '-'),
+          el('td', { style: 'text-align:center' }, String(r.impact_score ?? '-')),
+          el('td', { style: 'text-align:center' }, String(r.financial_score ?? '-')),
+          el('td', { style: 'text-align:center' }, el('span', { style: `font-size:11px;padding:2px 8px;border-radius:10px;background:${isMat ? '#dcfce7' : '#f3f4f6'};color:${isMat ? '#047857' : '#6b7280'}` }, isMat ? '중대' : '비중대')),
+          el('td', {},
+            el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => openDmaIroModal(project.id, r.id) }, '수정'),
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('삭제?')) { Store.deleteDmaIRO(r.id); renderDMA() } } }, '삭제')))
+      })
+      body = el('div', { className: 'table-wrap' }, el('table', { className: 'table-dense' }, thead, el('tbody', {}, ...rows)))
+    } else {
+      body = el('p', { style: 'padding:20px;color:#9CA3AF;text-align:center' }, '도출된 IRO가 없습니다. "ESRS 주요 IRO 불러오기" 또는 "AI로 IRO 후보 생성"을 사용하세요.')
+    }
+    host.append(el('div', { className: 'card' }, header, hint, body))
+  }
+
+  function openDmaIroModal(projectId, id) {
+    const r = id ? Store.getDmaIROs(projectId).find(x => x.id === id) : null
+    const types = [['Impact', '영향'], ['Risk', '리스크'], ['Opportunity', '기회']]
+    const vcs = ['상류', '자사', '하류']
+    modal(r ? 'IRO 수정' : 'IRO 추가', el('div', {},
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
+        el('div', { className: 'form-group' }, el('label', {}, 'ESRS 토픽'), el('select', { id: 'dmaIroTopic' }, [el('option', { value: '' }, '선택 안함')].concat(DMA_ESRS.map(t => el('option', { value: t.code, selected: r?.topic === t.code }, `${t.code} ${t.name}`))))),
+        el('div', { className: 'form-group' }, el('label', {}, '유형'), el('select', { id: 'dmaIroType' }, types.map(([v, l]) => el('option', { value: v, selected: (r?.type || 'Impact') === v }, l))))),
+      el('div', { className: 'form-group' }, el('label', {}, 'IRO 서술 (영향·리스크·기회)'), el('textarea', { id: 'dmaIroStmt', rows: 2, style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px', placeholder: '예: 온실가스 배출로 인한 기후변화 심화' })),
+      el('div', { className: 'form-group' }, el('label', {}, '가치사슬 위치'), el('select', { id: 'dmaIroVc' }, vcs.map(v => el('option', { value: v, selected: (r?.value_chain || '자사') === v }, v)))),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
+        el('div', { className: 'form-group' }, el('label', {}, '영향 점수(1~5)'), el('input', { type: 'number', id: 'dmaIroImpact', min: 1, max: 5, value: r?.impact_score ?? 3 })),
+        el('div', { className: 'form-group' }, el('label', {}, '재무 점수(1~5)'), el('input', { type: 'number', id: 'dmaIroFin', min: 1, max: 5, value: r?.financial_score ?? 3 }))),
+      el('div', { className: 'form-group' }, el('label', {}, '평가 근거'), el('textarea', { id: 'dmaIroRationale', rows: 2, style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px', placeholder: '이해관계자 의견, 자료 출처 등' }))))
+    if (r) document.getElementById('dmaIroStmt').value = r.statement || ''
+    if (r) document.getElementById('dmaIroRationale').value = r.rationale || ''
+    document.getElementById('modal-save').onclick = () => {
+      const data = { topic: document.getElementById('dmaIroTopic').value, type: document.getElementById('dmaIroType').value, statement: document.getElementById('dmaIroStmt').value.trim(), value_chain: document.getElementById('dmaIroVc').value, impact_score: parseInt(document.getElementById('dmaIroImpact').value) || 3, financial_score: parseInt(document.getElementById('dmaIroFin').value) || 3, rationale: document.getElementById('dmaIroRationale').value.trim() }
+      if (!data.statement) { alert('IRO 서술을 입력하세요.'); return }
+      if (r) Store.updateDmaIRO(r.id, data)
+      else Store.addDmaIRO({ project_id: projectId, ...data })
+      closeModal(); renderDMA()
+    }
+  }
+
+  function _dmaSeedEsrs(projectId) {
+    let added = 0
+    const existing = Store.getDmaIROs(projectId).map(r => (r.topic || '') + '|' + (r.statement || ''))
+    DMA_ESRS.forEach(t => t.iros.forEach(iro => {
+      const key = t.code + '|' + iro.statement
+      if (existing.includes(key)) return
+      Store.addDmaIRO({ project_id: projectId, topic: t.code, type: iro.type, statement: iro.statement, value_chain: iro.value_chain, impact_score: 3, financial_score: 3, source: 'ESRS 기본' })
+      added++
+    }))
+    showToast(added ? `ESRS 주요 IRO ${added}건을 불러왔습니다. 점수를 조정하세요.` : '이미 모두 불러와 있습니다.', added ? 'success' : '')
+    renderDMA()
+  }
+
+  async function _dmaGenerateIROs(projectId) {
+    const btn = document.getElementById('dmaAiBtn')
+    const project = Store.getDmaProject(projectId)
+    const refs = Store.getReferenceDocs ? (Store.getReferenceDocs() || []) : []
+    let context = ''
+    if (refs.length && Store.getReferenceChunks) {
+      const chunks = (Store.getReferenceChunks() || []).slice(0, 8)
+      context = chunks.map(c => c.content || '').join('\n').slice(0, 4000)
+    }
+    const company = (Store.getCompanies() || [])[0]
+    const sys = '당신은 GRI/ESRS 이중중대성평가 전문가입니다. 주어진 기업 정보와 자료를 바탕으로 실질적 이슈(IRO: Impact, Risk, Opportunity)를 도출하세요. 반드시 JSON만 출력: {"iros":[{"topic":"E1","type":"Impact","statement":"...","value_chain":"자사"}]}. topic은 다음 중 하나: ' + DMA_ESRS.map(t => t.code).join(', ') + '. type은 Impact/Risk/Opportunity, value_chain은 상류/자사/하류.'
+    const user = `기업명: ${company?.name || '미지정'}\n업종: ${company?.industry_code || '미지정'}\n\n참고자료:\n${context || '(없음 — 일반 제조업 기준으로 도출)'}\n\n각 토픽별로 주요 IRO를 8~14개 도출하세요.`
+    if (btn) { btn.disabled = true; btn.textContent = '🤖 생성 중...' }
+    try {
+      const raw = await AI._callAI([{ role: 'system', content: sys }, { role: 'user', content: user }])
+      const parsed = AI._safeParseJson(raw)
+      const iros = parsed && Array.isArray(parsed.iros) ? parsed.iros : []
+      if (!iros.length) throw new Error('AI 응답에서 IRO를 찾지 못했습니다.')
+      const existing = Store.getDmaIROs(projectId).map(r => (r.topic || '') + '|' + (r.statement || ''))
+      let added = 0
+      iros.forEach(i => {
+        const topic = DMA_ESRS.some(t => t.code === i.topic) ? i.topic : ''
+        const key = topic + '|' + (i.statement || '')
+        if (!i.statement || existing.includes(key)) return
+        Store.addDmaIRO({ project_id: projectId, topic, type: ['Impact', 'Risk', 'Opportunity'].includes(i.type) ? i.type : 'Impact', statement: String(i.statement).slice(0, 300), value_chain: ['상류', '자사', '하류'].includes(i.value_chain) ? i.value_chain : '자사', impact_score: 3, financial_score: 3, source: 'AI' })
+        added++
+      })
+      showToast(added ? `AI가 IRO ${added}건을 생성했습니다. 점수를 검토하세요.` : '새로 추가할 IRO가 없습니다.', added ? 'success' : '')
+    } catch (e) {
+      showToast('AI 생성 실패: ' + (e.message || e) + ' — 설정 › AI 연결을 확인하거나 ESRS 기본 목록을 사용하세요.', 'error')
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🤖 AI로 IRO 후보 생성' }
+      renderDMA()
+    }
+  }
+
+  function _dmaMatrixSvg(project) {
+    const th = project.threshold || 3
+    const iros = Store.getDmaIROs(project.id)
+    const S = 380, pad = 44, plot = S - pad * 2
+    const fx = s => pad + ((Math.min(Math.max(s, 1), 5) - 1) / 4) * plot
+    const fy = s => pad + plot - ((Math.min(Math.max(s, 1), 5) - 1) / 4) * plot
+    const tl = fx(th), tly = fy(th)
+    let g = ''
+    g += `<rect x="${pad}" y="${pad}" width="${plot}" height="${plot}" fill="#fff" stroke="#e4e7eb"/>`
+    g += `<rect x="${tl}" y="${pad}" width="${fx(5) - tl}" height="${tly - pad}" fill="#f0fdfa"/>`
+    g += `<rect x="${pad}" y="${pad}" width="${tl - pad}" height="${tly - pad}" fill="#eff6ff"/>`
+    g += `<rect x="${tl}" y="${tly}" width="${fx(5) - tl}" height="${fy(1) - tly}" fill="#fef2f2"/>`
+    for (let s = 1; s <= 5; s++) {
+      g += `<line x1="${fx(s)}" y1="${pad}" x2="${fx(s)}" y2="${pad + plot}" stroke="#f1f5f9"/>`
+      g += `<line x1="${pad}" y1="${fy(s)}" x2="${pad + plot}" y2="${fy(s)}" stroke="#f1f5f9"/>`
+      g += `<text x="${fx(s)}" y="${pad + plot + 16}" font-size="10" fill="#9ca3af" text-anchor="middle">${s}</text>`
+      g += `<text x="${pad - 10}" y="${fy(s) + 3}" font-size="10" fill="#9ca3af" text-anchor="end">${s}</text>`
+    }
+    g += `<line x1="${tl}" y1="${pad}" x2="${tl}" y2="${pad + plot}" stroke="#0f766e" stroke-dasharray="4 3"/>`
+    g += `<line x1="${pad}" y1="${tly}" x2="${pad + plot}" y2="${tly}" stroke="#0f766e" stroke-dasharray="4 3"/>`
+    g += `<text x="${pad + plot - 6}" y="${pad + 14}" font-size="10" fill="#0f766e" text-anchor="end" font-weight="700">이중중대</text>`
+    g += `<text x="${pad + 6}" y="${pad + 14}" font-size="10" fill="#2563EB" font-weight="700">영향 중대</text>`
+    g += `<text x="${pad + plot - 6}" y="${pad + plot - 6}" font-size="10" fill="#dc2626" text-anchor="end" font-weight="700">재무 중대</text>`
+    g += `<text x="${pad + plot / 2}" y="${S - 8}" font-size="11" fill="#6b7280" text-anchor="middle">재무적 중요성 (→)</text>`
+    g += `<text x="14" y="${pad + plot / 2}" font-size="11" fill="#6b7280" text-anchor="middle" transform="rotate(-90 14 ${pad + plot / 2})">영향 중요성 (→)</text>`
+    const groups = {}
+    iros.forEach(r => { const t = _dmaTopic(r.topic); const code = t ? t.code : '기타'; const k = code + '|' + (r.financial_score || 3) + '|' + (r.impact_score || 3); groups[k] = groups[k] || []; groups[k].push(r) })
+    Object.keys(groups).forEach(k => {
+      const [code, fs, is] = k.split('|')
+      const arr = groups[k]
+      const cx = fx(parseInt(fs)), cy = fy(parseInt(is))
+      const isMat = (parseInt(fs) >= th || parseInt(is) >= th)
+      const r = 7 + Math.min(arr.length - 1, 3) * 2
+      g += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${isMat ? '#0f766e' : '#94a3b8'}" fill-opacity="0.75" stroke="#fff" stroke-width="1.5"><title>${_dmaEsc(code)}: ${arr.map(a => _dmaEsc(a.statement)).join(' / ')}</title></circle>`
+      if (arr.length > 1) g += `<text x="${cx}" y="${cy + 3}" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">${arr.length}</text>`
+    })
+    return `<svg viewBox="0 0 ${S} ${S}" width="100%" style="max-width:420px;display:block;margin:0 auto">${g}</svg>`
+  }
+
+  function _renderDmaMatrix(host, project) {
+    const iros = Store.getDmaIROs(project.id)
+    const legend = [['Impact', '영향'], ['Risk', '리스크'], ['Opportunity', '기회']].map(([t, l]) =>
+      el('span', { style: 'display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-right:12px' },
+        el('span', { style: `width:10px;height:10px;border-radius:50%;background:${_dmaTypeColor(t)}` }), l))
+    host.append(el('div', { className: 'card' },
+      el('div', { className: 'card-header', style: 'flex-wrap:wrap;gap:8px' },
+        el('h3', {}, '중대성 매트릭스')),
+      el('div', { style: 'padding:8px 20px 0;font-size:11.5px;color:#9ca3af' }, '가로축 = 재무적 중요성, 세로축 = 영향 중요성(환경·사회) · 대각 점선 = 임계값 경계'),
+      el('div', { style: 'padding:10px 20px 0' }, ...legend),
+      el('div', { style: 'padding:8px 20px 16px' },
+        el('div', { style: 'padding:8px 0' }, el('div', { innerHTML: _dmaMatrixSvg(project) })),
+        el('p', { style: 'font-size:11.5px;color:#6b7280;text-align:center;margin:4px 0 0' }, `임계값 ${project.threshold || 3} 기준 · 초록 원 = 중대 이슈 · 회색 원 = 비중대 (총 ${iros.length}개)`))))
+    if (!iros.length) host.lastChild.append(el('p', { style: 'text-align:center;color:#9CA3AF;font-size:12px' }, 'IRO 탭에서 이슈를 도출하면 매트릭스가 표시됩니다.'))
+  }
+
+  function _renderDmaResults(host, project) {
+    const mat = _dmaMaterial(project)
+    const th = project.threshold || 3
+    const table = mat.length ? el('div', { className: 'table-wrap' }, el('table', { className: 'table-dense' },
+      el('thead', {}, el('tr', {}, el('th', { style: 'width:60px' }, '토픽'), el('th', {}, '중대 이슈'), el('th', { style: 'width:120px' }, 'GRI 연계'), el('th', { style: 'width:56px;text-align:center' }, '영향'), el('th', { style: 'width:56px;text-align:center' }, '재무'))),
+      el('tbody', {}, ...mat.sort((a, b) => Math.max(b.impact_score, b.financial_score) - Math.max(a.impact_score, a.financial_score)).map(r => {
+        const tp = _dmaTopic(r.topic)
+        return el('tr', {},
+          el('td', {}, tp ? tp.code : (r.topic || '-')),
+          el('td', { style: 'font-size:12px' }, r.statement || '-'),
+          el('td', { style: 'font-size:11px;color:#6b7280' }, tp ? tp.gri : '-'),
+          el('td', { style: 'text-align:center' }, String(r.impact_score ?? '-')),
+          el('td', { style: 'text-align:center' }, String(r.financial_score ?? '-')))
+      })))) : el('p', { style: 'padding:20px;color:#9CA3AF;text-align:center' }, '중대 이슈가 없습니다. IRO 점수를 조정하거나 임계값을 낮춰보세요.')
+    host.append(el('div', { className: 'card' },
+      el('div', { className: 'card-header', style: 'flex-wrap:wrap;gap:8px' },
+        el('h3', {}, `중대 이슈 (${mat.length}개)`),
+        el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaExportCsv(project) }, '⬇ 결과 CSV 내보내기'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => _dmaLinkToIndicators(project) }, '📌 지표로 연계'),
+          el('button', { className: 'btn btn-sm btn-primary', onClick: () => { navigate('writer'); showToast('보고서 작성기에서 중대 이슈를 활용하세요.', '') } }, '✍️ 보고서 작성기로'))),
+      el('p', { style: 'padding:8px 20px 0;font-size:11.5px;color:#9ca3af' }, '임계값 ' + th + ' 이상인 이슈를 중대 이슈로 판정합니다. GRI·ESRS 정합성을 확인하세요.'),
+      table,
+      el('div', { style: 'padding:12px 20px;border-top:1px dashed #e4e7eb' },
+        el('div', { style: 'font-size:12px;color:#6b7280;line-height:1.7' },
+          '전문가 관점: 이중중대성 평가는 ',
+          el('strong', {}, '3선 거버넌스(1선 소관부서 → 2선 주관부서 → 3선 이사회)'),
+          ' 승인과 각 점수의 근거(증빙·이해관계자 의견) 확보가 감사 대응에 중요합니다. 결과를 제3자 검증(감사 보증) 메뉴와 연계하세요.'))))
+  }
+
+  function _dmaExportCsv(project) {
+    const iros = Store.getDmaIROs(project.id)
+    if (!iros.length) return alert('내보낼 IRO가 없습니다.')
+    const th = project.threshold || 3
+    const rows = [['topic', 'type', 'statement', 'value_chain', 'impact_score', 'financial_score', 'material']]
+    iros.forEach(r => { const tp = _dmaTopic(r.topic); rows.push([r.topic || '', r.type, '"' + String(r.statement || '').replace(/"/g, '""') + '"', r.value_chain || '', r.impact_score, r.financial_score, _dmaIsMaterial(r, th) ? 'Y' : 'N']) })
+    const csv = '\uFEFF' + rows.map(r => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `DMA_${project.year || ''}_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url)
+  }
+
+  function _dmaLinkToIndicators(project) {
+    const mat = _dmaMaterial(project)
+    if (!mat.length) return alert('연계할 중대 이슈가 없습니다.')
+    let added = 0
+    const existing = Store.getIndicators().filter(i => i.authority_code === 'KSSB').map(i => i.indicator_name)
+    mat.forEach(r => {
+      const name = '[중대성] ' + (r.statement || r.topic || '이슈')
+      if (existing.includes(name)) return
+      Store.addIndicator({ authority_code: 'KSSB', group_id: null, indicator_name: name, pillar: (_dmaTopic(r.topic) || {}).pillar || 'ESG', description: '이중중대성평가 도출 이슈 · ' + (r.rationale || ''), data_type: 'text', is_active: true })
+      added++
+    })
+    Store.addAuditLog({ category: '이중중대성평가', action: '지표 연계', user_id: currentUser?.id || null, user_name: currentUser?.name || '', detail: `프로젝트 ${project.year || project.id} · ${added}개 지표 생성` })
+    showToast(added ? `중대 이슈 ${added}건을 KSSB 지표로 연계했습니다.` : '이미 연계된 이슈입니다.', added ? 'success' : '')
+    if (added && confirm('지표 관리 화면으로 이동할까요?')) navigate('indicator')
+  }
+
+  function openDmaProjectModal(id) {
+    const p = id ? Store.getDmaProject(id) : null
+    modal(p ? '이중중대성평가 설정' : '새 이중중대성평가', el('div', {},
+      el('div', { className: 'form-group' }, el('label', {}, '제목'), el('input', { id: 'dmaTitle', value: p?.title || '', placeholder: '예: 2026 이중중대성평가' })),
+      el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
+        el('div', { className: 'form-group' }, el('label', {}, '연도'), el('input', { type: 'number', id: 'dmaYear', value: p?.year || new Date().getFullYear() })),
+        el('div', { className: 'form-group' }, el('label', {}, '임계값(1~5)'), el('input', { type: 'number', id: 'dmaThreshold', min: 1, max: 5, value: p?.threshold ?? 3 }))),
+      el('div', { className: 'form-group' }, el('label', {}, '보고 경계'), el('input', { id: 'dmaBoundary', value: p?.boundary || '', placeholder: '예: 국내 사업장 + 주요 1차 협력사' })),
+      el('div', { className: 'form-group' }, el('label', {}, '상태'), el('select', { id: 'dmaStatus' }, [['draft', '작성중'], ['final', '확정']].map(([v, l]) => el('option', { value: v, selected: (p?.status || 'draft') === v }, l)))),
+      el('div', { className: 'form-group' }, el('label', {}, '메모'), el('textarea', { id: 'dmaNotes', rows: 2, style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px' })),
+      p ? el('button', { className: 'btn btn-sm btn-danger', style: 'margin-top:4px', onClick: () => { if (confirm('평가와 연결된 IRO·이해관계자를 모두 삭제할까요?')) { Store.deleteDmaProject(p.id); _dmaProjectId = null; closeModal(); renderDMA() } } }, '🗑 평가 삭제') : null))
+    if (p) document.getElementById('dmaNotes').value = p.notes || ''
+    document.getElementById('modal-save').onclick = () => {
+      const data = { title: document.getElementById('dmaTitle').value.trim() || '이중중대성평가', year: parseInt(document.getElementById('dmaYear').value) || new Date().getFullYear(), threshold: Math.min(5, Math.max(1, parseInt(document.getElementById('dmaThreshold').value) || 3)), boundary: document.getElementById('dmaBoundary').value.trim(), status: document.getElementById('dmaStatus').value, notes: document.getElementById('dmaNotes').value.trim() }
+      if (p) { Store.updateDmaProject(p.id, data) }
+      else { const np = Store.addDmaProject(data); _dmaProjectId = np.id }
+      closeModal(); renderDMA()
+    }
+  }
+
   // ==================== Expose globals ====================
   window.init = init
   window.navigate = navigate
@@ -7051,8 +7823,15 @@
   window.closeModal = closeModal
   window.saveModal = saveModal
   window.renderAssessments = renderAssessments
+  window.renderDMA = renderDMA
+  window.renderStructure = renderStructure
+  window.openDmaProjectModal = openDmaProjectModal
+  window.openDmaStakeholderModal = openDmaStakeholderModal
+  window.openDmaIroModal = openDmaIroModal
   window.renderIndicators = renderIndicators
   window.renderDashboard = renderDashboard
+  window.renderNextActions = renderNextActions
+  window._dataQualityIssues = _dataQualityIssues
   window.setDashAssessment = setDashAssessment
   window.showAssessmentDetail = showAssessmentDetail
   window.renderCompanies = renderCompanies

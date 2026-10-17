@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.5.0'
+const APP_VERSION = 'v2.6.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -572,12 +572,14 @@ const Store = {
       apiEndpoints: [],
       apiDataLogs: [],
       benchmarks: null,
-      referenceDocs: [],
-      referenceChunks: [],
+      referenceDocs: [],      referenceChunks: [],
       reportDocs: [],
       reportDocSections: [],
       reportFeedback: [],
       reportDocVersions: [],
+      dmaProjects: [],
+      dmaStakeholders: [],
+      dmaIROs: [],
       aiConfig: null
     }
   },
@@ -1402,6 +1404,24 @@ const Store = {
   getAgencyTrackType(code) { const a = (this.data.agencyMaster || []).find(x => x.code === code); return a ? a.track_type : 'VOLUNTARY' },
   addAgencyMaster(a) { this.data.agencyMaster.push({ id: Date.now(), ...a }); this._save() },
   deleteAgencyMaster(id) { this.data.agencyMaster = this.data.agencyMaster.filter(x => x.id !== id); this._save() },
+
+  // ==== Double Materiality Assessment (DMA, 이중중대성평가) ====
+  getDmaProjects() { return this.data.dmaProjects || [] },
+  getDmaProject(id) { const nid = this._normId(id); return (this.data.dmaProjects || []).find(p => this._normId(p.id) === nid) || null },
+  addDmaProject(p) { if (!this.data.dmaProjects) this.data.dmaProjects = []; const proj = { id: Date.now(), year: new Date().getFullYear(), boundary: '', threshold: 3, status: 'draft', created_at: new Date().toISOString(), ...p }; this.data.dmaProjects.push(proj); this._save(); return proj },
+  updateDmaProject(id, updates) { const nid = this._normId(id); const i = (this.data.dmaProjects || []).findIndex(p => this._normId(p.id) === nid); if (i > -1) { Object.assign(this.data.dmaProjects[i], updates); this._save() } },
+  deleteDmaProject(id) { const nid = this._normId(id); (this.data.dmaStakeholders || []).filter(s => this._normId(s.project_id) === nid).forEach(s => this._addDeletedId('dmaStakeholders', s.id)); (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) === nid).forEach(r => this._addDeletedId('dmaIROs', r.id)); this.data.dmaProjects = (this.data.dmaProjects || []).filter(p => this._normId(p.id) !== nid); this.data.dmaStakeholders = (this.data.dmaStakeholders || []).filter(s => this._normId(s.project_id) !== nid); this.data.dmaIROs = (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) !== nid); this._addDeletedId('dmaProjects', id); this._save() },
+
+  getDmaStakeholders(projectId) { const nid = this._normId(projectId); return (this.data.dmaStakeholders || []).filter(s => this._normId(s.project_id) === nid) },
+  addDmaStakeholder(s) { if (!this.data.dmaStakeholders) this.data.dmaStakeholders = []; const row = { id: Date.now() + Math.random(), type: 'external', influence: 3, interest: 3, engagement: '', created_at: new Date().toISOString(), ...s }; this.data.dmaStakeholders.push(row); this._save(); return row },
+  updateDmaStakeholder(id, updates) { const i = (this.data.dmaStakeholders || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.dmaStakeholders[i], updates); this._save() } },
+  deleteDmaStakeholder(id) { this.data.dmaStakeholders = (this.data.dmaStakeholders || []).filter(x => x.id !== id); this._addDeletedId('dmaStakeholders', id); this._save() },
+
+  getDmaIROs(projectId) { const nid = this._normId(projectId); return (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) === nid) },
+  addDmaIRO(r) { if (!this.data.dmaIROs) this.data.dmaIROs = []; const row = { id: Date.now() + Math.random(), type: 'Impact', topic: '', statement: '', value_chain: '자사', likelihood: 3, impact_score: 3, financial_score: 3, evidence_ids: [], rationale: '', source: '', created_at: new Date().toISOString(), ...r }; this.data.dmaIROs.push(row); this._save(); return row },
+  updateDmaIRO(id, updates) { const i = (this.data.dmaIROs || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.dmaIROs[i], updates); this._save() } },
+  deleteDmaIRO(id) { this.data.dmaIROs = (this.data.dmaIROs || []).filter(x => x.id !== id); this._addDeletedId('dmaIROs', id); this._save() },
+  clearDmaIROs(projectId) { const nid = this._normId(projectId); (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) === nid).forEach(r => this._addDeletedId('dmaIROs', r.id)); this.data.dmaIROs = (this.data.dmaIROs || []).filter(r => this._normId(r.project_id) !== nid); this._save() },
 
   // ==== Import API Data (ERP 연동) ====
   importApiData(category, rows) {

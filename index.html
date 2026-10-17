@@ -26,6 +26,7 @@
         </div>
         <div class="nav-group-items">
           <a href="#" data-page="dashboard"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> <span class="nav-label">대시보드</span></a>
+          <a href="#" data-page="structure"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 6h10M6.5 7.5 11 16M17.5 7.5 13 16"/></svg> <span class="nav-label">전체 구조도</span></a>
           <a href="#" data-page="monitor"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> <span class="nav-label">벤치마크</span></a>
           <a href="#" data-page="risk"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <span class="nav-label">리스크 예측</span></a>
         </div>
@@ -35,6 +36,7 @@
           <span class="nav-group-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></span><span class="nav-label">평가·관리</span><span class="nav-group-arrow">›</span>
         </div>
         <div class="nav-group-items">
+          <a href="#" data-page="dma"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></svg> <span class="nav-label">이중중대성평가</span></a>
           <a href="#" data-page="assessment"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> <span class="nav-label">ESG 평가</span></a>
           <a href="#" data-page="indicator"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> <span class="nav-label">지표 관리</span></a>
           <a href="#" data-page="evidence"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg> <span class="nav-label">증빙 관리</span></a>
@@ -131,11 +133,14 @@
         <button id="export-btn" title="데이터 내보내기" style="background:none;border:1px solid #e4e7eb;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:14px" onclick="showExportModal()">📥</button>
       </div>
     </header>
+    <div id="workflow-bar" class="wf-bar"></div>
     <section id="content">
       <div id="page-dashboard" class="page active">
         <div id="dashboardGrid"></div>
       </div>
+      <div id="page-structure" class="page"></div>
       <div id="page-assessment" class="page"></div>
+      <div id="page-dma" class="page"></div>
       <div id="page-indicator" class="page"></div>
       <div id="page-evidence" class="page"></div>
       <div id="page-ghg" class="page"></div>
