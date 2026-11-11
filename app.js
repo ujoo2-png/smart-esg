@@ -772,7 +772,7 @@
     if (_helpOpen) showHelpFor(page)
 
     const _safe = (fn) => { try { fn() } catch (e) { console.error('Render error [' + page + ']:', e); const c = document.getElementById('page-' + page); if (c) { c.innerHTML = ''; c.append(el('div', { className: 'card' }, el('div', { style: 'padding:20px;color:#dc2626' }, el('h3', { style: 'margin:0 0 8px' }, '오류가 발생했습니다'), el('p', { style: 'margin:0 0 12px;font-size:13px' }, e.message), el('button', { className: 'btn btn-secondary', onClick: () => navigate(page) }, '다시 시도')))) } } }
-    if (page === 'dashboard') { _safe(renderDashboard); setTimeout(() => _showFirstLoginProjectPopup(), 500) }
+    if (page === 'dashboard') { _safe(renderDashboard); setTimeout(() => _showLoginReminder(), 500) }
     else if (page === 'structure') _safe(renderStructure)
     else if (page === 'assessment') _safe(renderAssessments)
     else if (page === 'dma') _safe(renderDMA)
@@ -2565,7 +2565,7 @@
   }
 
   function openAddSupplier() { createSupplierModal() }
-  function editSupplier(id) { const s = Supplier.getAll().find(x => x.id === id); if (s) createSupplierModal(s) }
+  function editSupplier(id) { const s = Supplier.getAll().find(x => String(x.id) === String(id)); if (s) createSupplierModal(s) }
 
   function _downloadTextFile(filename, content, mime) {
     const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' })
@@ -2844,8 +2844,8 @@
   }
 
   function openSupplierRiskModal(supplierId) {
-    const supplier = Supplier.getAll().find(s => s.id === supplierId)
-    if (!supplier) return
+    const supplier = Supplier.getAll().find(s => String(s.id) === String(supplierId))
+    if (!supplier) { showToast('협력사 정보를 찾을 수 없습니다. 새로고침 후 다시 시도하세요.', 'error'); return }
     const existing = Store.getSupplierRiskItems(supplierId)
     const getAns = qid => (existing.find(i => i.question_id === qid)?.answer) ?? ''
     const selectEls = {}
@@ -3081,6 +3081,8 @@
         el('h3', { style: 'margin:0;font-size:16px' }, '📝 VSME 자가진단'),
         el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
           el('button', { className: 'btn btn-sm btn-secondary', onClick: openQuestionnaireManager }, '⚙ 설문 관리'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: importVSMEExcel }, '📤 엑셀 일괄등록'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: downloadVSMEImportTemplate }, '📄 일괄등록 템플릿'),
           el('button', { className: 'btn btn-sm btn-secondary', onClick: exportVSMEExcel }, '📥 엑셀 내보내기')
         )
       ),
@@ -3114,14 +3116,15 @@
   }
 
   function openVSMEForSupplier(supplierId) {
-    const supplier = Supplier.getAll().find(s => s.id === supplierId)
-    if (!supplier) return
+    const supplier = Supplier.getAll().find(s => String(s.id) === String(supplierId))
+    if (!supplier) { showToast('협력사 정보를 찾을 수 없습니다. 새로고침 후 다시 시도하세요.', 'error'); return }
     const questionnaires = Supplier.getQuestionnaires()
     const form = el('div', {})
     const qSelect = el('select', { style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px' },
       ...questionnaires.map(q => el('option', { value: q.id }, `${q.name} (${q.questions.length}항목)`))
     )
     const qDesc = el('div', { style: 'font-size:11px;color:#9CA3AF;margin:4px 0 12px;min-height:16px' })
+    const assessedAt = el('input', { type: 'date', value: new Date().toISOString().slice(0, 10), style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })
     const questionContainer = el('div', {})
     function renderQuestions() {
       const selected = Supplier.getQuestionnaire(qSelect.value)
@@ -3141,7 +3144,14 @@
     }
     qSelect.onchange = renderQuestions
     renderQuestions()
-    form.append(qSelect, qDesc, questionContainer)
+    form.append(
+      el('div', { style: 'display:grid;grid-template-columns:1fr 180px;gap:10px;align-items:end' },
+        el('label', { style: 'font-size:12px;color:#6B7280' }, '설문지', qSelect),
+        el('label', { style: 'font-size:12px;color:#6B7280' }, '입력일 (자가진단 기준일)', assessedAt)
+      ),
+      qDesc,
+      questionContainer
+    )
     modal(`VSME 자가진단 - ${supplier.name}`, form)
     document.getElementById('modal-save').onclick = () => {
       try {
@@ -3151,7 +3161,7 @@
           const checked = form.querySelector(`input[name="${q.id}"]:checked`)
           answers[q.id] = checked ? checked.value : 'na'
         })
-        Supplier.submitVSME(supplierId, selected.id, answers)
+        Supplier.submitVSME(supplierId, selected.id, answers, assessedAt.value)
         closeModal()
         _supplierTab = 'vsme'
         renderSupplier()
@@ -3164,7 +3174,7 @@
   }
 
   function showVSMEHistory(supplierId) {
-    const supplier = Supplier.getAll().find(s => s.id === supplierId)
+    const supplier = Supplier.getAll().find(s => String(s.id) === String(supplierId))
     const assessments = Supplier.getVSMEAssessments(supplierId).slice().reverse()
     const body = el('div', { style: 'max-height:400px;overflow-y:auto' })
     if (!assessments.length) {
@@ -3369,6 +3379,112 @@
       alert('엑셀 생성 실패: ' + e.message)
       console.error('VSME excel export error:', e)
     }
+  }
+
+  async function downloadVSMEImportTemplate() {
+    try {
+      const XLSX = await _ensureXLSX()
+      const basic = Supplier.getQuestionnaire('basic')
+      const today = new Date().toISOString().slice(0, 10)
+      const wide = [
+        ['협력사', '업종', '설문지', '입력일', ...basic.questions.map(q => q.id)],
+        ['대동포리마', '제조', basic.name, today, ...basic.questions.map(() => '예')]
+      ]
+      const long = [['협력사', '설문지', '입력일', '문항ID', '문항', '응답']]
+      basic.questions.slice(0, 3).forEach(q => long.push(['대동포리마', basic.name, today, q.id, q.question, '예']))
+      const guide = [
+        ['항목', '설명'],
+        ['가로형', '1행 = 협력사 1곳. 문항ID(vb-1 등) 또는 문항 텍스트를 컬럼으로 사용합니다.'],
+        ['세로형', '1행 = 문항 1개. 내보내기(응답상세) 형식과 동일합니다.'],
+        ['응답값', '예 / 아니오 / 해당없음 / 부분 (yes, no, na, partial 가능)'],
+        ['입력일', 'YYYY-MM-DD 형식. 비우면 오늘 날짜로 등록됩니다.'],
+        ['설문지', '설문지 이름 또는 ID. 비우면 문항ID로 자동 판별합니다.'],
+        ['협력사', '미등록 협력사는 자동으로 신규 등록됩니다.'],
+        ['중복', '같은 협력사·설문지·입력일 자료가 있으면 새 값으로 갱신됩니다.']
+      ]
+      const wb = XLSX.utils.book_new()
+      const add = (rows, name, widths) => {
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws['!cols'] = widths.map(w => ({ wch: w }))
+        XLSX.utils.book_append_sheet(wb, ws, name)
+      }
+      add(wide, '가로형_템플릿', [18, 12, 20, 14, ...basic.questions.map(() => 10)])
+      add(long, '세로형_템플릿', [18, 20, 14, 12, 52, 10])
+      add(guide, '작성안내', [14, 80])
+      XLSX.writeFile(wb, 'VSME_자가진단_일괄등록_템플릿.xlsx')
+      showToast('일괄등록 템플릿을 내려받았습니다.', 'success')
+    } catch (e) {
+      alert('템플릿 생성 실패: ' + e.message)
+    }
+  }
+
+  function importVSMEExcel() {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.xlsx,.xls,.csv'
+    input.style.display = 'none'
+    document.body.append(input)
+    input.onchange = async () => {
+      const file = input.files && input.files[0]
+      input.remove()
+      if (!file) return
+      try {
+        const XLSX = await _ensureXLSX()
+        const buf = await file.arrayBuffer()
+        const isCsv = /\.csv$/i.test(file.name)
+        const wb = isCsv ? XLSX.read(new TextDecoder().decode(buf), { type: 'string' }) : XLSX.read(buf, { type: 'array' })
+        const collected = []
+        const errors = []
+        const names = []
+        const usedSheets = []
+        wb.SheetNames.forEach(name => {
+          if (/안내|guide|작성/i.test(name)) return
+          const ws = wb.Sheets[name]
+          if (!ws) return
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' })
+          const parsed = Supplier.parseBulkRows(rows)
+          if (!parsed.assessments.length) {
+            parsed.errors.forEach(e => errors.push(`[${name}] ${e}`))
+            return
+          }
+          usedSheets.push(name)
+          collected.push(...parsed.assessments)
+          parsed.errors.forEach(e => errors.push(`[${name}] ${e}`))
+          parsed.supplierNames.forEach(n => { if (!names.includes(n)) names.push(n) })
+        })
+        const byKey = new Map()
+        collected.forEach(item => {
+          const key = `${String(item.supplierName || '').trim().toLowerCase()}|${item.questionnaireId}|${String(item.assessedAt || '').slice(0, 10)}`
+          const prev = byKey.get(key)
+          if (prev) prev.answers = { ...prev.answers, ...item.answers }
+          else byKey.set(key, { ...item, answers: { ...item.answers } })
+        })
+        const merged = { assessments: [...byKey.values()], errors, supplierNames: names }
+        if (!merged.assessments.length) {
+          alert('등록할 자가진단 데이터를 찾지 못했습니다.\n\n' + (merged.errors.slice(0, 8).join('\n') || '일괄등록 템플릿 형식을 확인하세요.'))
+          return
+        }
+        const existing = new Set(Supplier.getAll().map(s => String(s.name || '').trim().toLowerCase()))
+        const newNames = merged.supplierNames.filter(n => !existing.has(String(n).trim().toLowerCase()))
+        const lines = [
+          `파일: ${file.name}`,
+          `인식된 자가진단: ${merged.assessments.length}건 (시트 ${usedSheets.length}개)`,
+          `대상 협력사: ${merged.supplierNames.length}곳`,
+          newNames.length ? `신규 협력사(자동 등록): ${newNames.length}곳 — ${newNames.slice(0, 5).join(', ')}${newNames.length > 5 ? ' 외' : ''}` : '신규 협력사 없음',
+          merged.errors.length ? `건너뛴 행: ${merged.errors.length}건` : ''
+        ].filter(Boolean)
+        if (!confirm(lines.join('\n') + '\n\n일괄등록을 진행할까요?')) return
+        const r = Supplier.applyBulkImport(merged, { createSuppliers: true, overwrite: true })
+        _supplierTab = 'vsme'
+        renderSupplier()
+        showToast(`일괄등록 완료: 신규 ${r.created}건 · 갱신 ${r.updated}건 · 신규 협력사 ${r.createdSuppliers}곳`, 'success')
+        if (merged.errors.length) alert('일부 행을 건너뛰었습니다.\n\n' + merged.errors.slice(0, 10).join('\n'))
+      } catch (e) {
+        alert('엑셀 일괄등록 실패: ' + e.message)
+        console.error('VSME bulk import error:', e)
+      }
+    }
+    input.click()
   }
 
   // ==================== AI 보고서 ====================
@@ -6211,8 +6327,8 @@
     const form = el('form', { onSubmit: e => e.preventDefault() },
       el('div', { style: 'display:flex;flex-direction:column;gap:10px' },
         el('label', { style: 'font-size:12px' }, '현재 비밀번호', el('input', { id: 'pwCurrent', type: 'password', required: true, style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })),
-        el('label', { style: 'font-size:12px' }, '새 비밀번호', el('input', { id: 'pwNew', type: 'password', required: true, minLength: 6, style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })),
-        el('label', { style: 'font-size:12px' }, '새 비밀번호 확인', el('input', { id: 'pwConfirm', type: 'password', required: true, style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }))
+        el('label', { style: 'font-size:12px' }, '새 비밀번호 (8자 이상)', el('input', { id: 'pwNew', type: 'password', required: true, minLength: 8, style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })),
+        el('label', { style: 'font-size:12px' }, '새 비밀번호 확인', el('input', { id: 'pwConfirm', type: 'password', required: true, minLength: 8, style: 'width:100%;padding:7px 10px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' }))
       )
     )
     modal('비밀번호 변경', form)
@@ -6222,13 +6338,15 @@
       const cf = document.getElementById('pwConfirm').value
       if (!cur || !nw || !cf) { alert('모든 필드를 입력하세요.'); return }
       if (nw !== cf) { alert('새 비밀번호가 일치하지 않습니다.'); return }
-      if (nw.length < 6) { alert('비밀번호는 6자 이상이어야 합니다.'); return }
-      const curHash = await Store.hashPassword(cur)
-      const users = Store.getUsers()
-      const u = users.find(x => x.id === user.id)
-      if (!u || u.password !== curHash) { alert('현재 비밀번호가 올바르지 않습니다.'); return }
+      if (nw.length < 8) { alert('비밀번호는 8자 이상이어야 합니다.'); return }
+      if (nw === cur) { alert('현재 비밀번호와 다른 비밀번호를 입력하세요.'); return }
+      const u = (Store.getUsers() || []).find(x => String(x.id) === String(user.id))
+      if (!u) { alert('사용자 정보를 찾을 수 없습니다. 다시 로그인하세요.'); return }
+      const vr = await Store.verifyPassword(cur, u.password)
+      if (!vr.ok) { alert('현재 비밀번호가 올바르지 않습니다.'); return }
       const newHash = await Store.hashPassword(nw)
-      Store.updateUser(user.id, { password: newHash })
+      Store.updateUser(u.id, { password: newHash })
+      try { Store.addAuditLog({ category: '사용자관리', action: '비밀번호 변경', user_id: u.id, user_name: u.name, detail: `아이디: ${u.username}` }) } catch (e) {}
       closeModal()
       showToast('비밀번호가 변경되었습니다.', 'success')
     }
@@ -6778,61 +6896,111 @@
     )
   }
 
-  function _showFirstLoginProjectPopup() {
+  function _showLoginReminder() {
     const user = typeof Store.getCurrentUser === 'function' ? Store.getCurrentUser() : null
     if (!user) return
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const flagKey = `smart_esg_proj_seen_${user.id}_${today}`
-    if (localStorage.getItem(flagKey)) return
-    const tasks = Store.getProjectTasks() || []
-    if (!tasks.length) return
-    localStorage.setItem(flagKey, '1')
+    if (sessionStorage.getItem('smart_esg_reminder_seen')) return
+    sessionStorage.setItem('smart_esg_reminder_seen', '1')
     const todayStr = new Date().toISOString().slice(0, 10)
+    const tasks = Store.getProjectTasks() || []
+    const openTasks = tasks.filter(t => t.status !== '완료')
+    const overdue = openTasks.filter(t => t.due_date && t.due_date < todayStr)
+    const todayDue = openTasks.filter(t => t.due_date === todayStr)
     const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + 7)
-    const overdue = tasks.filter(t => t.due_date && t.due_date < todayStr && t.status !== '완료')
-    const inProgress = tasks.filter(t => t.status === '진행중')
-    const todayDue = tasks.filter(t => t.due_date === todayStr && t.status !== '완료')
-    const weekDue = tasks.filter(t => t.due_date && t.due_date >= todayStr && t.due_date <= weekEnd.toISOString().slice(0, 10) && t.status !== '완료')
-    const myTasks = user.id ? tasks.filter(t => String(t.assignee_id) === String(user.id) && t.status !== '완료') : []
+    const weekEndStr = weekEnd.toISOString().slice(0, 10)
+    const weekDue = openTasks.filter(t => t.due_date && t.due_date > todayStr && t.due_date <= weekEndStr)
+    const forecast = openTasks.filter(t => {
+      if (!t.due_date || t.due_date <= todayStr) return false
+      const days = Math.ceil((new Date(t.due_date) - new Date(todayStr)) / 86400000)
+      return days <= 3 && Number(t.progress || 0) < 50
+    })
+    const notStarted = openTasks.filter(t => t.status === '대기' && Number(t.progress || 0) === 0 && (!t.due_date || t.due_date > weekEndStr))
+    const myTasks = openTasks.filter(t => String(t.assignee_id) === String(user.id))
 
-    const overlay = el('div', { style: 'position:fixed;top:0;right:0;bottom:0;width:400px;max-width:100vw;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.15);z-index:9999;transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column', id: 'first-login-slide' },
-      el('div', { style: 'padding:20px 24px;border-bottom:1px solid #EEF1F4;display:flex;justify-content:space-between;align-items:center' },
-        el('div', {},
-          el('div', { style: 'font-size:18px;font-weight:700;color:#14213D' }, `안녕하세요, ${user.name}님! 👋`),
-          el('div', { style: 'font-size:12px;color:#9ca3af;margin-top:2px' }, `${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })} 프로젝트 현황`)
+    const noVSME = (Store.getSuppliers() || []).filter(s => !s.last_vsme_grade && !s.last_vsme_date)
+    const issues = _dataQualityIssues()
+    const levelLabel = { high: '높음', medium: '보통', low: '낮음' }
+
+    const now = new Date()
+    const windows = []
+    ;(Store.getAgencyMaster() || []).filter(a => a.submission_window && a.assessment_type === 'QUESTIONNAIRE').forEach(a => {
+      const parts = String(a.submission_window).split('~')
+      if (parts.length !== 2) return
+      const smd = parts[0].split('-').map(Number)
+      const emd = parts[1].split('-').map(Number)
+      if (smd.length !== 2 || emd.length !== 2) return
+      const startDate = new Date(now.getFullYear(), smd[0] - 1, smd[1])
+      const endDate = new Date(now.getFullYear(), emd[0] - 1, emd[1])
+      const daysUntilStart = Math.ceil((startDate - now) / 86400000)
+      const daysUntilEnd = Math.ceil((endDate - now) / 86400000)
+      if (now >= startDate && now <= endDate) windows.push({ label: a.name, meta: `진행 중 · 마감 ${daysUntilEnd}일 전` })
+      else if (daysUntilStart > 0 && daysUntilStart <= 30) windows.push({ label: a.name, meta: `${daysUntilStart}일 후 시작` })
+    })
+
+    const overlay = el('div', { id: 'login-reminder', style: 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px' })
+    const panel = el('div', { style: 'width:min(760px,100%);max-height:88vh;background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.28);display:flex;flex-direction:column;overflow:hidden' })
+    const close = () => overlay.remove()
+
+    const sections = []
+    const addSection = (icon, title, color, items, page) => {
+      if (!items.length) return
+      sections.push(el('div', { style: 'margin-bottom:14px' },
+        el('div', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:6px' },
+          el('span', { style: `width:20px;height:20px;border-radius:6px;background:${color}15;color:${color};display:flex;align-items:center;justify-content:center;font-size:11px` }, icon),
+          el('span', { style: 'font-size:12px;font-weight:700;color:#374151' }, title),
+          el('span', { style: `font-size:10px;font-weight:700;color:${color};background:${color}15;padding:1px 6px;border-radius:8px` }, String(items.length))
         ),
-        el('button', { style: 'background:none;border:none;font-size:20px;cursor:pointer;color:#9CA3AF;padding:4px 8px', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) { s.style.transform = 'translateX(100%)'; setTimeout(() => s.remove(), 300) } } }, '✕')
-      ),
-      el('div', { style: 'flex:1;overflow-y:auto;padding:16px 24px' },
-        el('div', { style: 'font-size:12px;font-weight:600;color:#6B7280;margin-bottom:8px' }, '📊 오늘의 업무 요약'),
-        ...[
-          { label: '⏰ 오늘 마감', items: todayDue, color: '#d97706' },
-          { label: '🔄 진행중', items: inProgress, color: '#2563EB' },
-          { label: '🚨 지연', items: overdue, color: '#dc2626' },
-          { label: '📅 이번주 예정', items: weekDue, color: '#2563EB' }
-        ].filter(s => s.items.length).map(s => el('div', { style: 'margin-bottom:12px' },
-          el('div', { style: 'font-size:12px;font-weight:600;color:' + s.color + ';margin-bottom:4px' }, `${s.label} (${s.items.length}건)`),
-          ...s.items.slice(0, 5).map(t => el('div', { style: 'padding:6px 8px;background:#F8FAFC;border-radius:6px;margin-bottom:3px;font-size:11px;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) s.remove(); navigate('project') } },
-            el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, t.title),
-            el('span', { style: 'color:#9ca3af;white-space:nowrap;margin-left:8px;font-size:10px' }, t.assignee || '미지정')
-          )),
-          s.items.length > 5 ? el('div', { style: 'font-size:10px;color:#9CA3AF;text-align:center;padding:4px' }, `+${s.items.length - 5}건 더보기`) : null
+        ...items.slice(0, 4).map(it => el('div', { style: 'display:flex;align-items:center;gap:8px;padding:6px 10px;background:#F8FAFC;border-radius:7px;margin-bottom:3px;font-size:11px;cursor:pointer', onClick: () => { close(); navigate(page) } },
+          el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1F2937' }, it.label),
+          it.meta ? el('span', { style: 'font-size:10px;color:#9CA3AF;white-space:nowrap' }, it.meta) : null
         )),
-        !overdue.length && !inProgress.length && !todayDue.length && !weekDue.length ? el('div', { style: 'text-align:center;padding:20px;color:#9CA3AF;font-size:13px' }, '🎉 모든 업무를 완료했습니다!') : null,
-        myTasks.length ? el('div', { style: 'margin-top:16px' },
-          el('div', { style: 'font-size:12px;font-weight:600;color:#6B7280;margin-bottom:8px' }, `📌 나의 미완료 업무 (${myTasks.length}건)`),
-          ...myTasks.slice(0, 5).map(t => el('div', { style: 'padding:6px 8px;background:#eef4fa;border-radius:6px;margin-bottom:3px;font-size:11px;display:flex;justify-content:space-between;align-items:center;cursor:pointer', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) s.remove(); navigate('project') } },
-            el('span', { style: 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, t.title),
-            el('span', { style: 'color:#1E3A5F;white-space:nowrap;margin-left:8px;font-size:10px' }, `${t.progress || 0}%`)
-          ))
-        ) : null
+        items.length > 4 ? el('div', { style: 'font-size:10px;color:#9CA3AF;padding:2px 10px' }, `+${items.length - 4}건 더보기`) : null
+      ))
+    }
+
+    addSection('🚨', '지연 업무', '#dc2626', overdue.map(t => ({ label: t.title, meta: t.due_date })), 'project')
+    addSection('⏰', '오늘 마감', '#d97706', todayDue.map(t => ({ label: t.title, meta: t.assignee || '미지정' })), 'project')
+    addSection('📉', '지연 예측 (3일 내 마감·진행률 50% 미만)', '#c2410c', forecast.map(t => ({ label: t.title, meta: `${t.due_date} · ${t.progress || 0}%` })), 'project')
+    addSection('📅', '이번 주 예정', '#2563EB', weekDue.map(t => ({ label: t.title, meta: t.due_date })), 'project')
+    addSection('⏸', '미진행 (대기·진행률 0%)', '#6b7280', notStarted.map(t => ({ label: t.title, meta: t.assignee || '미지정' })), 'project')
+    addSection('🏢', 'VSME 미진단 협력사', '#7c3aed', noVSME.map(s => ({ label: s.name, meta: s.industry || '' })), 'supplier')
+    addSection('⚠️', '데이터 품질 이슈', '#d97706', issues.map(i => ({ label: i.text, meta: levelLabel[i.level] || '' })), issues[0]?.page || 'dashboard')
+    addSection('🗓', '제출기간 알림', '#059669', windows, 'publicdata')
+    addSection('📌', '내 미완료 업무', '#1E3A5F', myTasks.map(t => ({ label: t.title, meta: `${t.progress || 0}%` })), 'project')
+
+    const summary = [
+      { n: overdue.length + todayDue.length, label: '긴급', color: '#dc2626' },
+      { n: forecast.length, label: '지연 예측', color: '#c2410c' },
+      { n: noVSME.length, label: '미진단 협력사', color: '#7c3aed' },
+      { n: issues.length, label: '데이터 이슈', color: '#d97706' }
+    ]
+
+    panel.append(
+      el('div', { style: 'padding:18px 22px 14px;border-bottom:1px solid #EEF1F4;display:flex;align-items:flex-start;gap:12px' },
+        el('div', { style: 'width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#1E3A5F,#2563EB);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0' }, '🔔'),
+        el('div', { style: 'flex:1' },
+          el('div', { style: 'font-size:16px;font-weight:700;color:#14213D' }, `${user.name}님, 오늘의 리마인드입니다`),
+          el('div', { style: 'font-size:11px;color:#9CA3AF;margin-top:2px' }, `${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })} · 예상·예측·미진행 사항을 확인하세요`)
+        ),
+        el('button', { style: 'background:none;border:none;font-size:18px;cursor:pointer;color:#9CA3AF;padding:2px 6px', onClick: close }, '✕')
       ),
-      el('div', { style: 'padding:16px 24px;border-top:1px solid #EEF1F4' },
-        el('button', { className: 'btn btn-primary', style: 'width:100%;padding:10px', onClick: () => { const s = document.getElementById('first-login-slide'); if (s) s.remove(); navigate('project') } }, '프로젝트 관리로 이동')
+      el('div', { style: 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 22px;background:#F8FAFC;border-bottom:1px solid #EEF1F4' },
+        ...summary.map(s => el('div', { style: 'text-align:center;background:#fff;border-radius:8px;padding:8px 4px;border:1px solid #EEF1F4' },
+          el('div', { style: `font-size:18px;font-weight:700;color:${s.color}` }, String(s.n)),
+          el('div', { style: 'font-size:10px;color:#9CA3AF;margin-top:1px' }, s.label)
+        ))
+      ),
+      el('div', { style: 'flex:1;overflow-y:auto;padding:14px 22px' },
+        ...(sections.length ? sections : [el('div', { style: 'text-align:center;padding:32px 12px;color:#047857;font-size:13px' }, '✅ 지연·미진행·미진단 항목이 없습니다. 오늘도 좋은 하루 되세요!')])
+      ),
+      el('div', { style: 'padding:12px 22px;border-top:1px solid #EEF1F4;display:flex;justify-content:flex-end;gap:8px' },
+        el('button', { className: 'btn btn-secondary', onClick: () => { close(); navigate('project') } }, '프로젝트 관리'),
+        el('button', { className: 'btn btn-primary', onClick: close }, '확인했습니다')
       )
     )
+    overlay.append(panel)
+    overlay.addEventListener('click', e => { if (e.target === overlay) close() })
     document.body.append(overlay)
-    setTimeout(() => { overlay.style.transform = 'translateX(0)' }, 50)
   }
 
   // ==================== Settings: Companies ====================

@@ -32,10 +32,12 @@ function getSession() {
 function setSession(user, sbSession) {
   if (user) {
     sessionStorage.setItem('smart_esg_session', JSON.stringify({ id: user.id, username: user.username, name: user.name, role: user.role }))
+    sessionStorage.removeItem('smart_esg_reminder_seen')
     if (sbSession?.refresh_token) sessionStorage.setItem('smart_esg_sb_refresh', sbSession.refresh_token)
   } else {
     sessionStorage.removeItem('smart_esg_session')
     sessionStorage.removeItem('smart_esg_sb_refresh')
+    sessionStorage.removeItem('smart_esg_reminder_seen')
   }
   currentUser = user
   authListeners.forEach(fn => fn(user))
