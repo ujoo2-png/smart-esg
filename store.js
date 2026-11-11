@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.10.0'
+const APP_VERSION = 'v2.12.0'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -63,17 +63,73 @@ async function _sha256(str) {
   return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
+const PBKDF2_PREFIX = 'pbkdf2_sha256'
+const PBKDF2_ITERATIONS = 210000
+const PBKDF2_MIN_ITERATIONS = 10000
+const PBKDF2_MAX_ITERATIONS = 1000000
+
+function _toB64(bytes) {
+  let s = ''
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i])
+  return btoa(s)
+}
+
+function _fromB64(str) {
+  const bin = atob(str)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+function _safeEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i]
+  return diff === 0
+}
+
+async function _pbkdf2(pw, salt, iterations) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256)
+  return new Uint8Array(bits)
+}
+
+function _isLegacyHash(stored) {
+  return typeof stored === 'string' && /^[0-9a-f]{64}$/i.test(stored)
+}
+
 const Store = {
   _data: null,
   _listeners: [],
-  _pwCache: {},
   get version() { return APP_VERSION },
 
   async hashPassword(pw) {
-    if (this._pwCache[pw]) return this._pwCache[pw]
-    const h = await _sha256(pw)
-    this._pwCache[pw] = h
-    return h
+    const salt = crypto.getRandomValues(new Uint8Array(16))
+    const dk = await _pbkdf2(String(pw), salt, PBKDF2_ITERATIONS)
+    return `${PBKDF2_PREFIX}$${PBKDF2_ITERATIONS}$${_toB64(salt)}$${_toB64(dk)}`
+  },
+
+  needsPasswordUpgrade(stored) {
+    return _isLegacyHash(stored)
+  },
+
+  async verifyPassword(pw, stored) {
+    if (!stored || typeof stored !== 'string') return { ok: false, needsUpgrade: false }
+    if (_isLegacyHash(stored)) {
+      const legacy = await _sha256(String(pw))
+      const ok = legacy === stored.toLowerCase()
+      return { ok, needsUpgrade: ok }
+    }
+    const parts = stored.split('$')
+    if (parts.length !== 4 || parts[0] !== PBKDF2_PREFIX) return { ok: false, needsUpgrade: false }
+    const iterations = parseInt(parts[1], 10)
+    if (!Number.isFinite(iterations) || iterations < PBKDF2_MIN_ITERATIONS || iterations > PBKDF2_MAX_ITERATIONS) {
+      return { ok: false, needsUpgrade: false }
+    }
+    let salt, expected
+    try { salt = _fromB64(parts[2]); expected = _fromB64(parts[3]) } catch { return { ok: false, needsUpgrade: false } }
+    const dk = await _pbkdf2(String(pw), salt, iterations)
+    return { ok: _safeEqual(dk, expected), needsUpgrade: false }
   },
 
   getCurrentUser() {
@@ -212,18 +268,52 @@ const Store = {
     this._save()
   },
 
-  async ensureAdmin() {
-    try {
-      const users = this.data.users
-      const adminExists = users.some(u => u.username === 'admin')
-      if (!adminExists) {
-        const hash = await this.hashPassword('admin1234')
-        users.push({ id: 1, username: 'admin', password: hash, role: 'admin', status: 'active', createdAt: new Date().toISOString() })
-        this._save()
+  needsBootstrap() {
+    const users = this.data.users || []
+    return !users.some(u => u && u.role === 'admin' && u.status === 'active')
+  },
+
+  async createFirstAdmin({ username, password, name, email, phone, company_id, dept_code, position }) {
+    // 새 기기·로컬 초기화 상태에서도 원격 관리자 유무를 먼저 확인한다.
+    // 서버 확인에 실패하면 생성을 거부해, 로컬 초기화로 관리자 권한을 얻는 경로를 막는다.
+    const sb = typeof getSupabase === 'function' ? getSupabase() : null
+    if (sb && typeof this.pullFromSupabase === 'function') {
+      let pulled = null
+      try {
+        pulled = await Promise.race([
+          this.pullFromSupabase({ tables: ['users'] }),
+          new Promise(res => setTimeout(() => res(null), 8000))
+        ])
+      } catch (e) { pulled = null }
+      if (!pulled || !pulled.ok) {
+        return { error: '서버에서 사용자 정보를 확인하지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.' }
       }
-    } catch (e) {
-      console.error('ensureAdmin error:', e)
     }
+    if (!this.needsBootstrap()) return { error: '이미 관리자 계정이 존재합니다.' }
+    const uname = String(username || '').trim()
+    if (!uname) return { error: '아이디를 입력하세요.' }
+    if (String(password || '').length < 8) return { error: '비밀번호는 8자 이상 입력하세요.' }
+    if (!String(name || '').trim()) return { error: '이름을 입력하세요.' }
+    if (String(email || '').indexOf('@') < 1) return { error: '올바른 이메일을 입력하세요.' }
+    const dup = (this.data.users || []).find(u => (u.username || '').trim().toLowerCase() === uname.toLowerCase())
+    if (dup) return { error: '이미 사용 중인 아이디입니다.' }
+    this.addUser({
+      username: uname,
+      password: await this.hashPassword(password),
+      name: String(name).trim(),
+      email: String(email).trim(),
+      phone: phone || '',
+      company_id: company_id || null,
+      dept_code: dept_code || '',
+      position: position || '',
+      role: 'admin',
+      status: 'active'
+    })
+    return { ok: true }
+  },
+
+  countActiveAdmins() {
+    return (this.data.users || []).filter(u => u && u.role === 'admin' && u.status === 'active').length
   },
 
   get data() {
@@ -335,13 +425,12 @@ const Store = {
     if (!d.indicatorMappings?.length && d.indicators?.length) {
       this._seedIndicatorMappings()
     }
-    if (!d.suppliers?.length) {
-      d.suppliers = [
-        { id: _ts(), name: '(주)한국전자', industry: '전자제품', ceo: '김철수', employee_count: 500, last_vsme_score: null, last_vsme_grade: null, last_vsme_date: null },
-        { id: _ts(), name: '(주)서울ENG', industry: '엔지니어링', ceo: '박영희', employee_count: 200, last_vsme_score: 72, last_vsme_grade: 'B', last_vsme_date: '2025-12-01' },
-        { id: _ts(), name: '(주)그린팩토리', industry: '제조업', ceo: '이준호', employee_count: 100, last_vsme_score: 45, last_vsme_grade: 'D', last_vsme_date: '2025-11-15' }
-      ]
-    }
+    const seeds = d._seeds || (d._seeds = {})
+    const legacyDemoNames = ['(주)한국전자', '(주)서울ENG', '(주)그린팩토리']
+    ;(d.suppliers || []).forEach(s => {
+      if (s.is_demo == null && !s.created_at && legacyDemoNames.includes(s.name)) s.is_demo = true
+    })
+    seeds.suppliers = true
     if (!d.maskingRules?.length) {
       d.maskingRules = [
         { id: 1, field_name: '급여', masking_type: '전체마스킹', applies_to_ai_api: true },
@@ -349,8 +438,9 @@ const Store = {
         { id: 3, field_name: '직원명', masking_type: '부분마스킹', applies_to_ai_api: true }
       ]
     }
-    if (!d.supplierRiskItems?.length && d.suppliers?.length && typeof SupplierRisk !== 'undefined') {
-      this._seedSupplierRisk()
+    if (!seeds.supplierRisk) {
+      if (!d.supplierRiskItems?.length && d.suppliers?.length && typeof SupplierRisk !== 'undefined') this._seedSupplierRisk()
+      seeds.supplierRisk = true
     }
     this._seedApiEndpoints()
     this._seedBenchmarks()
@@ -557,6 +647,7 @@ const Store = {
       supplierRiskItems: [],
       supplierRiskActions: [],
       vsmeAssessments: [],
+      questionnaires: [],
       maskingRules: [],
       projectBudget: [],
       riskRegister: [],
@@ -804,9 +895,9 @@ const Store = {
     )
 
     this._data.suppliers.push(
-      { id: _ts(), name: '그린텍(주)', industry: '제조업', ceo: '김철수', employee_count: 120, revenue: 5000, phone: '02-1234-5678', email: 'contact@greentech.kr', last_vsme_grade: 'B', last_vsme_score: 72, last_vsme_date: '2026-03-15', created_at: new Date().toISOString() },
-      { id: _ts(), name: '에코솔루션', industry: '환경서비스', ceo: '이영희', employee_count: 45, revenue: 2000, phone: '031-987-6543', email: 'info@ecosol.kr', last_vsme_grade: 'A', last_vsme_score: 85, last_vsme_date: '2026-04-20', created_at: new Date().toISOString() },
-      { id: _ts(), name: '스마트물산', industry: '도매업', ceo: '박지민', employee_count: 200, revenue: 12000, phone: '051-555-1234', email: 'smart@smartmul.kr', last_vsme_grade: 'C', last_vsme_score: 48, last_vsme_date: '2026-02-10', created_at: new Date().toISOString() }
+      { id: _ts(), name: '그린텍(주)', industry: '제조업', ceo: '김철수', employee_count: 120, revenue: 5000, phone: '02-1234-5678', email: 'contact@greentech.kr', last_vsme_grade: 'B', last_vsme_score: 72, last_vsme_date: '2026-03-15', created_at: new Date().toISOString(), is_demo: true },
+      { id: _ts(), name: '에코솔루션', industry: '환경서비스', ceo: '이영희', employee_count: 45, revenue: 2000, phone: '031-987-6543', email: 'info@ecosol.kr', last_vsme_grade: 'A', last_vsme_score: 85, last_vsme_date: '2026-04-20', created_at: new Date().toISOString(), is_demo: true },
+      { id: _ts(), name: '스마트물산', industry: '도매업', ceo: '박지민', employee_count: 200, revenue: 12000, phone: '051-555-1234', email: 'smart@smartmul.kr', last_vsme_grade: 'C', last_vsme_score: 48, last_vsme_date: '2026-02-10', created_at: new Date().toISOString(), is_demo: true }
     )
 
     this._seedAutoTagRules()
@@ -814,10 +905,45 @@ const Store = {
     this._save()
   },
 
-  _save() {
+  _save(opts) {
     localStorage.setItem(STORE_KEY, JSON.stringify(this._data))
     this._notify()
-    this._sbSync()
+    const dirty = opts && Object.prototype.hasOwnProperty.call(opts, 'dirty') ? opts.dirty : null
+    if (Array.isArray(dirty) && dirty.length === 0) return
+    this._scheduleSync(dirty)
+  },
+
+  _scheduleSync(dirty) {
+    let sb = null
+    try { sb = typeof getSupabase === 'function' ? getSupabase() : null } catch (e) { sb = null }
+    if (!sb || typeof setTimeout !== 'function') return
+    if (dirty == null) this._pendingSync = 'ALL'
+    else if (this._pendingSync !== 'ALL') {
+      if (!(this._pendingSync instanceof Set)) this._pendingSync = new Set()
+      dirty.forEach(t => this._pendingSync.add(t))
+    }
+    if (this._syncTimer) clearTimeout(this._syncTimer)
+    this._syncTimer = setTimeout(() => {
+      this._syncTimer = null
+      this._flushSync()
+    }, 800)
+  },
+
+  async _flushSync() {
+    if (this._syncing) { this._syncAgain = true; return }
+    if (this._pendingSync == null) return
+    this._syncing = true
+    this._syncAgain = false
+    const target = this._pendingSync
+    this._pendingSync = null
+    try {
+      await this._sbSync(target)
+    } catch (e) {
+      console.error('[sbSync] flush 실패', e && e.message)
+    } finally {
+      this._syncing = false
+      if (this._syncAgain) { this._syncAgain = false; this._scheduleSync(null) }
+    }
   },
 
   _fmtSbError(e) {
@@ -885,15 +1011,15 @@ const Store = {
     return [...byId.values()]
   },
 
-  async _sbSync() {
+  async _sbSync(target) {
     const sb = getSupabase ? getSupabase() : null
     if (!sb) return
-    const now = Date.now()
-    if (this._lastSync && now - this._lastSync < 3000) return
-    this._lastSync = now
     const deleted = this._getDeletedIds()
     const errors = []
-    for (const table of Object.keys(SB_SYNC_MAP)) {
+    const all = target == null || target === 'ALL'
+    const has = t => target instanceof Set ? target.has(t) : Array.isArray(target) ? target.includes(t) : false
+    const tables = Object.keys(SB_SYNC_MAP).filter(t => all || has(t))
+    for (const table of tables) {
       const [tb, cols] = SB_SYNC_MAP[table]
       try {
         if (deleted[table]?.length) {
@@ -943,6 +1069,23 @@ const Store = {
     console.table(report)
     console.log(JSON.stringify(report, null, 2))
     return report
+  },
+
+  async diagnoseSecurity() {
+    const sb = getSupabase ? getSupabase() : null
+    if (!sb) return { ok: false, reason: 'no-supabase' }
+    const result = { ok: true, passwordReadable: false, userRows: 0, detail: '' }
+    try {
+      const { data, error } = await sb.from('tb_user').select('id,username,password').limit(3)
+      if (error) { result.ok = false; result.detail = this._fmtSbError(error); return result }
+      result.userRows = (data || []).length
+      result.passwordReadable = (data || []).some(r => typeof r.password === 'string' && r.password.length > 0)
+      if (result.passwordReadable) result.detail = 'anon 키로 tb_user.password 조회가 가능합니다. RLS를 적용하세요.'
+    } catch (e) {
+      result.ok = false
+      result.detail = (e && e.message) ? e.message : String(e)
+    }
+    return result
   },
 
   _normalizeRemoteRow(row) {
@@ -1095,7 +1238,15 @@ const Store = {
   // ==== Users ====
   getUsers() { return this.data.users },
   getUser(id) { const nid = this._normId(id); return (this.data.users || []).find(u => this._normId(u.id) === nid) || null },
-  addUser(user) { this.data.users.push({ id: Date.now(), ...user, company_id: user.company_id || null, dept_code: user.dept_code || '', position: user.position || '', createdAt: new Date().toISOString() }); this._save(); return user },
+  addUser(user) {
+    const taken = new Set((this.data.users || []).map(u => this._normId(u.id)))
+    let id = (user && user.id != null) ? user.id : Date.now()
+    while (taken.has(this._normId(id))) id = Number(id) + 1
+    const record = { ...user, id, company_id: user.company_id || null, dept_code: user.dept_code || '', position: user.position || '', createdAt: user.createdAt || new Date().toISOString() }
+    this.data.users.push(record)
+    this._save()
+    return record
+  },
   updateUser(id, updates) { const nid = this._normId(id); const i = this.data.users.findIndex(u => this._normId(u.id) === nid); if (i > -1) { Object.assign(this.data.users[i], updates); this._save() } },
   deleteUser(id) { const nid = this._normId(id); this.data.users = this.data.users.filter(u => this._normId(u.id) !== nid); this._addDeletedId('users', id); this._save() },
 
@@ -1618,14 +1769,24 @@ const Store = {
 
   // ==== Suppliers ====
   getSuppliers() { return this.data.suppliers },
-  addSupplier(s) { this.data.suppliers.push({ id: Date.now(), ...s, created_at: new Date().toISOString() }); this._save(); return s },
-  updateSupplier(id, updates) { const i = this.data.suppliers.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.suppliers[i], updates); this._save() } },
+  addSupplier(s) {
+    const item = { id: Date.now() + Math.random(), ...s, created_at: new Date().toISOString() }
+    this.data.suppliers.push(item)
+    this._save({ dirty: [] })
+    return item
+  },
+  updateSupplier(id, updates) { const i = this.data.suppliers.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.suppliers[i], updates); this._save({ dirty: [] }) } },
   deleteSupplier(id) {
     this.data.suppliers = this.data.suppliers.filter(x => x.id !== id)
-    this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.supplier_id !== id)
-    this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.supplier_id !== id)
-    this._addDeletedId('suppliers', id)
-    this._save()
+    this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => String(x.supplier_id) !== String(id))
+    this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => String(x.supplier_id) !== String(id))
+    this.data.vsmeAssessments = (this.data.vsmeAssessments || []).filter(x => String(x.supplier_id) !== String(id))
+    this._save({ dirty: [] })
+  },
+  deleteDemoSuppliers() {
+    const ids = (this.data.suppliers || []).filter(x => x.is_demo).map(x => x.id)
+    ids.forEach(id => this.deleteSupplier(id))
+    return ids.length
   },
 
   // ==== Supplier Risk Items (5축 진단) ====
@@ -1633,26 +1794,81 @@ const Store = {
     const items = this.data.supplierRiskItems || []
     return supplierId == null ? items : items.filter(x => x.supplier_id === supplierId)
   },
-  addSupplierRiskItem(item) { this.data.supplierRiskItems.push({ id: Date.now() + Math.random(), answer: null, created_at: new Date().toISOString(), ...item }); this._save(); return item },
-  updateSupplierRiskItem(id, updates) { const i = (this.data.supplierRiskItems || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.supplierRiskItems[i], updates, { updated_at: new Date().toISOString() }); this._save() } },
-  deleteSupplierRiskItem(id) { this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.id !== id); this._save() },
-  deleteSupplierRiskItemsBySupplier(supplierId) { this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.supplier_id !== supplierId); this._save() },
+  addSupplierRiskItem(item) { this.data.supplierRiskItems.push({ id: Date.now() + Math.random(), answer: null, created_at: new Date().toISOString(), ...item }); this._save({ dirty: [] }); return item },
+  updateSupplierRiskItem(id, updates) { const i = (this.data.supplierRiskItems || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.supplierRiskItems[i], updates, { updated_at: new Date().toISOString() }); this._save({ dirty: [] }) } },
+  deleteSupplierRiskItem(id) { this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.id !== id); this._save({ dirty: [] }) },
+  deleteSupplierRiskItemsBySupplier(supplierId) { this.data.supplierRiskItems = (this.data.supplierRiskItems || []).filter(x => x.supplier_id !== supplierId); this._save({ dirty: [] }) },
 
   // ==== Supplier Risk Actions (개선조치) ====
   getSupplierRiskActions(supplierId) {
     const actions = this.data.supplierRiskActions || []
     return supplierId == null ? actions : actions.filter(x => x.supplier_id === supplierId)
   },
-  addSupplierRiskAction(a) { this.data.supplierRiskActions.push({ id: Date.now() + Math.random(), status: 'not_started', priority: '보통', progress: 0, created_at: new Date().toISOString(), ...a }); this._save(); return a },
-  updateSupplierRiskAction(id, updates) { const i = (this.data.supplierRiskActions || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.supplierRiskActions[i], updates, { updated_at: new Date().toISOString() }); this._save() } },
-  deleteSupplierRiskAction(id) { this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.id !== id); this._save() },
-  deleteSupplierRiskActionsBySupplier(supplierId) { this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.supplier_id !== supplierId); this._save() },
+  addSupplierRiskAction(a) { this.data.supplierRiskActions.push({ id: Date.now() + Math.random(), status: 'not_started', priority: '보통', progress: 0, created_at: new Date().toISOString(), ...a }); this._save({ dirty: [] }); return a },
+  updateSupplierRiskAction(id, updates) { const i = (this.data.supplierRiskActions || []).findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.supplierRiskActions[i], updates, { updated_at: new Date().toISOString() }); this._save({ dirty: [] }) } },
+  deleteSupplierRiskAction(id) { this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.id !== id); this._save({ dirty: [] }) },
+  deleteSupplierRiskActionsBySupplier(supplierId) { this.data.supplierRiskActions = (this.data.supplierRiskActions || []).filter(x => x.supplier_id !== supplierId); this._save({ dirty: [] }) },
 
   // ==== VSME Assessments ====
   getVSMEAssessments() { return this.data.vsmeAssessments },
-  addVSMEAssessment(v) { this.data.vsmeAssessments.push({ id: Date.now(), ...v, created_at: new Date().toISOString() }); this._save(); return v },
-  updateVSMEAssessment(id, updates) { const i = this.data.vsmeAssessments.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.vsmeAssessments[i], updates); this._save() } },
-  deleteVSMEAssessment(id) { this.data.vsmeAssessments = this.data.vsmeAssessments.filter(x => x.id !== id); this._addDeletedId('vsmeAssessments', id); this._save() },
+  addVSMEAssessment(v) { this.data.vsmeAssessments.push({ id: Date.now(), ...v, created_at: new Date().toISOString() }); this._save({ dirty: [] }); return v },
+  recordVSMEAssessment(supplierId, payload) {
+    const rec = { id: Date.now() + Math.random(), ...payload, supplier_id: supplierId, created_at: new Date().toISOString() }
+    this.data.vsmeAssessments.push(rec)
+    const s = (this.data.suppliers || []).find(x => String(x.id) === String(supplierId))
+    if (s) {
+      s.last_vsme_score = payload.score
+      s.last_vsme_grade = payload.grade
+      s.last_vsme_date = payload.assessed_at || rec.created_at
+    }
+    this._save({ dirty: [] })
+    return rec
+  },
+  updateVSMEAssessment(id, updates) { const i = this.data.vsmeAssessments.findIndex(x => x.id === id); if (i > -1) { Object.assign(this.data.vsmeAssessments[i], updates); this._save({ dirty: [] }) } },
+  deleteVSMEAssessment(id) { this.data.vsmeAssessments = this.data.vsmeAssessments.filter(x => x.id !== id); this._save({ dirty: [] }) },
+
+  // ==== VSME Questionnaires (사용자 정의 설문) ====
+  getQuestionnaires() { return this.data.questionnaires || [] },
+  addQuestionnaire(q) {
+    const list = this.data.questionnaires || (this.data.questionnaires = [])
+    const name = (q.name || '').trim()
+    if (!name) throw new Error('설문 이름을 입력하세요.')
+    if (['basic', 'comprehensive'].includes(q.id)) throw new Error('기본 제공 설문 ID는 사용할 수 없습니다.')
+    if (list.some(x => x.name === name)) throw new Error('같은 이름의 설문이 이미 있습니다.')
+    const id = q.id || 'q_' + Date.now()
+    const item = {
+      id,
+      name,
+      description: q.description || '',
+      questions: (q.questions || []).map((x, i) => ({ id: x.id || `${id}-${i + 1}`, category: x.category || '기타', question: x.question })),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+    list.push(item)
+    this._save({ dirty: [] })
+    return item
+  },
+  updateQuestionnaire(id, updates) {
+    const q = (this.data.questionnaires || []).find(x => x.id === id)
+    if (!q) throw new Error('설문을 찾을 수 없습니다.')
+    if (updates.name != null) {
+      const name = String(updates.name).trim()
+      if (!name) throw new Error('설문 이름을 입력하세요.')
+      if ((this.data.questionnaires || []).some(x => x.id !== id && x.name === name)) throw new Error('같은 이름의 설문이 이미 있습니다.')
+      q.name = name
+    }
+    if (updates.description != null) q.description = updates.description
+    if (Array.isArray(updates.questions)) {
+      q.questions = updates.questions.map((x, i) => ({ id: x.id || `${q.id}-${i + 1}`, category: x.category || '기타', question: x.question }))
+    }
+    q.updated_at = new Date().toISOString()
+    this._save({ dirty: [] })
+    return q
+  },
+  deleteQuestionnaire(id) {
+    this.data.questionnaires = (this.data.questionnaires || []).filter(x => x.id !== id)
+    this._save({ dirty: [] })
+  },
 
   // ==== Deleted IDs (Supabase sync) ====
   _getDeletedIds() {

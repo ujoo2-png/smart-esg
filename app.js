@@ -147,7 +147,8 @@
           if (confirm(`${selCount}개를 삭제하시겠습니까?`)) {
             st.selected.forEach(k => opts.bulkDelete(k))
             st.selected.clear()
-            rerender()
+            if (opts.onBulkDeleted) opts.onBulkDeleted()
+            else rerender()
           }
         }}, `선택 삭제 (${selCount})`) : null,
         selCount ? el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { st.selected.clear(); rerender() }}, '선택 해제') : null
@@ -509,6 +510,15 @@
       box.className = 'supa-status is-on'
       box.title = 'Supabase 연결됨 · 저장소 모드: ' + (remote ? '원격' : '로컬(IndexedDB)')
       if (txt) txt.textContent = 'Supabase 연결됨'
+      if (typeof Store.diagnoseSecurity === 'function') {
+        Store.diagnoseSecurity().then(sec => {
+          if (!sec || !sec.passwordReadable) return
+          box.className = 'supa-status is-err'
+          box.title = '보안 경고: anon 키로 사용자 테이블의 비밀번호 해시를 읽을 수 있습니다.\n' +
+            'DB가 공개 상태입니다. supabase/SECURITY.md의 RLS 적용 절차를 확인하세요.'
+          if (txt) txt.textContent = '보안 경고'
+        }).catch(() => {})
+      }
     } else {
       box.className = 'supa-status is-err'
       box.title = 'Supabase에 연결할 수 없습니다. 네트워크/키/RLS를 확인하세요.'
@@ -523,15 +533,22 @@
     const vb = document.getElementById('version-badge')
     if (vb) vb.textContent = Store.version
     renderSupabaseStatus()
-    try { await ensureAdmin() } catch (e) { console.warn('ensureAdmin:', e) }
     GHG.init()
-    checkAuth().then(user => {
+    checkAuth().then(async user => {
       applyAuthUI()
       if (user) {
         document.getElementById('app').style.display = 'flex'
         navigate('dashboard')
       } else {
-        showAuthModal('login')
+        if (typeof Store.pullFromSupabase === 'function') {
+          try {
+            await Promise.race([
+              Store.pullFromSupabase({ tables: ['users'] }),
+              new Promise(res => setTimeout(() => res(null), 5000))
+            ])
+          } catch (e) {}
+        }
+        showAuthModal()
       }
       if (typeof Store.pullFromSupabase === 'function') {
         Store.pullFromSupabase({ tables: ['users', 'referenceDocs', 'referenceChunks', 'projectTasks', 'projectTaskLogs'] })
@@ -546,7 +563,14 @@
     })
     initKeepAlive()
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && _evidencePreviewId) { _evidencePreviewId = null; const c = document.getElementById('page-evidence'); if (c) renderEvidenceMgmt() } })
-    window.addEventListener('beforeunload', () => { const wp = document.getElementById('page-writer'); if (wp && wp.classList.contains('active')) { clearTimeout(_writerAutosaveTimer); _flushWriterInput() } })
+    window.addEventListener('beforeunload', () => {
+      const wp = document.getElementById('page-writer')
+      if (wp && wp.classList.contains('active')) { clearTimeout(_writerAutosaveTimer); _flushWriterInput() }
+      try { Store._flushSync() } catch (e) {}
+    })
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') { try { Store._flushSync() } catch (e) {} }
+    })
   }
 
   // ==================== Workflow ====================
@@ -2499,12 +2523,20 @@
       el('div', { className: 'card' },
         el('div', { className: 'card-header' },
           el('h3', {}, `협력사 목록 (${suppliers.length}건)`),
-          el('div', { style: 'display:flex;gap:8px' },
+          el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+            (suppliers.filter(s => s.is_demo).length ? el('button', { className: 'btn btn-secondary', onClick: () => {
+              const demoCount = suppliers.filter(s => s.is_demo).length
+              if (!confirm(`데모 협력사 ${demoCount}개사를 삭제할까요?\n연결된 VSME 진단 이력과 리스크 항목도 함께 삭제됩니다.`)) return
+              const n = Supplier.deleteDemo()
+              renderSupplier()
+              showToast(`데모 협력사 ${n}개사가 삭제되었습니다.`, 'success')
+            } }, '🧹 데모 데이터 삭제') : null),
+            el('button', { className: 'btn btn-secondary', onClick: exportVSMEExcel }, '📥 엑셀'),
             el('button', { className: 'btn btn-secondary', onClick: openSupplierReminder }, '📨 미진단 리마인더'),
             el('button', { className: 'btn btn-primary', onClick: openAddSupplier }, '+ 협력사 추가'))
         ),
         suppliers.length ? sortableTable('suppliers', [
-          { label: '회사명', key: 'name', value: s => el('span', { style: 'font-weight:600' }, s.name || '-') },
+          { label: '회사명', key: 'name', value: s => el('span', { style: 'font-weight:600' }, s.name || '-', s.is_demo ? el('span', { style: 'margin-left:6px;font-size:10px;padding:1px 6px;border-radius:8px;background:#F1F5F9;color:#64748B;font-weight:500' }, '데모') : null) },
           { label: '업종', key: 'industry', value: s => s.industry || '-' },
           { label: '대표자', key: 'ceo', value: s => s.ceo || '-' },
           { label: '규모', key: 'employee_count', value: s => s.employee_count ? s.employee_count + '명' : '-', align: 'center' },
@@ -2516,6 +2548,7 @@
           { label: '최근 진단', key: 'last_vsme_date', value: s => s.last_vsme_date ? el('span', { style: 'font-size:12px;color:#9ca3af' }, new Date(s.last_vsme_date).toLocaleDateString('ko-KR')) : el('span', { style: 'color:#D0D5DD' }, '-') }
         ], suppliers, {
           bulkDelete: id => { Supplier.delete(id); showToast('협력사가 삭제되었습니다.', 'success') },
+          onBulkDeleted: () => renderSupplier(),
           actions: s => [
             el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => openVSMEForSupplier(s.id) }, '자가진단'),
             el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => editSupplier(s.id) }, '수정'),
@@ -2602,9 +2635,15 @@
     modal(isEdit ? '협력사 수정' : '협력사 추가', form)
     document.getElementById('modal-save').onclick = () => {
       const data = { name: name.value, industry: industry.value, ceo: ceo.value, employee_count: parseInt(empCount.value) || null, revenue: parseFloat(revenue.value) || null, phone: phone.value, email: email.value }
-      if (isEdit) { Supplier.update(s.id, data); showToast('협력사가 수정되었습니다.', 'success') }
-      else { Supplier.add(data); showToast('협력사가 추가되었습니다.', 'success') }
-      closeModal(); renderSupplier()
+      closeModal()
+      try {
+        if (isEdit) { Supplier.update(s.id, data); showToast('협력사가 수정되었습니다.', 'success') }
+        else { Supplier.add(data); showToast('협력사가 추가되었습니다.', 'success') }
+        renderSupplier()
+      } catch (e) {
+        alert('협력사 저장 중 오류: ' + e.message)
+        console.error('supplier save error:', e)
+      }
     }
   }
 
@@ -3004,23 +3043,19 @@
   function renderVSMEPanel() {
     const suppliers = Supplier.getAll()
     const container = el('div', {})
-    const totalYes = suppliers.reduce((sum, s) => {
-      const latest = Supplier.getLatestVSME(s.id)
-      return sum + (latest?.answers?.filter(a => a === 'yes').length || 0)
-    }, 0)
+    const totalYes = suppliers.reduce((sum, s) => sum + Supplier.countYes(Supplier.getLatestVSME(s.id)), 0)
     const totalQ = suppliers.reduce((sum, s) => {
       const latest = Supplier.getLatestVSME(s.id)
-      const checklist = Supplier.getVSMEChecklist(latest?.mode || 'basic')
-      return sum + (checklist.length || 0)
+      const q = latest ? Supplier.getAssessmentQuestionnaire(latest) : Supplier.getQuestionnaire('basic')
+      return sum + q.questions.length
     }, 0)
     const avgPct = totalQ ? Math.round(totalYes / totalQ * 100) : 0
 
     const supplierCards = suppliers.map(s => {
       const latest = Supplier.getLatestVSME(s.id)
       const grade = latest ? Supplier.getGrade(latest.score) : null
-      const checklist = Supplier.getVSMEChecklist(latest?.mode || 'basic')
-      const yesCount = latest?.answers?.filter(a => a === 'yes').length || 0
-      const completionPct = checklist.length ? Math.round(yesCount / checklist.length * 100) : 0
+      const questionnaire = latest ? Supplier.getAssessmentQuestionnaire(latest) : null
+      const completionPct = latest ? Supplier.assessmentProgress(latest) : 0
       return el('div', { style: `display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:8px;background:${grade ? grade.color + '08' : '#F8FAFC'};border:1px solid ${grade ? grade.color + '20' : '#EEF1F4'};margin-bottom:8px` },
         el('div', { style: `width:44px;height:44px;border-radius:10px;background:${grade ? grade.color + '15' : '#EEF1F4'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${grade ? grade.color : '#D0D5DD'};font-size:16px;border:1px solid ${grade ? grade.color + '30' : '#eef1f4'}` },
           grade ? grade.grade : '-'
@@ -3028,7 +3063,7 @@
         el('div', { style: 'flex:1' },
           el('div', { style: 'font-weight:600;font-size:14px' }, s.name),
           el('div', { style: 'font-size:12px;color:#9ca3af;margin-top:2px' },
-            latest ? `${latest.mode === 'basic' ? '기본' : '종합'} · ${latest.score}점 · ${new Date(latest.assessed_at).toLocaleDateString('ko-KR')}` : '미진단'
+            latest ? `${questionnaire.name} · ${latest.score}점 · ${new Date(latest.assessed_at).toLocaleDateString('ko-KR')}` : '미진단'
           ),
           latest ? el('div', { style: 'margin-top:4px;background:#E4E7EB;height:6px;border-radius:3px;overflow:hidden;width:120px' },
             el('div', { style: `background:${grade ? grade.color : '#D0D5DD'};height:100%;width:${completionPct}%` })
@@ -3042,13 +3077,21 @@
     })
 
     container.append(
-      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eef1f4;background:#fff;border-radius:12px 12px 0 0' },
-        el('h3', { style: 'margin:0;font-size:16px' }, '📝 VSME 자가진단')
+      el('div', { className: 'card-header', style: 'display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eef1f4;background:#fff;border-radius:12px 12px 0 0;flex-wrap:wrap;gap:8px' },
+        el('h3', { style: 'margin:0;font-size:16px' }, '📝 VSME 자가진단'),
+        el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' },
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: openQuestionnaireManager }, '⚙ 설문 관리'),
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: exportVSMEExcel }, '📥 엑셀 내보내기')
+        )
       ),
-      el('div', { style: 'padding:16px 20px;background:#F8FAFC;border-bottom:1px solid #eef1f4;display:flex;gap:16px' },
+      el('div', { style: 'padding:16px 20px;background:#F8FAFC;border-bottom:1px solid #eef1f4;display:flex;gap:16px;flex-wrap:wrap' },
         el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:100px' },
           el('div', { style: 'font-size:11px;color:#9CA3AF' }, '대상 협력사'),
           el('div', { style: 'font-size:22px;font-weight:700;margin-top:2px' }, suppliers.length)
+        ),
+        el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:100px' },
+          el('div', { style: 'font-size:11px;color:#9CA3AF' }, '설문지'),
+          el('div', { style: 'font-size:22px;font-weight:700;color:#047857;margin-top:2px' }, `${Supplier.getQuestionnaires().length}종`)
         ),
         el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:100px' },
           el('div', { style: 'font-size:11px;color:#9CA3AF' }, '진행률'),
@@ -3073,16 +3116,18 @@
   function openVSMEForSupplier(supplierId) {
     const supplier = Supplier.getAll().find(s => s.id === supplierId)
     if (!supplier) return
+    const questionnaires = Supplier.getQuestionnaires()
     const form = el('div', {})
-    const mode = el('select', { style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;margin-bottom:12px' },
-      el('option', { value: 'basic' }, '기본 모드 (12항목)'),
-      el('option', { value: 'comprehensive' }, '종합 모드 (14항목)')
+    const qSelect = el('select', { style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px' },
+      ...questionnaires.map(q => el('option', { value: q.id }, `${q.name} (${q.questions.length}항목)`))
     )
+    const qDesc = el('div', { style: 'font-size:11px;color:#9CA3AF;margin:4px 0 12px;min-height:16px' })
     const questionContainer = el('div', {})
     function renderQuestions() {
-      const checklist = Supplier.getVSMEChecklist(mode.value)
+      const selected = Supplier.getQuestionnaire(qSelect.value)
+      qDesc.textContent = selected.description || ''
       questionContainer.innerHTML = ''
-      checklist.forEach(q => {
+      selected.questions.forEach(q => {
         const row = el('div', { style: 'padding:8px 0;border-bottom:1px solid #EEF1F4' },
           el('div', { style: 'font-size:13px;margin-bottom:4px' }, `[${q.category}] ${q.question}`),
           el('div', { style: 'display:flex;gap:8px' },
@@ -3094,21 +3139,23 @@
         questionContainer.append(row)
       })
     }
-    mode.onchange = renderQuestions
+    qSelect.onchange = renderQuestions
     renderQuestions()
-    form.append(mode, questionContainer)
+    form.append(qSelect, qDesc, questionContainer)
     modal(`VSME 자가진단 - ${supplier.name}`, form)
     document.getElementById('modal-save').onclick = () => {
       try {
-        const checklist = Supplier.getVSMEChecklist(mode.value)
-        const answers = checklist.map(q => {
+        const selected = Supplier.getQuestionnaire(qSelect.value)
+        const answers = {}
+        selected.questions.forEach(q => {
           const checked = form.querySelector(`input[name="${q.id}"]:checked`)
-          return checked ? checked.value : 'na'
+          answers[q.id] = checked ? checked.value : 'na'
         })
-        Supplier.submitVSME(supplierId, mode.value, answers)
+        Supplier.submitVSME(supplierId, selected.id, answers)
         closeModal()
         _supplierTab = 'vsme'
         renderSupplier()
+        showToast('자가진단이 저장되었습니다.', 'success')
       } catch (e) {
         alert('VSME 저장 중 오류: ' + e.message)
         console.error('VSME save error:', e)
@@ -3118,17 +3165,18 @@
 
   function showVSMEHistory(supplierId) {
     const supplier = Supplier.getAll().find(s => s.id === supplierId)
-    const assessments = Supplier.getVSMEAssessments(supplierId).reverse()
+    const assessments = Supplier.getVSMEAssessments(supplierId).slice().reverse()
     const body = el('div', { style: 'max-height:400px;overflow-y:auto' })
     if (!assessments.length) {
       body.append(el('p', { style: 'color:#9CA3AF;text-align:center' }, '진단 이력이 없습니다.'))
     } else {
       assessments.forEach(a => {
         const grade = Supplier.getGrade(a.score)
+        const qn = Supplier.getAssessmentQuestionnaire(a)
         body.append(el('div', { style: 'padding:10px;border-bottom:1px solid #EEF1F4;display:flex;justify-content:space-between;align-items:center' },
           el('div', {},
-            el('div', { style: 'font-weight:500' }, `${a.mode === 'basic' ? '기본' : '종합'} 모드`),
-            el('div', { style: 'font-size:12px;color:#9ca3af' }, new Date(a.assessed_at).toLocaleString('ko-KR'))
+            el('div', { style: 'font-weight:500' }, qn.name),
+            el('div', { style: 'font-size:12px;color:#9ca3af' }, `${new Date(a.assessed_at).toLocaleString('ko-KR')} · ${qn.questions.length}문항`)
           ),
           el('span', { style: `background:${grade.color};color:#fff;padding:3px 12px;border-radius:10px;font-size:12px;font-weight:600` }, `${a.score}점 - ${a.grade}등급`)
         ))
@@ -3136,6 +3184,191 @@
     }
     modal(`${supplier?.name || ''} VSME 이력`, body)
     document.getElementById('modal-save').style.display = 'none'
+  }
+
+  function openQuestionnaireManager() {
+    const list = Supplier.getQuestionnaires()
+    const body = el('div', { style: 'max-height:440px;overflow-y:auto' },
+      el('p', { style: 'font-size:12px;color:#6b7280;margin:0 0 12px' }, `총 ${list.length}종의 설문지가 있습니다. 기본 제공 설문은 복제해서 수정할 수 있습니다.`)
+    )
+    list.forEach(q => {
+      body.append(el('div', { style: 'display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #EEF1F4;border-radius:8px;margin-bottom:8px' },
+        el('div', { style: `width:36px;height:36px;border-radius:8px;background:${q.builtin ? '#1E3A5F15' : '#04785715'};display:flex;align-items:center;justify-content:center;font-size:16px` }, q.builtin ? '📘' : '✏️'),
+        el('div', { style: 'flex:1' },
+          el('div', { style: 'font-size:13px;font-weight:600;color:#1F2937' }, q.name, el('span', { style: 'margin-left:6px;font-size:10px;padding:1px 6px;border-radius:8px;background:#F1F5F9;color:#64748B;font-weight:500' }, q.builtin ? '기본 제공' : '사용자')),
+          el('div', { style: 'font-size:11px;color:#9CA3AF;margin-top:2px' }, `${q.questions.length}문항${q.description ? ' · ' + q.description : ''}`)
+        ),
+        el('div', { style: 'display:flex;gap:6px' },
+          el('button', { className: 'btn btn-sm btn-secondary', onClick: () => openQuestionnaireEditor(q) }, q.builtin ? '복제' : '수정'),
+          q.builtin ? null : el('button', { className: 'btn btn-sm btn-danger', onClick: () => {
+            if (!confirm(`"${q.name}" 설문을 삭제할까요?\n기존 진단 이력은 당시 문항 스냅샷으로 보존됩니다.`)) return
+            Store.deleteQuestionnaire(q.id)
+            closeModal()
+            renderSupplier()
+            showToast('설문이 삭제되었습니다.', 'success')
+          } }, '삭제')
+        )
+      ))
+    })
+    modal('⚙ VSME 설문지 관리', body, [
+      { label: '+ 새 설문', className: 'btn btn-primary', onClick: () => openQuestionnaireEditor() },
+      { label: '닫기', className: 'btn btn-secondary', onClick: closeModal }
+    ])
+    document.getElementById('modal-save').style.display = 'none'
+  }
+
+  function openQuestionnaireEditor(base) {
+    const isEdit = !!(base && !base.builtin)
+    let suggestedName = ''
+    if (base) {
+      if (isEdit) suggestedName = base.name
+      else {
+        const used = new Set(Supplier.getQuestionnaires().map(q => q.name))
+        suggestedName = `${base.name} (복제)`
+        let n = 2
+        while (used.has(suggestedName)) suggestedName = `${base.name} (복제 ${n++})`
+      }
+    }
+    const name = el('input', { value: suggestedName })
+    const description = el('input', { value: base?.description || '' })
+    const rows = el('div', {})
+    const items = []
+    function addRow(q = { category: '환경', question: '' }) {
+      const category = el('input', { value: q.category || '환경', style: 'width:92px', placeholder: '영역' })
+      const text = el('input', { value: q.question || '', style: 'flex:1', placeholder: '문항 내용' })
+      const row = el('div', { style: 'display:flex;gap:6px;margin-bottom:6px;align-items:center' })
+      const item = { id: q.id || null, category, text, row }
+      row.append(category, text, el('button', { type: 'button', className: 'btn btn-sm btn-danger', onClick: () => {
+        const i = items.indexOf(item)
+        if (i > -1) items.splice(i, 1)
+        row.remove()
+      } }, '×'))
+      items.push(item)
+      rows.append(row)
+      return item
+    }
+    ;(base?.questions?.length ? base.questions : [{ category: '환경', question: '' }]).forEach(addRow)
+    const form = el('form', { onSubmit: e => e.preventDefault() },
+      el('label', {}, '설문 이름 *', name),
+      el('label', {}, '설명', description),
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px' },
+        el('span', { style: 'font-size:12px;font-weight:600;color:#1F2937' }, '문항'),
+        el('button', { type: 'button', className: 'btn btn-sm btn-secondary', onClick: () => addRow() }, '+ 문항 추가')
+      ),
+      rows
+    )
+    modal(isEdit ? '설문 수정' : (base ? '설문 복제' : '새 설문'), form)
+    document.getElementById('modal-save').onclick = () => {
+      const filled = items
+        .map((it, i) => ({
+          id: it.id || `q${Date.now()}-${i + 1}`,
+          category: it.category.value.trim() || '기타',
+          question: it.text.value.trim()
+        }))
+        .filter(q => q.question)
+      if (!name.value.trim()) return alert('설문 이름을 입력하세요.')
+      if (!filled.length) return alert('문항을 1개 이상 입력하세요.')
+      try {
+        if (isEdit) Store.updateQuestionnaire(base.id, { name: name.value.trim(), description: description.value.trim(), questions: filled })
+        else Store.addQuestionnaire({ name: name.value.trim(), description: description.value.trim(), questions: filled })
+        closeModal()
+        renderSupplier()
+        showToast(isEdit ? '설문이 수정되었습니다.' : '설문이 추가되었습니다.', 'success')
+        openQuestionnaireManager()
+      } catch (e) {
+        alert(e.message)
+      }
+    }
+  }
+
+  let _xlsxPromise = null
+  function _ensureXLSX() {
+    if (typeof XLSX !== 'undefined') return Promise.resolve(XLSX)
+    if (_xlsxPromise) return _xlsxPromise
+    _xlsxPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = 'materiality-app/js/vendor/xlsx.full.min.js'
+      script.onload = () => typeof XLSX !== 'undefined' ? resolve(XLSX) : reject(new Error('XLSX 초기화 실패'))
+      script.onerror = () => reject(new Error('XLSX 스크립트를 불러오지 못했습니다.'))
+      document.head.append(script)
+    })
+    return _xlsxPromise
+  }
+
+  const VSME_ANSWER_LABELS = { yes: '예', no: '아니오', na: '해당없음', partial: '부분' }
+
+  async function exportVSMEExcel() {
+    const assessments = Supplier.getVSMEAssessments()
+    if (!assessments.length) return alert('내보낼 VSME 진단 결과가 없습니다.')
+    try {
+      const XLSX = await _ensureXLSX()
+      const suppliers = Supplier.getAll()
+      const supplierById = new Map(suppliers.map(s => [String(s.id), s]))
+      const detail = [['협력사', '업종', '설문지', '응답일', '점수', '등급', '영역', '문항', '응답', '응답코드']]
+      const summary = [['협력사', '업종', '설문지', '응답일', '문항수', '예', '아니오', '해당없음', '미응답', '점수', '등급']]
+      const statMap = new Map()
+
+      assessments.forEach(a => {
+        const s = supplierById.get(String(a.supplier_id))
+        const qn = Supplier.getAssessmentQuestionnaire(a)
+        const map = Supplier.normalizeAnswers(a.answers, qn)
+        const counts = { yes: 0, no: 0, na: 0, none: 0 }
+        qn.questions.forEach(q => {
+          const value = map[q.id] || 'na'
+          if (value === 'yes') counts.yes++
+          else if (value === 'no') counts.no++
+          else if (value === 'na') counts.na++
+          else counts.none++
+          const respondedAt = a.assessed_at || a.created_at || ''
+          detail.push([s?.name || '-', s?.industry || '-', qn.name, respondedAt, a.score ?? '', a.grade || '', q.category || '기타', q.question, VSME_ANSWER_LABELS[value] || value, value])
+          const key = `${qn.id}|${q.id}|${q.question}`
+          if (!statMap.has(key)) statMap.set(key, { qn: qn.name, category: q.category || '기타', question: q.question, total: 0, yes: 0, no: 0, na: 0, none: 0 })
+          const st = statMap.get(key)
+          st.total++
+          if (value === 'yes') st.yes++
+          else if (value === 'no') st.no++
+          else if (value === 'na') st.na++
+          else st.none++
+        })
+        summary.push([s?.name || '-', s?.industry || '-', qn.name, a.assessed_at || a.created_at || '', qn.questions.length, counts.yes, counts.no, counts.na, counts.none, a.score ?? '', a.grade || ''])
+      })
+
+      const stats = [['설문지', '영역', '문항', '응답수', '예', '아니오', '해당없음', '미응답', '예 비율(%)']]
+      statMap.forEach(v => stats.push([v.qn, v.category, v.question, v.total, v.yes, v.no, v.na, v.none, v.total ? Math.round(v.yes / v.total * 100) : 0]))
+
+      const gradeRows = [['등급', '라벨', '협력사 수', '비율(%)', '평균 점수']]
+      const summaryData = Supplier.getSummary()
+      const scored = suppliers.filter(s => s.last_vsme_score != null)
+      Supplier.RISK_GRADES.forEach(g => {
+        const rows = suppliers.filter(s => s.last_vsme_grade === g.grade)
+        const avg = rows.length ? (rows.reduce((sum, s) => sum + (s.last_vsme_score || 0), 0) / rows.length).toFixed(1) : '-'
+        gradeRows.push([g.grade, g.label, rows.length, summaryData.total ? Math.round(rows.length / summaryData.total * 100) : 0, avg])
+      })
+      gradeRows.push(['-', '미진단', summaryData.riskCounts.unscored || 0, summaryData.total ? Math.round((summaryData.riskCounts.unscored || 0) / summaryData.total * 100) : 0, '-'])
+      gradeRows.push(['합계', '', summaryData.total, 100, scored.length ? (scored.reduce((sum, s) => sum + s.last_vsme_score, 0) / scored.length).toFixed(1) : '-'])
+
+      const qList = [['설문 ID', '설문지', '구분', '문항 ID', '영역', '문항']]
+      Supplier.getQuestionnaires().forEach(q => q.questions.forEach(x => qList.push([q.id, q.name, q.builtin ? '기본 제공' : '사용자', x.id, x.category, x.question])))
+
+      const wb = XLSX.utils.book_new()
+      const addSheet = (rows, name, widths) => {
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws['!cols'] = widths.map(w => ({ wch: w }))
+        XLSX.utils.book_append_sheet(wb, ws, name)
+      }
+      addSheet(detail, '응답상세', [18, 14, 20, 20, 7, 6, 10, 52, 10, 9])
+      addSheet(summary, '진단요약', [18, 14, 20, 20, 8, 7, 8, 10, 8, 7, 6])
+      addSheet(stats, '문항별집계', [20, 10, 52, 8, 7, 8, 10, 8, 11])
+      addSheet(gradeRows, '등급분포', [8, 10, 12, 10, 10])
+      addSheet(qList, '설문목록', [16, 20, 10, 14, 10, 52])
+
+      const stamp = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `VSME_자가진단_분석_${stamp}.xlsx`)
+      showToast(`진단 ${assessments.length}건을 엑셀로 내보냈습니다.`, 'success')
+    } catch (e) {
+      alert('엑셀 생성 실패: ' + e.message)
+      console.error('VSME excel export error:', e)
+    }
   }
 
   // ==================== AI 보고서 ====================
@@ -4596,12 +4829,38 @@
   function openStorageSettings() {
     const mode = StorageAdapter.mode
     const remoteReady = typeof SUPABASE_CONFIG !== 'undefined' && !!SUPABASE_CONFIG.url && !SUPABASE_CONFIG.url.includes('your-project')
-    const policySql = 'insert into storage.buckets (id, name, public)\nvalues (\'references\', \'references\', false)\non conflict (id) do update set public = false;\n\ndrop policy if exists "references_all" on storage.objects;\ncreate policy "references_all" on storage.objects\n  for all to anon, authenticated\n  using (bucket_id = \'references\')\n  with check (bucket_id = \'references\');'
+    const policySql = [
+      "-- 버킷 생성(비공개)",
+      "insert into storage.buckets (id, name, public)",
+      "values ('references', 'references', false)",
+      "on conflict (id) do update set public = false;",
+      "",
+      "-- 기존 전체 허용 정책 제거",
+      'drop policy if exists "references_all" on storage.objects;',
+      'drop policy if exists "references_read_authenticated" on storage.objects;',
+      'drop policy if exists "references_write_authenticated" on storage.objects;',
+      "",
+      "-- 로그인(auth) 사용자만, 앱이 생성하는 경로 형태만 허용",
+      'create policy "references_read_authenticated" on storage.objects',
+      "  for select to authenticated",
+      "  using (bucket_id = 'references');",
+      "",
+      'create policy "references_write_authenticated" on storage.objects',
+      "  for all to authenticated",
+      "  using (bucket_id = 'references' and (storage.foldername(name))[1] ~ '^[A-Za-z0-9_-]+$')",
+      "  with check (bucket_id = 'references' and (storage.foldername(name))[1] ~ '^[A-Za-z0-9_-]+$');",
+      "",
+      "-- [주의] 아래는 인증 연동 전 임시 방편입니다. 운영 환경에서는 사용하지 마세요.",
+      "-- create policy \"references_all\" on storage.objects",
+      "--   for all to anon using (bucket_id = 'references')",
+      "--   with check (bucket_id = 'references');"
+    ].join('\n')
     const note = el('div', { id: 'storage-remote-note', style: { display: mode !== 'local' ? 'block' : 'none', fontSize: 12, lineHeight: 1.6, color: remoteReady ? '#6B7280' : '#dc2626', background: '#f8fafc', padding: '10px 12px', borderRadius: 8 } },
       remoteReady
         ? el('div', {},
             el('div', {}, '백엔드: Supabase Storage · 버킷: ' + StorageAdapter._bucket),
             el('div', { style: { marginTop: 4, color: '#6B7280' } }, 'Supabase 대시보드 → Storage에서 "' + StorageAdapter._bucket + '" 버킷을 생성하고, 아래 정책 SQL을 SQL Editor에서 실행하세요.'),
+            el('div', { style: { marginTop: 4, color: '#dc2626' } }, '정책 SQL은 로그인(auth) 사용자만 업로드·삭제를 허용합니다. anon 키 전체 허용 정책은 어떤 경우에도 운영에 사용하지 마세요.'),
             el('button', { type: 'button', className: 'btn btn-secondary', style: { marginTop: 8, fontSize: 12, padding: '5px 10px' }, onClick: e => { navigator.clipboard.writeText(policySql).then(() => showToast('정책 SQL을 복사했습니다.')).catch(() => showToast('복사 실패', 'error')) } }, '정책 SQL 복사'),
             el('div', { style: { marginTop: 8, color: '#9CA3AF' } }, '업로드 400 오류 원인: ① 버킷 미생성 ② Storage 정책(RLS) 미설정 ③ 파일 크기 제한(기본 50MB) 초과 ④ 버킷 공개/비공개 설정 불일치')
           )
@@ -7089,7 +7348,7 @@
       const role = document.getElementById('a-role').value
       const status = document.getElementById('a-status').value
       if (!username || !password || !name) { alert('아이디, 비밀번호, 이름은 필수입니다.'); return }
-      if (password.length < 6) { alert('비밀번호는 6자 이상이어야 합니다.'); return }
+      if (password.length < 8) { alert('비밀번호는 8자 이상이어야 합니다.'); return }
       const exists = Store.getUsers().find(u => u.username === username)
       if (exists) { alert('이미 사용 중인 아이디입니다.'); return }
       Store.addUser({ username, password: await Store.hashPassword(password), name, email, phone, company_id: company_id ? parseInt(company_id) : null, dept_code, position, role, status })
@@ -7138,6 +7397,7 @@
 
   function approveUser(id) {
     if (!currentUser) return alert('로그인이 필요합니다.')
+    if (currentUser.role !== 'admin') return alert('관리자만 승인할 수 있습니다.')
     const u = Store.getUser(id)
     Store.updateUser(id, { status: 'active' })
     Store.addAuditLog({ category: '사용자관리', action: '사용자 승인', user_id: currentUser.id, user_name: currentUser.name, detail: `대상: ${u?.name || id} (${u?.username || ''})` })
@@ -7168,7 +7428,13 @@
       <div class="form-group"><label>상태</label><select id="f-ustatus"><option value="active" ${user.status === 'active' ? 'selected' : ''}>활성</option><option value="pending" ${user.status === 'pending' ? 'selected' : ''}>승인대기</option><option value="inactive" ${user.status === 'inactive' ? 'selected' : ''}>비활성</option></select></div>`
     modal('사용자 수정', form)
     document.getElementById('modal-save').onclick = function() {
-      Store.updateUser(id, { name: document.getElementById('f-uname').value, company_id: document.getElementById('f-ucompany').value ? parseInt(document.getElementById('f-ucompany').value) : null, dept_code: document.getElementById('f-udept').value, position: document.getElementById('f-uposition').value, email: document.getElementById('f-uemail').value, phone: document.getElementById('f-uphone').value, role: document.getElementById('f-urole').value, status: document.getElementById('f-ustatus').value })
+      const nextRole = document.getElementById('f-urole').value
+      const nextStatus = document.getElementById('f-ustatus').value
+      if (user.role === 'admin' && user.status === 'active' && Store.countActiveAdmins() <= 1 && (nextRole !== 'admin' || nextStatus !== 'active')) {
+        alert('마지막 관리자 계정의 권한이나 상태는 변경할 수 없습니다.\n다른 활성 사용자를 먼저 관리자로 지정하세요.')
+        return
+      }
+      Store.updateUser(id, { name: document.getElementById('f-uname').value, company_id: document.getElementById('f-ucompany').value ? parseInt(document.getElementById('f-ucompany').value) : null, dept_code: document.getElementById('f-udept').value, position: document.getElementById('f-uposition').value, email: document.getElementById('f-uemail').value, phone: document.getElementById('f-uphone').value, role: nextRole, status: nextStatus })
       showToast('사용자 정보가 수정되었습니다.', 'success')
       closeModal(); renderUsers()
     }
@@ -7177,7 +7443,12 @@
   function deleteUser(id) {
     const u = Store.getUser(id)
     if (!u) return
+    if (!currentUser || currentUser.role !== 'admin') { alert('관리자만 사용자를 삭제할 수 있습니다.'); return }
     if (currentUser && String(currentUser.id) === String(id)) { alert('본인 계정은 삭제할 수 없습니다.'); return }
+    if (u.role === 'admin' && u.status === 'active' && Store.countActiveAdmins() <= 1) {
+      alert('마지막 관리자 계정은 삭제할 수 없습니다.\n다른 활성 사용자를 먼저 관리자로 지정한 뒤 삭제하세요.')
+      return
+    }
     const counts = Store.countUserData(id)
     const others = Store.getUsers().filter(x => String(x.id) !== String(id) && x.status === 'active')
     const sameCo = others.filter(x => x.company_id != null && u.company_id != null && String(x.company_id) === String(u.company_id))

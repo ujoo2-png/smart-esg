@@ -31,6 +31,11 @@ const VSME_CHECKLIST = {
   ]
 }
 
+const VSME_QUESTIONNAIRE_META = {
+  basic: { name: 'VSME 기본 모듈', description: '중소기업 공통 12문항 (환경·사회·지배구조)' },
+  comprehensive: { name: 'VSME 종합 모듈', description: '대형 고객사 대응 14문항 (Scope 3·인권·반부패 포함)' }
+}
+
 const Supplier = {
   RISK_GRADES: [
     { grade: 'A', label: '우수', min_score: 80, color: '#047857' },
@@ -55,6 +60,10 @@ const Supplier = {
     Store.deleteSupplier(id)
   },
 
+  deleteDemo() {
+    return Store.deleteDemoSuppliers()
+  },
+
   getGrade(score) {
     for (const g of this.RISK_GRADES) {
       if (score >= g.min_score) return g
@@ -62,12 +71,79 @@ const Supplier = {
     return this.RISK_GRADES[this.RISK_GRADES.length - 1]
   },
 
-  getVSMEChecklist(mode) {
-    return VSME_CHECKLIST[mode] || VSME_CHECKLIST.basic
+  getBuiltinQuestionnaires() {
+    return Object.keys(VSME_CHECKLIST).map(id => ({
+      id,
+      name: VSME_QUESTIONNAIRE_META[id]?.name || id,
+      description: VSME_QUESTIONNAIRE_META[id]?.description || '',
+      builtin: true,
+      questions: VSME_CHECKLIST[id].map(q => ({ ...q }))
+    }))
+  },
+
+  getQuestionnaires() {
+    const builtins = this.getBuiltinQuestionnaires()
+    const ids = new Set(builtins.map(q => q.id))
+    const custom = (typeof Store !== 'undefined' && Store.getQuestionnaires) ? Store.getQuestionnaires() : []
+    const normalized = custom
+      .filter(q => !ids.has(q.id))
+      .map(q => ({
+        id: q.id,
+        name: q.name || '이름 없는 설문',
+        description: q.description || '',
+        builtin: false,
+        questions: (q.questions || []).map((x, i) => ({
+          id: x.id || `${q.id}-${i + 1}`,
+          category: x.category || '기타',
+          question: x.question || ''
+        }))
+      }))
+    return [...builtins, ...normalized]
+  },
+
+  getQuestionnaire(idOrMode) {
+    const list = this.getQuestionnaires()
+    return list.find(q => q.id === idOrMode) || list[0]
+  },
+
+  getVSMEChecklist(idOrMode) {
+    return this.getQuestionnaire(idOrMode).questions
+  },
+
+  getAssessmentQuestionnaire(a) {
+    if (!a) return this.getQuestionnaire('basic')
+    if (Array.isArray(a.questions) && a.questions.length) {
+      return { id: a.questionnaire_id || a.mode || 'custom', name: a.questionnaire_name || '사용자 설문', builtin: false, questions: a.questions }
+    }
+    return this.getQuestionnaire(a.questionnaire_id || a.mode)
+  },
+
+  normalizeAnswers(answers, questionnaire) {
+    const map = {}
+    if (Array.isArray(answers)) {
+      questionnaire.questions.forEach((q, i) => { if (answers[i] != null) map[q.id] = answers[i] })
+    } else if (answers && typeof answers === 'object') {
+      Object.entries(answers).forEach(([k, v]) => { if (v != null) map[k] = v })
+    }
+    return map
+  },
+
+  countYes(assessment) {
+    if (!assessment) return 0
+    const answers = assessment.answers
+    if (Array.isArray(answers)) return answers.filter(a => a === 'yes').length
+    return Object.values(answers || {}).filter(a => a === 'yes').length
+  },
+
+  assessmentProgress(assessment) {
+    const q = this.getAssessmentQuestionnaire(assessment)
+    return q.questions.length ? Math.round(this.countYes(assessment) / q.questions.length * 100) : 0
   },
 
   getVSMEAssessments(supplierId) {
-    return Store.getVSMEAssessments().filter(a => a.supplier_id === supplierId)
+    const all = Store.getVSMEAssessments() || []
+    if (supplierId == null) return all
+    return all.filter(a => String(a.supplier_id) === String(supplierId))
   },
 
   getLatestVSME(supplierId) {
@@ -75,26 +151,33 @@ const Supplier = {
     return all.length ? all[all.length - 1] : null
   },
 
-  calcVSMEScore(answers, mode) {
-    const checklist = this.getVSMEChecklist(mode)
-    const total = checklist.length
-    const yes = answers.filter(a => a === 'yes').length
+  calcVSMEScore(answers, idOrMode) {
+    const questionnaire = this.getQuestionnaire(idOrMode)
+    const map = this.normalizeAnswers(answers, questionnaire)
+    const total = questionnaire.questions.length
+    const yes = questionnaire.questions.filter(q => map[q.id] === 'yes').length
     return total > 0 ? Math.round((yes / total) * 100) : 0
   },
 
-  submitVSME(supplierId, mode, answers) {
-    const score = this.calcVSMEScore(answers, mode)
+  submitVSME(supplierId, idOrMode, answers) {
+    const questionnaire = this.getQuestionnaire(idOrMode)
+    const map = this.normalizeAnswers(answers, questionnaire)
+    const score = this.calcVSMEScore(map, questionnaire.id)
     const grade = this.getGrade(score)
-    const assessment = {
-      supplier_id: supplierId,
-      mode,
-      answers,
+    const assessedAt = new Date().toISOString()
+    const payload = {
+      questionnaire_id: questionnaire.id,
+      questionnaire_name: questionnaire.name,
+      mode: VSME_CHECKLIST[questionnaire.id] ? questionnaire.id : undefined,
+      questions: questionnaire.questions.map(q => ({ id: q.id, category: q.category, question: q.question })),
+      answers: map,
       score,
       grade: grade.grade,
-      assessed_at: new Date().toISOString()
+      assessed_at: assessedAt
     }
-    const created = Store.addVSMEAssessment(assessment)
-    Store.updateSupplier(supplierId, { last_vsme_score: score, last_vsme_grade: grade.grade, last_vsme_date: new Date().toISOString() })
+    if (Store.recordVSMEAssessment) return Store.recordVSMEAssessment(supplierId, payload)
+    const created = Store.addVSMEAssessment({ supplier_id: supplierId, ...payload })
+    Store.updateSupplier(supplierId, { last_vsme_score: score, last_vsme_grade: grade.grade, last_vsme_date: assessedAt })
     return created
   },
 

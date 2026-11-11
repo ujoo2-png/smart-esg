@@ -17,8 +17,8 @@ async function hashPw(pw) {
   return await Store.hashPassword(pw)
 }
 
-async function ensureAdmin() {
-  await Store.ensureAdmin()
+async function verifyPw(pw, stored) {
+  return await Store.verifyPassword(pw, stored)
 }
 
 function onAuthChange(fn) { authListeners.push(fn) }
@@ -58,6 +58,10 @@ async function checkAuth() {
   const s = getSession()
   if (!s) return null
   const user = Store.getUsers().find(u => String(u.id) === String(s.id)) || null
+  if (!user || user.status !== 'active') {
+    setSession(null)
+    return null
+  }
   currentUser = user
   return user
 }
@@ -67,18 +71,20 @@ async function checkAuth() {
 async function register(data) {
   const users = Store.getUsers()
   const uname = String(data.username || '').trim().toLowerCase()
+  if (!uname) return { error: '아이디를 입력하세요.' }
+  if (String(data.password || '').length < 8) return { error: '비밀번호는 8자 이상 입력하세요.' }
   const localDup = users.find(u => (u.username || '').trim().toLowerCase() === uname)
   if (localDup) return { error: '이미 사용 중인 아이디입니다.' }
-  let authId = null
   const sbAuth = getSbAuth()
   if (sbAuth && data.email) {
     try {
-      const { data: authData } = await sbAuth.signUp({ email: data.email, password: data.password })
-      if (authData?.user) authId = authData.user.id
+      await sbAuth.signUp({ email: data.email, password: data.password })
     } catch (e) { console.warn('Supabase Auth register:', e.message) }
+    // 승인 전 계정이 Supabase Auth 세션을 갖게 되면 안 된다.
+    try { await sbAuth.signOut() } catch (e) { /* ignore */ }
   }
   Store.addUser({
-    username: data.username,
+    username: String(data.username).trim(),
     password: await hashPw(data.password),
     name: data.name,
     email: data.email,
@@ -86,7 +92,7 @@ async function register(data) {
     company_id: data.company_id || null,
     dept_code: data.dept_code || '',
     position: data.position || '',
-    role: data.role || 'user',
+    role: 'user',
     status: 'pending',
   })
   Store.addAuditLog({ category: '사용자등록', action: '신규 등록', user_id: null, user_name: data.name, detail: `아이디: ${data.username}, 이름: ${data.name}, 부서: ${data.dept_code || '미지정'}` })
@@ -98,8 +104,51 @@ function checkUsername(username) {
   return !Store.getUsers().find(u => (u.username || '').toLowerCase() === uname)
 }
 
+const LOGIN_MAX_ATTEMPTS = 5
+const LOGIN_LOCK_MS = 60 * 1000
+const LOGIN_GUARD_KEY = 'smart_esg_login_guard'
+
+function _readGuard() {
+  try { return JSON.parse(localStorage.getItem(LOGIN_GUARD_KEY) || '{}') || {} } catch { return {} }
+}
+
+function _writeGuard(g) {
+  try { localStorage.setItem(LOGIN_GUARD_KEY, JSON.stringify(g)) } catch { /* ignore */ }
+}
+
+function loginLockRemaining(username) {
+  const g = _readGuard()
+  const rec = g[String(username || '').toLowerCase()]
+  if (!rec) return 0
+  const remain = Number(rec.lockedUntil || 0) - Date.now()
+  return remain > 0 ? Math.ceil(remain / 1000) : 0
+}
+
+function _recordLoginFailure(username) {
+  const key = String(username || '').toLowerCase()
+  const g = _readGuard()
+  const rec = g[key] || { count: 0, lockedUntil: 0 }
+  rec.count = Number(rec.count || 0) + 1
+  if (rec.count >= LOGIN_MAX_ATTEMPTS) {
+    rec.lockedUntil = Date.now() + LOGIN_LOCK_MS
+    rec.count = 0
+  }
+  g[key] = rec
+  _writeGuard(g)
+}
+
+function _clearLoginFailure(username) {
+  const g = _readGuard()
+  delete g[String(username || '').toLowerCase()]
+  _writeGuard(g)
+}
+
 async function login(username, password) {
   const uname = String(username || '').trim().toLowerCase()
+  const lock = loginLockRemaining(uname)
+  if (lock > 0) {
+    return { error: `로그인 시도가 너무 많습니다. ${lock}초 후 다시 시도하세요.` }
+  }
   let cands = Store.getUsers().filter(u => (u.username || '').toLowerCase() === uname)
   if (!cands.length) {
     try {
@@ -114,20 +163,41 @@ async function login(username, password) {
   }
   if (!cands.length) {
     try { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: null, user_name: '', detail: `아이디: ${username} (사용자 없음)` }) } catch (e) {}
+    _recordLoginFailure(uname)
     return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
   }
-  const pwHash = await Store.hashPassword(password)
-  const matched = cands.filter(u => u.password === pwHash)
-  const user = matched.find(u => u.company_id != null) || matched[0] || null
-  const pwMatch = !!user
-  if (!pwMatch) {
+
+  let user = null
+  let needsUpgrade = false
+  const matched = []
+  for (const cand of cands) {
+    const r = await verifyPw(password, cand.password)
+    if (r.ok) matched.push({ cand, needsUpgrade: r.needsUpgrade })
+  }
+  if (matched.length) {
+    const pick = matched.find(m => m.cand.status === 'active') || matched[0]
+    user = pick.cand
+    needsUpgrade = pick.needsUpgrade
+  }
+  if (!user) {
     try { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: cands[0].id, user_name: cands[0].name, detail: `아이디: ${username} (비밀번호 불일치)` }) } catch (e) {}
+    _recordLoginFailure(uname)
     return { error: '아이디 또는 비밀번호가 일치하지 않습니다.' }
   }
   if (user.status !== 'active') {
-    try { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: user.id, user_name: user.name, detail: `아이디: ${username} (승인 대기)` }) } catch (e) {}
-    return { error: '관리자 승인 대기 중입니다. 관리자에게 문의하세요.' }
+    try { Store.addAuditLog({ category: '로그인', action: '로그인 실패', user_id: user.id, user_name: user.name, detail: `아이디: ${username} (상태: ${user.status})` }) } catch (e) {}
+    return { error: user.status === 'inactive'
+      ? '비활성화된 계정입니다. 관리자에게 문의하세요.'
+      : '관리자 승인 대기 중입니다. 관리자에게 문의하세요.' }
   }
+
+  if (needsUpgrade) {
+    try {
+      Store.updateUser(user.id, { password: await hashPw(password) })
+      user = Store.getUsers().find(u => String(u.id) === String(user.id)) || user
+    } catch (e) { console.warn('password upgrade:', e.message) }
+  }
+  _clearLoginFailure(uname)
 
   let sbSession = null
   const sbAuth = getSbAuth()
@@ -149,6 +219,13 @@ async function logout() {
   const sbAuth = getSbAuth()
   if (sbAuth) { try { await sbAuth.signOut() } catch (e) { /* ignore */ } }
   setSession(null)
+}
+
+function maskId(username) {
+  const s = String(username || '')
+  if (s.length <= 2) return s[0] + '*'
+  if (s.length <= 4) return s.slice(0, 1) + '*'.repeat(s.length - 2) + s.slice(-1)
+  return s.slice(0, 2) + '*'.repeat(s.length - 4) + s.slice(-2)
 }
 
 function findId(email) {
@@ -228,7 +305,7 @@ function showAuthModal(tab) {
   grid.innerHTML = `<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="lg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0L0 0 0 40" fill="none" stroke="white" stroke-width=".5"/></pattern></defs><rect width="100%" height="100%" fill="url(#lg)"/></svg>`
   page.appendChild(grid)
   document.body.appendChild(page)
-  switchAuthTab(tab || 'login')
+  switchAuthTab(tab || (Store.needsBootstrap && Store.needsBootstrap() ? 'setup' : 'login'))
 }
 
 function closeAuthModal(showApp) {
@@ -244,6 +321,23 @@ function switchAuthTab(tab) {
   const container = document.getElementById('auth-page')
   if (!container) return
   const html = {
+    setup: `
+      <div style="background:rgba(255,255,255,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:32px;width:420px;box-shadow:0 8px 40px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1);max-height:90vh;overflow-y:auto">
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#1E3A5F,#1E3A5F);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;color:#fff;box-shadow:0 4px 16px rgba(30,58,95,.4)">★</div>
+          <h2 style="margin:0;font-size:18px;font-weight:700;color:#14213D;letter-spacing:-.3px">최초 관리자 설정</h2>
+          <p style="margin:4px 0 0;font-size:12px;color:#9CA3AF">등록된 관리자 계정이 없습니다. 첫 관리자 계정을 만드세요.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div><label style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px;display:block">아이디 *</label><input id="af-setup-id" type="text" style="width:100%;padding:10px 12px;border:2px solid #EEF1F4;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#EEF1F4'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px;display:block">비밀번호 * (8자 이상)</label><input id="af-setup-pw" type="password" style="width:100%;padding:10px 12px;border:2px solid #EEF1F4;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#EEF1F4'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px;display:block">비밀번호 확인 *</label><input id="af-setup-pw2" type="password" style="width:100%;padding:10px 12px;border:2px solid #EEF1F4;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#EEF1F4'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px;display:block">이름 *</label><input id="af-setup-name" type="text" style="width:100%;padding:10px 12px;border:2px solid #EEF1F4;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#EEF1F4'"></div>
+          <div><label style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px;display:block">이메일 *</label><input id="af-setup-email" type="email" style="width:100%;padding:10px 12px;border:2px solid #EEF1F4;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box" onfocus="this.style.borderColor='#1E3A5F'" onblur="this.style.borderColor='#EEF1F4'"></div>
+          <button onclick="doSetup()" style="margin-top:4px;padding:12px;background:linear-gradient(135deg,#1E3A5F,#1E3A5F);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(30,58,95,.3)">관리자 계정 만들기</button>
+          <p id="af-setup-err" style="color:#DC2626;font-size:13px;margin:0;display:none;text-align:center;padding:4px 0"></p>
+        </div>
+      </div>`,
     login: `
       <div style="background:rgba(255,255,255,.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:20px;padding:36px 32px 28px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.1);max-height:90vh;overflow-y:auto">
         <div style="text-align:center;margin-bottom:24px">
@@ -361,6 +455,31 @@ function switchAuthTab(tab) {
   }
 }
 
+async function doSetup() {
+  const err = document.getElementById('af-setup-err')
+  const show = m => { if (err) { err.textContent = m; err.style.color = '#DC2626'; err.style.display = 'block' } }
+  if (!Store.needsBootstrap || !Store.needsBootstrap()) { show('이미 관리자 계정이 존재합니다. 로그인하세요.'); return }
+  const id = document.getElementById('af-setup-id').value.trim()
+  const pw = document.getElementById('af-setup-pw').value
+  const pw2 = document.getElementById('af-setup-pw2').value
+  const name = document.getElementById('af-setup-name').value.trim()
+  const email = document.getElementById('af-setup-email').value.trim()
+  if (!id) return show('아이디를 입력하세요.')
+  if (!pw || pw.length < 8) return show('비밀번호는 8자 이상 입력하세요.')
+  if (pw !== pw2) return show('비밀번호가 일치하지 않습니다.')
+  if (!name) return show('이름을 입력하세요.')
+  if (!email || email.indexOf('@') < 1) return show('올바른 이메일을 입력하세요.')
+
+  const r = await Store.createFirstAdmin({ username: id, password: pw, name, email })
+  if (r.error) return show(r.error)
+  try { Store.addAuditLog({ category: '사용자등록', action: '최초 관리자 생성', user_id: null, user_name: name, detail: `아이디: ${id}` }) } catch (e) {}
+  const lr = await login(id, pw)
+  if (lr.error) return show(lr.error)
+  closeAuthModal(true)
+  applyAuthUI()
+  try { if (typeof init === 'function') await init() } catch (e) { console.warn('init after setup:', e) }
+}
+
 async function doLogin() {
   const id = document.getElementById('af-id').value.trim()
   const pw = document.getElementById('af-pw').value
@@ -393,7 +512,7 @@ async function doRegister() {
   const position = document.getElementById('af-reg-position').value.trim()
   const err = document.getElementById('af-reg-err')
   if (!id) { err.textContent = '아이디를 입력하세요.'; err.style.display = 'block'; return }
-  if (!pw || pw.length < 4) { err.textContent = '비밀번호는 4자리 이상 입력하세요.'; err.style.display = 'block'; return }
+  if (!pw || pw.length < 8) { err.textContent = '비밀번호는 8자 이상 입력하세요.'; err.style.display = 'block'; return }
   if (pw !== pw2) { err.textContent = '비밀번호가 일치하지 않습니다.'; err.style.display = 'block'; return }
   if (!name) { err.textContent = '이름을 입력하세요.'; err.style.display = 'block'; return }
   if (!email) { err.textContent = '이메일을 입력하세요.'; err.style.display = 'block'; return }
@@ -430,7 +549,7 @@ function doFindId() {
   if (!email) { rs.textContent = '이메일을 입력하세요.'; rs.style.color = '#DC2626'; rs.style.display = 'block'; return }
   const r = findId(email)
   if (r.error) { rs.textContent = r.error; rs.style.color = '#DC2626'; rs.style.display = 'block'; return }
-  rs.innerHTML = `회원님의 아이디는 <strong>${esc(r.username)}</strong>입니다. (가입일: ${r.createdAt})`
+  rs.innerHTML = `회원님의 아이디는 <strong>${esc(maskId(r.username))}</strong>입니다. (가입일: ${r.createdAt})`
   rs.style.color = '#047857'; rs.style.display = 'block'
 }
 
