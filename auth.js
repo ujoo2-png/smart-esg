@@ -143,21 +143,34 @@ function _clearLoginFailure(username) {
   _writeGuard(g)
 }
 
+async function _matchUsers(cands, password) {
+  const matched = []
+  for (const cand of cands) {
+    const r = await verifyPw(password, cand.password)
+    if (r.ok) matched.push({ cand, needsUpgrade: r.needsUpgrade })
+  }
+  if (!matched.length) return null
+  return matched.find(m => m.cand.status === 'active') || matched[0]
+}
+
 async function login(username, password) {
   const uname = String(username || '').trim().toLowerCase()
   const lock = loginLockRemaining(uname)
   if (lock > 0) {
     return { error: `로그인 시도가 너무 많습니다. ${lock}초 후 다시 시도하세요.` }
   }
-  let cands = Store.getUsers().filter(u => (u.username || '').toLowerCase() === uname)
-  if (!cands.length) {
+  const pickLocal = () => Store.getUsers().filter(u => (u.username || '').toLowerCase() === uname)
+  let cands = pickLocal()
+  let pick = cands.length ? await _matchUsers(cands, password) : null
+  if (!pick) {
     try {
       if (typeof Store.pullFromSupabase === 'function') {
         await Promise.race([
           Store.pullFromSupabase({ tables: ['users'] }),
           new Promise(res => setTimeout(() => res(null), 5000))
         ])
-        cands = Store.getUsers().filter(u => (u.username || '').toLowerCase() === uname)
+        cands = pickLocal()
+        pick = cands.length ? await _matchUsers(cands, password) : null
       }
     } catch (e) {}
   }
@@ -169,13 +182,7 @@ async function login(username, password) {
 
   let user = null
   let needsUpgrade = false
-  const matched = []
-  for (const cand of cands) {
-    const r = await verifyPw(password, cand.password)
-    if (r.ok) matched.push({ cand, needsUpgrade: r.needsUpgrade })
-  }
-  if (matched.length) {
-    const pick = matched.find(m => m.cand.status === 'active') || matched[0]
+  if (pick) {
     user = pick.cand
     needsUpgrade = pick.needsUpgrade
   }

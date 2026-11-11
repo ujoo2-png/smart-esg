@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.12.0'
+const APP_VERSION = 'v2.12.1'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -336,7 +336,7 @@ const Store = {
     this._ensureSeeds()
     if (savedVer !== APP_VERSION) {
       localStorage.setItem(STORE_KEY + '_ver', APP_VERSION)
-      this._save()
+      this._save({ dirty: [] })
     }
   },
 
@@ -1097,6 +1097,33 @@ const Store = {
     return r
   },
 
+  _mergeRemoteUsers(rows) {
+    const local = this.data.users || (this.data.users = [])
+    const byId = new Map(local.map(u => [String(u.id), u]))
+    const deleted = new Set((this._getDeletedIds().users || []).map(String))
+    const fields = ['username', 'password', 'name', 'email', 'phone', 'position', 'role', 'status', 'company_id', 'dept_code', 'updated_at']
+    let changed = 0
+    ;(rows || []).forEach(raw => {
+      if (!raw || raw.id == null) return
+      const id = String(raw.id)
+      if (deleted.has(id)) return
+      const remote = this._normalizeRemoteRow(raw)
+      const cur = byId.get(id)
+      if (!cur) { local.push(remote); byId.set(id, remote); changed++; return }
+      const rt = Date.parse(remote.updated_at || '') || 0
+      const lt = Date.parse(cur.updated_at || '') || 0
+      if ((rt || lt) && rt <= lt) return
+      let touched = false
+      fields.forEach(k => {
+        if (remote[k] == null) return
+        if (k === 'password' && !remote[k]) return
+        if (remote[k] !== cur[k]) { cur[k] = remote[k]; touched = true }
+      })
+      if (touched) changed++
+    })
+    return changed
+  },
+
   async pullFromSupabase(opts) {
     const sb = getSupabase ? getSupabase() : null
     if (!sb) return { ok: false, reason: 'no-supabase' }
@@ -1108,13 +1135,7 @@ const Store = {
       try {
         const { data, error } = await sb.from('tb_user').select('*')
         if (error) return { ok: false, reason: this._fmtSbError(error) }
-        const local = this._data.users || []
-        const have = new Set(local.map(u => String(u.id)))
-        const deletedUsers = new Set((this._getDeletedIds().users || []).map(String))
-        const incoming = (data || []).filter(u => u && u.id != null && !have.has(String(u.id)) && !deletedUsers.has(String(u.id)))
-        incoming.forEach(u => local.push(this._normalizeRemoteRow(u)))
-        this._data.users = local
-        added.users = incoming.length
+        added.users = this._mergeRemoteUsers(data)
       } catch (e) { console.warn('pullFromSupabase users:', e && e.message) }
     }
 
@@ -1247,7 +1268,7 @@ const Store = {
     this._save()
     return record
   },
-  updateUser(id, updates) { const nid = this._normId(id); const i = this.data.users.findIndex(u => this._normId(u.id) === nid); if (i > -1) { Object.assign(this.data.users[i], updates); this._save() } },
+  updateUser(id, updates) { const nid = this._normId(id); const i = this.data.users.findIndex(u => this._normId(u.id) === nid); if (i > -1) { Object.assign(this.data.users[i], updates, { updated_at: new Date().toISOString() }); this._save() } },
   deleteUser(id) { const nid = this._normId(id); this.data.users = this.data.users.filter(u => this._normId(u.id) !== nid); this._addDeletedId('users', id); this._save() },
 
   // ==== Companies ====

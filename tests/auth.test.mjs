@@ -135,3 +135,60 @@ test('부트스트랩: 생성한 관리자는 즉시 로그인 가능', async ()
   assert.equal(r.ok, true)
   assert.equal(r.user.role, 'admin')
 })
+
+test('원격 사용자 병합: 로컬에 없는 계정은 추가', () => {
+  const { Store } = createEnv()
+  const changed = Store._mergeRemoteUsers([{ id: '999', username: 'remote1', password: 'hash', role: 'user', status: 'active' }])
+  assert.equal(changed, 1)
+  assert.ok(Store.getUsers().some(u => u.username === 'remote1'))
+})
+
+test('원격 사용자 병합: 로컬 해시가 낡았으면 원격 해시로 교체', () => {
+  const { Store } = createEnv()
+  Store.addUser({ id: '1', username: 'admin', password: 'a'.repeat(64), name: '관리자', role: 'admin', status: 'active' })
+  const changed = Store._mergeRemoteUsers([{ id: '1', username: 'admin', password: 'remote-hash', name: '관리자', role: 'admin', status: 'active' }])
+  assert.equal(changed, 1)
+  assert.equal(Store.getUsers().find(u => String(u.id) === '1').password, 'remote-hash')
+})
+
+test('원격 사용자 병합: 원격 updated_at이 더 최신이면 원격 우선', () => {
+  const { Store } = createEnv()
+  Store.addUser({ id: '2', username: 'u2', password: 'local-hash', name: '로컬', role: 'user', status: 'active', updated_at: '2026-01-01T00:00:00.000Z' })
+  Store._mergeRemoteUsers([{ id: '2', username: 'u2', password: 'remote-hash', name: '원격', role: 'user', status: 'active', updated_at: '2026-02-01T00:00:00.000Z' }])
+  const u = Store.getUsers().find(x => String(x.id) === '2')
+  assert.equal(u.password, 'remote-hash')
+  assert.equal(u.name, '원격')
+})
+
+test('원격 사용자 병합: 로컬 updated_at이 더 최신이면 로컬 보존', () => {
+  const { Store } = createEnv()
+  Store.addUser({ id: '3', username: 'u3', password: 'local-hash', name: '로컬', role: 'user', status: 'active', updated_at: '2026-03-01T00:00:00.000Z' })
+  const changed = Store._mergeRemoteUsers([{ id: '3', username: 'u3', password: 'remote-hash', name: '원격', role: 'user', status: 'active', updated_at: '2026-02-01T00:00:00.000Z' }])
+  const u = Store.getUsers().find(x => String(x.id) === '3')
+  assert.equal(changed, 0)
+  assert.equal(u.password, 'local-hash')
+  assert.equal(u.name, '로컬')
+})
+
+test('원격 사용자 병합: 원격 비밀번호가 비어 있으면 로컬 해시 유지', () => {
+  const { Store } = createEnv()
+  Store.addUser({ id: '4', username: 'u4', password: 'local-hash', name: '로컬', role: 'user', status: 'active' })
+  Store._mergeRemoteUsers([{ id: '4', username: 'u4', password: '', name: '원격', role: 'user', status: 'active' }])
+  const u = Store.getUsers().find(x => String(x.id) === '4')
+  assert.equal(u.password, 'local-hash')
+  assert.equal(u.name, '원격')
+})
+
+test('로그인: 로컬 해시가 낡아도 원격 재조회 후 로그인 성공', async () => {
+  const { Store, evaluate } = createEnv()
+  const realHash = await Store.hashPassword('admin1234')
+  Store.addUser({ id: '1', username: 'admin', password: 'a'.repeat(64), name: '관리자', role: 'admin', status: 'active' })
+  Store.pullFromSupabase = async () => {
+    Store._mergeRemoteUsers([{ id: '1', username: 'admin', password: realHash, name: '관리자', role: 'admin', status: 'active' }])
+    return { ok: true, added: { users: 1 } }
+  }
+  const r = await evaluate('login')('admin', 'admin1234')
+  assert.equal(r.ok, true)
+  assert.equal(r.user.username, 'admin')
+  assert.match(Store.getUsers().find(u => u.username === 'admin').password, /^pbkdf2_sha256\$/)
+})
