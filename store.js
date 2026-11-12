@@ -1,4 +1,4 @@
-const APP_VERSION = 'v2.13.0'
+const APP_VERSION = 'v2.13.1'
 const STORE_KEY = 'smart_esg_data'
 const DELETED_IDS_KEY = 'smart_esg_deleted_ids'
 
@@ -1838,13 +1838,9 @@ const Store = {
     this.data.vsmeAssessments.push(rec)
     const s = (this.data.suppliers || []).find(x => String(x.id) === String(supplierId))
     if (s) {
-      const incoming = String(payload.assessed_at || rec.created_at || '').slice(0, 10)
-      const current = String(s.last_vsme_date || '').slice(0, 10)
-      if (!current || incoming >= current) {
-        s.last_vsme_score = payload.score
-        s.last_vsme_grade = payload.grade
-        s.last_vsme_date = payload.assessed_at || rec.created_at
-      }
+      s.last_vsme_score = payload.score
+      s.last_vsme_grade = payload.grade
+      s.last_vsme_date = payload.assessed_at || rec.created_at
     }
     this._save({ dirty: [] })
     return rec

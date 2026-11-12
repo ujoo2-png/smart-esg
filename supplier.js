@@ -148,7 +148,15 @@ const Supplier = {
 
   getLatestVSME(supplierId) {
     const all = this.getVSMEAssessments(supplierId)
-    return all.length ? all[all.length - 1] : null
+    if (!all.length) return null
+    const s = this.getAll().find(x => String(x.id) === String(supplierId))
+    const lastDate = s ? String(s.last_vsme_date || '').slice(0, 10) : ''
+    if (lastDate) {
+      for (let i = all.length - 1; i >= 0; i--) {
+        if (String(all[i].assessed_at || all[i].created_at || '').slice(0, 10) === lastDate) return all[i]
+      }
+    }
+    return all[all.length - 1]
   },
 
   calcVSMEScore(answers, idOrMode) {

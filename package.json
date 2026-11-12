@@ -1,6 +1,6 @@
 {
   "name": "smart-esg",
-  "version": "2.13.0",
+  "version": "2.13.1",
   "private": true,
   "description": "지속가능경영보고서(ESG) 작성·평가·공시 지원 웹 애플리케이션",
   "scripts": {

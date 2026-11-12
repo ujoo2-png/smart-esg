@@ -121,7 +121,7 @@ test('VSME 일괄등록: 미등록 협력사 자동 생성 후 반영', () => {
   assert.equal(s.last_vsme_score, Math.round(2 / 12 * 100))
 })
 
-test('VSME: 입력일 지정 저장 및 과거 입력일은 최근 진단일을 덮어쓰지 않는다', () => {
+test('VSME: 재제출한 입력일이 최근 진단일에 즉시 반영된다', () => {
   const { Store, Supplier } = makeEnv()
   const s = Supplier.add({ name: '입력일테스트' })
   const answers = {}
@@ -129,6 +129,24 @@ test('VSME: 입력일 지정 저장 및 과거 입력일은 최근 진단일을 
   Supplier.submitVSME(s.id, 'basic', answers, '2026-03-10')
   assert.equal(Supplier.getAll().find(x => String(x.id) === String(s.id)).last_vsme_date.slice(0, 10), '2026-03-10')
   Supplier.submitVSME(s.id, 'basic', answers, '2025-01-01')
-  assert.equal(Supplier.getAll().find(x => String(x.id) === String(s.id)).last_vsme_date.slice(0, 10), '2026-03-10')
+  const after = Supplier.getAll().find(x => String(x.id) === String(s.id))
+  assert.equal(after.last_vsme_date.slice(0, 10), '2025-01-01')
   assert.equal(Store.getVSMEAssessments(s.id).length, 2)
+  assert.equal(Supplier.getLatestVSME(s.id).assessed_at.slice(0, 10), '2025-01-01')
+})
+
+test('VSME 일괄등록: 과거 입력일은 최근 진단일을 덮어쓰지 않는다', () => {
+  const { Store, Supplier } = makeEnv()
+  Supplier.applyBulkImport(Supplier.parseBulkRows([
+    ['협력사', '설문지', '입력일', 'vb-1', 'vb-2'],
+    ['과거상사', 'VSME 기본 모듈', '2026-06-01', 'yes', 'yes']
+  ]))
+  Supplier.applyBulkImport(Supplier.parseBulkRows([
+    ['협력사', '설문지', '입력일', 'vb-1', 'vb-2'],
+    ['과거상사', 'VSME 기본 모듈', '2026-01-01', 'no', 'no']
+  ]))
+  const s = Supplier.getAll().find(x => x.name === '과거상사')
+  assert.equal(s.last_vsme_date.slice(0, 10), '2026-06-01')
+  assert.equal(Store.getVSMEAssessments(s.id).length, 2)
+  assert.equal(Supplier.getLatestVSME(s.id).assessed_at.slice(0, 10), '2026-06-01')
 })
