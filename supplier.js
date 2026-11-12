@@ -140,6 +140,21 @@ const Supplier = {
     return q.questions.length ? Math.round(this.countYes(assessment) / q.questions.length * 100) : 0
   },
 
+  assessmentCompletion(assessment) {
+    if (!assessment) return 0
+    const q = this.getAssessmentQuestionnaire(assessment)
+    const map = this.normalizeAnswers(assessment.answers, q)
+    const answered = q.questions.filter(x => map[x.id] != null && map[x.id] !== '').length
+    return q.questions.length ? Math.round(answered / q.questions.length * 100) : 0
+  },
+
+  getVSMEStats() {
+    const all = this.getAll()
+    const assessed = all.filter(s => this.getLatestVSME(s.id) || s.last_vsme_date).length
+    const total = all.length
+    return { total, assessed, pct: total ? Math.round(assessed / total * 100) : 0 }
+  },
+
   getVSMEAssessments(supplierId) {
     const all = Store.getVSMEAssessments() || []
     if (supplierId == null) return all
@@ -160,7 +175,10 @@ const Supplier = {
   },
 
   calcVSMEScore(answers, idOrMode) {
-    const questionnaire = this.getQuestionnaire(idOrMode)
+    return this._scoreAnswers(answers, this.getQuestionnaire(idOrMode))
+  },
+
+  _scoreAnswers(answers, questionnaire) {
     const map = this.normalizeAnswers(answers, questionnaire)
     const total = questionnaire.questions.length
     const yes = questionnaire.questions.filter(q => map[q.id] === 'yes').length
@@ -409,6 +427,54 @@ const Supplier = {
     const created = Store.addVSMEAssessment({ supplier_id: supplierId, ...payload })
     Store.updateSupplier(supplierId, { last_vsme_score: score, last_vsme_grade: grade.grade, last_vsme_date: assessedAt })
     return created
+  },
+
+  updateVSME(assessmentId, answers, assessedAtInput) {
+    const existing = (Store.getVSMEAssessments() || []).find(a => String(a.id) === String(assessmentId))
+    if (!existing) throw new Error('자가진단 이력을 찾을 수 없습니다.')
+    const questionnaire = this.getAssessmentQuestionnaire(existing)
+    const map = this.normalizeAnswers(answers, questionnaire)
+    const score = this._scoreAnswers(map, questionnaire)
+    const assessedAt = this._normalizeAssessedAt(assessedAtInput)
+    Store.updateVSMEAssessment(existing.id, {
+      answers: map,
+      score,
+      grade: this.getGrade(score).grade,
+      assessed_at: assessedAt
+    })
+    this.syncLatestVSME(existing.supplier_id)
+    return (Store.getVSMEAssessments() || []).find(a => String(a.id) === String(existing.id))
+  },
+
+  deleteVSME(assessmentId) {
+    const existing = (Store.getVSMEAssessments() || []).find(a => String(a.id) === String(assessmentId))
+    if (!existing) return null
+    Store.deleteVSMEAssessment(existing.id)
+    this.syncLatestVSME(existing.supplier_id)
+    return existing
+  },
+
+  syncLatestVSME(supplierId) {
+    const all = this.getVSMEAssessments(supplierId)
+    let latest = null
+    all.forEach(a => {
+      if (!latest) { latest = a; return }
+      const at = String(a.assessed_at || a.created_at || '')
+      const lt = String(latest.assessed_at || latest.created_at || '')
+      if (at >= lt) latest = a
+    })
+    const s = this.getAll().find(x => String(x.id) === String(supplierId))
+    if (!s) return latest
+    if (latest) {
+      Store.updateSupplier(s.id, {
+        last_vsme_score: latest.score,
+        last_vsme_grade: latest.grade,
+        last_vsme_date: latest.assessed_at || latest.created_at
+      })
+    } else {
+      Store.updateSupplier(s.id, { last_vsme_score: null, last_vsme_grade: null, last_vsme_date: null })
+    }
+    return latest
   },
 
   getSummary() {

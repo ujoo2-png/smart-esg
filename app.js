@@ -2550,7 +2550,7 @@
           bulkDelete: id => { Supplier.delete(id); showToast('협력사가 삭제되었습니다.', 'success') },
           onBulkDeleted: () => renderSupplier(),
           actions: s => [
-            el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => openVSMEForSupplier(s.id) }, '자가진단'),
+            el('button', { className: 'btn btn-sm btn-primary', style: { marginRight: 4 }, onClick: () => showVSMEForSupplier(s.id) }, '자가진단 결과'),
             el('button', { className: 'btn btn-sm btn-secondary', style: { marginRight: 4 }, onClick: () => editSupplier(s.id) }, '수정'),
             el('button', { className: 'btn btn-sm btn-danger', onClick: () => { if (confirm('정말 삭제?')) { Supplier.delete(s.id); showToast('협력사가 삭제되었습니다.', 'success'); renderSupplier() } } }, '삭제')
           ]
@@ -3043,19 +3043,19 @@
   function renderVSMEPanel() {
     const suppliers = Supplier.getAll()
     const container = el('div', {})
-    const totalYes = suppliers.reduce((sum, s) => sum + Supplier.countYes(Supplier.getLatestVSME(s.id)), 0)
-    const totalQ = suppliers.reduce((sum, s) => {
-      const latest = Supplier.getLatestVSME(s.id)
-      const q = latest ? Supplier.getAssessmentQuestionnaire(latest) : Supplier.getQuestionnaire('basic')
-      return sum + q.questions.length
-    }, 0)
-    const avgPct = totalQ ? Math.round(totalYes / totalQ * 100) : 0
+    const stats = Supplier.getVSMEStats()
+    const assessedCount = stats.assessed
+    const avgPct = stats.pct
 
     const supplierCards = suppliers.map(s => {
       const latest = Supplier.getLatestVSME(s.id)
-      const grade = latest ? Supplier.getGrade(latest.score) : null
+      const legacy = !latest && s.last_vsme_date
+        ? { score: s.last_vsme_score, grade: s.last_vsme_grade, assessed_at: s.last_vsme_date, legacy: true }
+        : null
+      const record = latest || legacy
+      const grade = record ? Supplier.getGrade(record.score) : null
       const questionnaire = latest ? Supplier.getAssessmentQuestionnaire(latest) : null
-      const completionPct = latest ? Supplier.assessmentProgress(latest) : 0
+      const completionPct = latest ? Supplier.assessmentCompletion(latest) : 0
       return el('div', { style: `display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:8px;background:${grade ? grade.color + '08' : '#F8FAFC'};border:1px solid ${grade ? grade.color + '20' : '#EEF1F4'};margin-bottom:8px` },
         el('div', { style: `width:44px;height:44px;border-radius:10px;background:${grade ? grade.color + '15' : '#EEF1F4'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${grade ? grade.color : '#D0D5DD'};font-size:16px;border:1px solid ${grade ? grade.color + '30' : '#eef1f4'}` },
           grade ? grade.grade : '-'
@@ -3063,7 +3063,9 @@
         el('div', { style: 'flex:1' },
           el('div', { style: 'font-weight:600;font-size:14px' }, s.name),
           el('div', { style: 'font-size:12px;color:#9ca3af;margin-top:2px' },
-            latest ? `${questionnaire.name} · ${latest.score}점 · ${new Date(latest.assessed_at).toLocaleDateString('ko-KR')}` : '미진단'
+            latest ? `${questionnaire.name} · ${latest.score}점 · ${new Date(latest.assessed_at).toLocaleDateString('ko-KR')}`
+              : legacy ? `최근 자가진단 요약 · ${record.score}점 · ${new Date(record.assessed_at).toLocaleDateString('ko-KR')}`
+                : '미진단'
           ),
           latest ? el('div', { style: 'margin-top:4px;background:#E4E7EB;height:6px;border-radius:3px;overflow:hidden;width:120px' },
             el('div', { style: `background:${grade ? grade.color : '#D0D5DD'};height:100%;width:${completionPct}%` })
@@ -3097,7 +3099,8 @@
         ),
         el('div', { style: 'text-align:center;padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:100px' },
           el('div', { style: 'font-size:11px;color:#9CA3AF' }, '진행률'),
-          el('div', { style: 'font-size:22px;font-weight:700;color:#1E3A5F;margin-top:2px' }, `${avgPct}%`)
+          el('div', { style: 'font-size:22px;font-weight:700;color:#1E3A5F;margin-top:2px' }, `${avgPct}%`),
+          el('div', { style: 'font-size:11px;color:#9CA3AF' }, `진단 완료 ${assessedCount}/${suppliers.length}개사`)
         ),
         el('div', { style: 'flex:1;display:flex;align-items:center' },
           el('div', { style: 'flex:1;background:#E4E7EB;height:10px;border-radius:5px;overflow:hidden' },
@@ -3115,28 +3118,34 @@
     return container
   }
 
-  function openVSMEForSupplier(supplierId) {
+  function openVSMEForSupplier(supplierId, assessmentId) {
     const supplier = Supplier.getAll().find(s => String(s.id) === String(supplierId))
     if (!supplier) { showToast('협력사 정보를 찾을 수 없습니다. 새로고침 후 다시 시도하세요.', 'error'); return }
+    const existing = assessmentId == null ? null : (Supplier.getVSMEAssessments(supplierId).find(a => String(a.id) === String(assessmentId)) || null)
+    if (assessmentId != null && !existing) { showToast('자가진단 이력을 찾을 수 없습니다.', 'error'); return }
+    const recorded = existing ? Supplier.getAssessmentQuestionnaire(existing) : null
+    const prefilled = existing ? Supplier.normalizeAnswers(existing.answers, recorded) : {}
     const questionnaires = Supplier.getQuestionnaires()
     const form = el('div', {})
     const qSelect = el('select', { style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px' },
       ...questionnaires.map(q => el('option', { value: q.id }, `${q.name} (${q.questions.length}항목)`))
     )
+    let active = existing ? recorded : Supplier.getQuestionnaire(qSelect.value)
     const qDesc = el('div', { style: 'font-size:11px;color:#9CA3AF;margin:4px 0 12px;min-height:16px' })
-    const assessedAt = el('input', { type: 'date', value: new Date().toISOString().slice(0, 10), style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })
+    const assessedAt = el('input', { type: 'date', value: existing ? String(existing.assessed_at || existing.created_at || '').slice(0, 10) : new Date().toISOString().slice(0, 10), style: 'width:100%;padding:8px;border:1px solid #e4e7eb;border-radius:6px;font-size:13px;box-sizing:border-box' })
     const questionContainer = el('div', {})
     function renderQuestions() {
-      const selected = Supplier.getQuestionnaire(qSelect.value)
-      qDesc.textContent = selected.description || ''
+      if (!existing) active = Supplier.getQuestionnaire(qSelect.value)
+      qDesc.textContent = active.description || ''
       questionContainer.innerHTML = ''
-      selected.questions.forEach(q => {
+      active.questions.forEach(q => {
+        const current = prefilled[q.id] || 'na'
         const row = el('div', { style: 'padding:8px 0;border-bottom:1px solid #EEF1F4' },
           el('div', { style: 'font-size:13px;margin-bottom:4px' }, `[${q.category}] ${q.question}`),
           el('div', { style: 'display:flex;gap:8px' },
-            el('label', { style: 'font-size:12px;cursor:pointer' }, el('input', { type: 'radio', name: q.id, value: 'yes' }), ' 예'),
-            el('label', { style: 'font-size:12px;cursor:pointer' }, el('input', { type: 'radio', name: q.id, value: 'no' }), ' 아니오'),
-            el('label', { style: 'font-size:12px;cursor:pointer' }, el('input', { type: 'radio', name: q.id, value: 'na', checked: true }), ' 해당없음')
+            el('label', { style: 'font-size:12px;cursor:pointer' }, el('input', { type: 'radio', name: q.id, value: 'yes', checked: current === 'yes' }), ' 예'),
+            el('label', { style: 'font-size:12px;cursor:pointer' }, el('input', { type: 'radio', name: q.id, value: 'no', checked: current === 'no' }), ' 아니오'),
+            el('label', { style: 'font-size:12px;cursor:pointer' }, el('input', { type: 'radio', name: q.id, value: 'na', checked: current !== 'yes' && current !== 'no' }), ' 해당없음')
           )
         )
         questionContainer.append(row)
@@ -3146,26 +3155,31 @@
     renderQuestions()
     form.append(
       el('div', { style: 'display:grid;grid-template-columns:1fr 180px;gap:10px;align-items:end' },
-        el('label', { style: 'font-size:12px;color:#6B7280' }, '설문지', qSelect),
+        existing
+          ? el('div', { style: 'font-size:12px;color:#6B7280' },
+            el('div', {}, '설문지'),
+            el('div', { style: 'margin-top:6px;padding:8px;border:1px solid #e4e7eb;border-radius:6px;background:#F8FAFC;font-size:13px' }, `${recorded.name} (${recorded.questions.length}항목)`))
+          : el('label', { style: 'font-size:12px;color:#6B7280' }, '설문지', qSelect),
         el('label', { style: 'font-size:12px;color:#6B7280' }, '입력일 (자가진단 기준일)', assessedAt)
       ),
       qDesc,
       questionContainer
     )
-    modal(`VSME 자가진단 - ${supplier.name}`, form)
+    modal(`${existing ? 'VSME 자가진단 수정' : 'VSME 자가진단'} - ${supplier.name}`, form)
     document.getElementById('modal-save').onclick = () => {
       try {
-        const selected = Supplier.getQuestionnaire(qSelect.value)
         const answers = {}
-        selected.questions.forEach(q => {
+        active.questions.forEach(q => {
           const checked = form.querySelector(`input[name="${q.id}"]:checked`)
           answers[q.id] = checked ? checked.value : 'na'
         })
-        Supplier.submitVSME(supplierId, selected.id, answers, assessedAt.value)
+        if (existing) Supplier.updateVSME(existing.id, answers, assessedAt.value)
+        else Supplier.submitVSME(supplierId, active.id, answers, assessedAt.value)
         closeModal()
         _supplierTab = 'vsme'
         renderSupplier()
-        showToast('자가진단이 저장되었습니다.', 'success')
+        showToast(existing ? '자가진단이 수정되었습니다.' : '자가진단이 저장되었습니다.', 'success')
+        if (existing) showVSMEHistory(supplierId)
       } catch (e) {
         alert('VSME 저장 중 오류: ' + e.message)
         console.error('VSME save error:', e)
@@ -3173,9 +3187,67 @@
     }
   }
 
+  function showVSMEForSupplier(supplierId) {
+    const supplier = Supplier.getAll().find(s => String(s.id) === String(supplierId))
+    if (!supplier) { showToast('협력사 정보를 찾을 수 없습니다.', 'error'); return }
+    const latest = Supplier.getLatestVSME(supplierId)
+    if (!latest) {
+      if (!supplier.last_vsme_date || supplier.last_vsme_score == null) {
+        showToast('등록된 자가진단이 없습니다. VSME 탭에서 입력하세요.', 'error')
+        return
+      }
+      const legacyGrade = Supplier.getGrade(supplier.last_vsme_score)
+      const legacyBody = el('div', { style: 'padding:14px;background:#F8FAFC;border:1px solid #EEF1F4;border-radius:8px' },
+        el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' },
+          el('div', {},
+            el('div', { style: 'font-size:13px;font-weight:600;color:#1F2937' }, '최근 자가진단 결과'),
+            el('div', { style: 'font-size:11px;color:#9CA3AF;margin-top:2px' }, new Date(supplier.last_vsme_date).toLocaleDateString('ko-KR'))
+          ),
+          el('div', { style: 'display:flex;align-items:center;gap:6px' },
+            el('span', { style: `background:${legacyGrade.color}15;color:${legacyGrade.color};border:1px solid ${legacyGrade.color}30;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600` }, `${supplier.last_vsme_score}점 · ${supplier.last_vsme_grade || legacyGrade.grade}등급`),
+            el('span', { style: 'font-size:10px;padding:2px 8px;border-radius:8px;background:#F1F5F9;color:#64748B;font-weight:500' }, '읽기 전용')
+          )
+        ),
+        el('div', { style: 'font-size:12px;color:#6B7280;margin-top:10px' }, '이 결과는 요약 정보만 저장되어 있어 문항별 응답은 표시할 수 없습니다. 상세 응답은 VSME 탭에서 새로 입력해 주세요.')
+      )
+      modal(`자가진단 결과 - ${supplier.name}`, legacyBody, [
+        { label: '닫기', className: 'btn btn-secondary', onClick: closeModal }
+      ])
+      document.getElementById('modal-save').style.display = 'none'
+      return
+    }
+    const qn = Supplier.getAssessmentQuestionnaire(latest)
+    const map = Supplier.normalizeAnswers(latest.answers, qn)
+    const grade = Supplier.getGrade(latest.score)
+    const body = el('div', { style: 'max-height:460px;overflow-y:auto' },
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#F8FAFC;border:1px solid #EEF1F4;border-radius:8px;margin-bottom:10px' },
+        el('div', {},
+          el('div', { style: 'font-size:13px;font-weight:600;color:#1F2937' }, qn.name),
+          el('div', { style: 'font-size:11px;color:#9CA3AF;margin-top:2px' }, `${new Date(latest.assessed_at).toLocaleDateString('ko-KR')} · 응답 완료 ${Supplier.assessmentCompletion(latest)}%`)
+        ),
+        el('div', { style: 'display:flex;align-items:center;gap:6px' },
+          el('span', { style: `background:${grade.color}15;color:${grade.color};border:1px solid ${grade.color}30;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600` }, `${latest.score}점 · ${latest.grade}등급`),
+          el('span', { style: 'font-size:10px;padding:2px 8px;border-radius:8px;background:#F1F5F9;color:#64748B;font-weight:500' }, '읽기 전용')
+        )
+      ),
+      ...qn.questions.map(q => el('div', { style: 'padding:8px 0;border-bottom:1px solid #EEF1F4' },
+        el('div', { style: 'font-size:13px;color:#1F2937' }, `[${q.category}] ${q.question}`),
+        el('div', { style: 'font-size:12px;color:#6B7280;margin-top:3px' }, `응답: ${VSME_ANSWER_LABELS[map[q.id]] || map[q.id] || '해당없음'}`)
+      ))
+    )
+    modal(`자가진단 결과 - ${supplier.name}`, body, [
+      { label: '닫기', className: 'btn btn-secondary', onClick: closeModal }
+    ])
+    document.getElementById('modal-save').style.display = 'none'
+  }
+
   function showVSMEHistory(supplierId) {
     const supplier = Supplier.getAll().find(s => String(s.id) === String(supplierId))
-    const assessments = Supplier.getVSMEAssessments(supplierId).slice().reverse()
+    const assessments = Supplier.getVSMEAssessments(supplierId).slice().sort((a, b) => {
+      const at = String(a.assessed_at || a.created_at || '')
+      const bt = String(b.assessed_at || b.created_at || '')
+      return bt.localeCompare(at)
+    })
     const body = el('div', { style: 'max-height:400px;overflow-y:auto' })
     if (!assessments.length) {
       body.append(el('p', { style: 'color:#9CA3AF;text-align:center' }, '진단 이력이 없습니다.'))
@@ -3183,12 +3255,23 @@
       assessments.forEach(a => {
         const grade = Supplier.getGrade(a.score)
         const qn = Supplier.getAssessmentQuestionnaire(a)
-        body.append(el('div', { style: 'padding:10px;border-bottom:1px solid #EEF1F4;display:flex;justify-content:space-between;align-items:center' },
+        body.append(el('div', { style: 'padding:10px;border-bottom:1px solid #EEF1F4;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap' },
           el('div', {},
             el('div', { style: 'font-weight:500' }, qn.name),
             el('div', { style: 'font-size:12px;color:#9ca3af' }, `${new Date(a.assessed_at).toLocaleString('ko-KR')} · ${qn.questions.length}문항`)
           ),
-          el('span', { style: `background:${grade.color};color:#fff;padding:3px 12px;border-radius:10px;font-size:12px;font-weight:600` }, `${a.score}점 - ${a.grade}등급`)
+          el('div', { style: 'display:flex;align-items:center;gap:6px' },
+            el('span', { style: `background:${grade.color};color:#fff;padding:3px 12px;border-radius:10px;font-size:12px;font-weight:600` }, `${a.score}점 - ${a.grade}등급`),
+            el('button', { className: 'btn btn-sm btn-secondary', onClick: () => { closeModal(); openVSMEForSupplier(supplierId, a.id) } }, '수정'),
+            el('button', { className: 'btn btn-sm btn-danger', onClick: () => {
+              if (!confirm(`${new Date(a.assessed_at).toLocaleDateString('ko-KR')} 자가진단 이력을 삭제할까요?\n삭제 후 최근 진단일과 등급이 다시 계산됩니다.`)) return
+              Supplier.deleteVSME(a.id)
+              renderSupplier()
+              closeModal()
+              showVSMEHistory(supplierId)
+              showToast('자가진단 이력이 삭제되었습니다.', 'success')
+            } }, '삭제')
+          )
         ))
       })
     }

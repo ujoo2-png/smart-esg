@@ -150,3 +150,76 @@ test('VSME 일괄등록: 과거 입력일은 최근 진단일을 덮어쓰지 �
   assert.equal(Store.getVSMEAssessments(s.id).length, 2)
   assert.equal(Supplier.getLatestVSME(s.id).assessed_at.slice(0, 10), '2026-06-01')
 })
+
+test('VSME: 이력 수정은 신규 등록 없이 기존 건만 갱신한다', () => {
+  const { Store, Supplier } = makeEnv()
+  const s = Supplier.add({ name: '이력수정상사' })
+  const answers = {}
+  Supplier.getVSMEChecklist('basic').forEach(q => { answers[q.id] = 'yes' })
+  Supplier.submitVSME(s.id, 'basic', answers, '2026-05-01')
+  const before = Store.getVSMEAssessments(s.id)[0]
+  const updated = Supplier.updateVSME(before.id, answers, '2026-04-15')
+  const after = Store.getVSMEAssessments(s.id)
+  assert.equal(after.length, 1)
+  assert.equal(updated.id, before.id)
+  assert.equal(updated.assessed_at.slice(0, 10), '2026-04-15')
+  assert.equal(updated.score, 100)
+  const saved = Supplier.getAll().find(x => String(x.id) === String(s.id))
+  assert.equal(saved.last_vsme_date.slice(0, 10), '2026-04-15')
+  assert.equal(saved.last_vsme_score, 100)
+})
+
+test('VSME: 이력 삭제 후 최근 진단일·등급이 남은 이력으로 재계산된다', () => {
+  const { Store, Supplier } = makeEnv()
+  const s = Supplier.add({ name: '이력삭제상사' })
+  const yesAll = {}
+  const noAll = {}
+  Supplier.getVSMEChecklist('basic').forEach(q => { yesAll[q.id] = 'yes'; noAll[q.id] = 'no' })
+  Supplier.submitVSME(s.id, 'basic', yesAll, '2026-05-01')
+  Supplier.submitVSME(s.id, 'basic', noAll, '2026-06-01')
+  assert.equal(Store.getVSMEAssessments(s.id).length, 2)
+  const latest = Supplier.getLatestVSME(s.id)
+  Supplier.deleteVSME(latest.id)
+  const saved = Supplier.getAll().find(x => String(x.id) === String(s.id))
+  assert.equal(Store.getVSMEAssessments(s.id).length, 1)
+  assert.equal(saved.last_vsme_date.slice(0, 10), '2026-05-01')
+  assert.equal(saved.last_vsme_score, 100)
+  assert.equal(saved.last_vsme_grade, 'A')
+  Supplier.deleteVSME(Store.getVSMEAssessments(s.id)[0].id)
+  const cleared = Supplier.getAll().find(x => String(x.id) === String(s.id))
+  assert.equal(Store.getVSMEAssessments(s.id).length, 0)
+  assert.equal(cleared.last_vsme_date, null)
+  assert.equal(cleared.last_vsme_score, null)
+  assert.equal(cleared.last_vsme_grade, null)
+  assert.equal(Supplier.getLatestVSME(s.id), null)
+})
+
+test('VSME: 진행률은 예 응답 비율이 아니라 응답 완료율이다', () => {
+  const { Supplier } = makeEnv()
+  const answers = {}
+  Supplier.getVSMEChecklist('basic').forEach(q => { answers[q.id] = 'no' })
+  const assessment = { questionnaire_id: 'basic', answers }
+  assert.equal(Supplier.calcVSMEScore(answers, 'basic'), 0)
+  assert.equal(Supplier.assessmentCompletion(assessment), 100)
+  assert.equal(Supplier.assessmentCompletion({ questionnaire_id: 'basic', answers: { 'vb-1': 'yes' } }), 8)
+})
+
+test('VSME: 전체 진행률은 진단 완료 업체 수 기준이다', () => {
+  const { Supplier } = makeEnv()
+  const baseline = Supplier.getAll().length
+  const initial = Supplier.getVSMEStats()
+  assert.equal(initial.total, baseline)
+  assert.equal(initial.assessed, baseline)
+  assert.equal(initial.pct, 100)
+
+  const s = Supplier.add({ name: '미진단상사' })
+  const half = Supplier.getVSMEStats()
+  assert.equal(half.total, baseline + 1)
+  assert.equal(half.assessed, baseline)
+  assert.equal(half.pct, Math.round(baseline / (baseline + 1) * 100))
+
+  const answers = {}
+  Supplier.getVSMEChecklist('basic').forEach(q => { answers[q.id] = 'no' })
+  Supplier.submitVSME(s.id, 'basic', answers, '2026-05-01')
+  assert.equal(Supplier.getVSMEStats().pct, 100)
+})
